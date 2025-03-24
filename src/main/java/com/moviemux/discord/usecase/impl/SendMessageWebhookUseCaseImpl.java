@@ -1,16 +1,15 @@
 package com.moviemux.discord.usecase.impl;
 
-import java.util.UUID;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import com.moviemux.discord.adapter.repository.rest.DiscordRepository;
 import com.moviemux.discord.domain.DiscordWebhookInfo;
 import com.moviemux.discord.usecase.SendMessageWebhookUseCase;
 import com.moviemux.movie.adapter.repository.MovieRepository;
 import com.moviemux.movie.domain.Movie;
 import com.moviemux.movie.domain.MovieDiscord;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.util.UUID;
 
 @Component
 public class SendMessageWebhookUseCaseImpl implements SendMessageWebhookUseCase {
@@ -35,7 +34,7 @@ public class SendMessageWebhookUseCaseImpl implements SendMessageWebhookUseCase 
 			return;
 		}
 
-		movie.setMovieDiscord(new MovieDiscord(movie.getId(), info.getMessageId(), movie));
+		movie.setMovieDiscord(new MovieDiscord(null, info.getMessageId(), movie));
 		movieRepository.saveAndFlush(movie);
 	}
 
