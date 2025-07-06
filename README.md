@@ -1,4 +1,4 @@
-# CineKronusBoss - API
+# MovieMux - API
 
 ## Introduction
 
@@ -15,6 +15,6 @@ Java 20, Spring Boot, JPA, Spring Security, Lombok, Spring Validation, Actuator
 
 ### Link
 
-[CineKronusBoss website](https://www.moviemux.com)
+[MovieMux Frontend](https://github.com/HenriqueMendesCoelho/moviemux)
 
 This product uses the TMDB API but is not endorsed or certified by TMDB.
