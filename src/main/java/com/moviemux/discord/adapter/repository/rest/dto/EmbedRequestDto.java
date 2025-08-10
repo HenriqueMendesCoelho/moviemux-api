@@ -20,18 +20,18 @@ import java.util.*;
 @NoArgsConstructor
 public class EmbedRequestDto {
 
-	private static final String URL_REDIRECT = "https://www.cine.kronusboss.com";
+	private static final String URL_REDIRECT = "https://www.moviemux.com";
 	private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("0.0", new DecimalFormatSymbols(Locale.US));
 	private static final Integer BLUE_COLOR_CODE = 3447003;
 	private static final String DELETED_USER_RED_CIRCLE_EMOJI = "\uD83D\uDD34";
 
-	public String title;
-	public Image image;
-	public int color;
-	public String url;
-	public Footer footer;
-	public List<Field> fields;
-	public OffsetDateTime timestamp;
+	private String title;
+	private Image image;
+	private int color;
+	private String url;
+	private Footer footer;
+	private List<Field> fields;
+	private OffsetDateTime timestamp;
 
 	public EmbedRequestDto(Movie movie) {
 		title = movie.isShowNotes()
@@ -66,9 +66,9 @@ public class EmbedRequestDto {
 	@Data
 	@AllArgsConstructor
 	public static class Field {
-		public String name;
-		public String value;
-		public boolean inline;
+		private String name;
+		private String value;
+		private boolean inline;
 
 		public Field(MovieNote note) {
 			name = note.getUser().getName();
@@ -88,12 +88,12 @@ public class EmbedRequestDto {
 	@Data
 	@AllArgsConstructor
 	public static class Footer {
-		public String text;
+		private String text;
 	}
 
 	@Data
 	@AllArgsConstructor
 	public static class Image {
-		public String url;
+		private String url;
 	}
 }
