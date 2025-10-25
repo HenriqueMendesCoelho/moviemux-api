@@ -1,16 +1,5 @@
 package com.moviemux.wishlist.usecase.impl;
 
-import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
-import com.moviemux.wishlist.usecase.UpdateUserWishlistUseCase;
-import org.apache.commons.collections4.CollectionUtils;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Component;
-
 import com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository;
 import com.moviemux.kronusintegrationtool.domain.MovieSummary;
 import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
@@ -21,28 +10,31 @@ import com.moviemux.wishlist.domain.MovieWishlist;
 import com.moviemux.wishlist.domain.MoviesWishlists;
 import com.moviemux.wishlist.domain.MoviesWishlistsKey;
 import com.moviemux.wishlist.domain.Wishlist;
+import com.moviemux.wishlist.usecase.UpdateUserWishlistUseCase;
 import com.moviemux.wishlist.usecase.exception.WishlistMovieAlreadyExistsException;
 import com.moviemux.wishlist.usecase.exception.WishlistNotFoundException;
-
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Component;
+
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class UpdateUserWishlistUseCaseImpl implements UpdateUserWishlistUseCase {
 
 	private static final int LIMIT = 100;
 
-	@Autowired
-	private WishlistRepository repository;
-
-	@Autowired
-	private MovieWishlistRepository movieWishlistRepository;
-
-	@Autowired
-	private MoviesWishlistsRepository moviesWishlistsRepository;
-
-	@Autowired
-	private KronusIntegrationToolRepository kitRepository;
+	private final WishlistRepository repository;
+	private final MovieWishlistRepository movieWishlistRepository;
+	private final MoviesWishlistsRepository moviesWishlistsRepository;
+	private final KronusIntegrationToolRepository kitRepository;
 
 	@Override
 	public Wishlist update(Wishlist userWishlist, UUID userId)

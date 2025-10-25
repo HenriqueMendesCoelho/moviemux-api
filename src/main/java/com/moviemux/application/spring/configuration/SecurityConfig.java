@@ -3,6 +3,7 @@ package com.moviemux.application.spring.configuration;
 import com.moviemux.application.spring.security.JWTAuthenticationFilter;
 import com.moviemux.application.spring.security.JWTAuthorizationFilter;
 import com.moviemux.application.spring.security.util.JWTUtil;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,15 +25,13 @@ import static org.springframework.security.config.Customizer.withDefaults;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
 
 	private static final String[] PUBLIC_MATCHERS = { "/public/**" };
-	@Autowired
-	private UserDetailsService userDetailsService;
-	@Autowired
-	private AuthenticationConfiguration authenticationConfiguration;
-	@Autowired
-	private JWTUtil jwtUtil;
+	private final UserDetailsService userDetailsService;
+	private final AuthenticationConfiguration authenticationConfiguration;
+	private final JWTUtil jwtUtil;
 
 	@Autowired
 	protected void configure(AuthenticationManagerBuilder auth) throws Exception {
