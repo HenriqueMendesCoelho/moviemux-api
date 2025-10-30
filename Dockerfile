@@ -1,9 +1,9 @@
-FROM maven:3.9.7-amazoncorretto-21 AS build
+FROM maven:3.9.11-amazoncorretto-25 AS build
 WORKDIR /app
 COPY . .
 RUN mvn clean package -DskipTests
 
-FROM amazoncorretto:21-alpine3.19
+FROM amazoncorretto:25.0.0-alpine3.22
 ENV TZ=America/Sao_Paulo
 WORKDIR /app
 COPY --from=build /app/target/moviemux.jar /app/moviemux.jar
