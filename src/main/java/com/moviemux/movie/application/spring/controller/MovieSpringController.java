@@ -5,7 +5,6 @@ import com.moviemux.adapter.util.CredentialUtil;
 import com.moviemux.movie.adapter.controller.MovieController;
 import com.moviemux.movie.adapter.controller.dto.*;
 import com.moviemux.movie.usecase.exception.DuplicatedMovieException;
-import com.moviemux.movie.usecase.exception.DuplicatedMovieNoteException;
 import com.moviemux.movie.usecase.exception.MovieNotFoundException;
 import com.moviemux.movie.usecase.exception.MovieNoteNotFoundException;
 import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
@@ -115,51 +114,6 @@ public class MovieSpringController {
 		}
 
 		return ResponseEntity.ok(response);
-
-	}
-
-	@GetMapping("/note/{movieId}")
-	public ResponseEntity<?> getMovieNote(@PathVariable UUID movieId, @RequestHeader("Authorization") String token) {
-		try {
-			UserTokenDto user = CredentialUtil.getUserFromToken(token);
-			List<MovieNoteResponseDto> response = controller.listMovieNotes(movieId, user);
-			return ResponseEntity.ok(response);
-		} catch (MovieNotFoundException e) {
-			return ResponseEntity.badRequest().body(Map.of("error", true, "code", 400, "message", e.getMessage()));
-		}
-	}
-
-	@PostMapping("/note")
-	public ResponseEntity<?> createMovieNote(@RequestBody @Valid MovieNoteRequestDto request,
-			@RequestHeader("Authorization") String token) {
-		try {
-			UserTokenDto user = CredentialUtil.getUserFromToken(token);
-			MovieNoteResponseDto response = controller.createMovieNote(request, user);
-			return ResponseEntity.ok(response);
-		} catch (MovieNotFoundException | DuplicatedMovieNoteException e) {
-			return ResponseEntity.badRequest().body(Map.of("error", true, "code", 400, "message", e.getMessage()));
-		}
-	}
-
-	@PatchMapping("note/{movieId}/update")
-	public ResponseEntity<?> updateMovieNote(@RequestBody @Valid MovieNoteRequestDto request,
-			@PathVariable UUID movieId, @RequestHeader("Authorization") String token) {
-		try {
-			UserTokenDto user = CredentialUtil.getUserFromToken(token);
-			MovieNoteResponseDto response = controller.updateMovieNote(movieId, request, user);
-			return ResponseEntity.ok(response);
-		} catch (MovieNoteNotFoundException e) {
-			return ResponseEntity.badRequest().body(Map.of("error", true, "code", 400, "message", e.getMessage()));
-		}
-	}
-
-	@DeleteMapping("/note/{movieId}/delete")
-	public ResponseEntity<?> deleteMovieNote(@PathVariable UUID movieId, @RequestHeader("Authorization") String token) {
-
-		UserTokenDto user;
-		user = CredentialUtil.getUserFromToken(token);
-		controller.deleteMovieNote(movieId, user);
-		return ResponseEntity.ok().build();
 
 	}
 }
