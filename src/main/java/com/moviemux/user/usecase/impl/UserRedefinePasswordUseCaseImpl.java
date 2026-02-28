@@ -1,14 +1,15 @@
 package com.moviemux.user.usecase.impl;
 
-import com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository;
-import com.moviemux.kronusintegrationtool.domain.SendMailTemplate;
+import com.moviemux.mail.domain.SendMailEvent;
+import com.moviemux.mail.domain.SendMailTemplate;
 import com.moviemux.user.adapter.repository.UserRepository;
 import com.moviemux.user.domain.User;
 import com.moviemux.user.usecase.UserRedefinePasswordUseCase;
 import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
 import com.moviemux.user.usecase.exception.UserRedefinePasswordKeyInvalid;
 import com.moviemux.user.usecase.exception.UserRedefinePasswordKeyNotFound;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -18,16 +19,12 @@ import java.time.OffsetDateTime;
 import java.util.Random;
 
 @Component
+@RequiredArgsConstructor
 public class UserRedefinePasswordUseCaseImpl implements UserRedefinePasswordUseCase {
 
-	@Autowired
-	private UserRepository repository;
-
-	@Autowired
-	private BCryptPasswordEncoder passwordEncoder;
-
-	@Autowired
-	private KronusIntegrationToolRepository kronusIntegrationToolRepository;
+	private final UserRepository repository;
+	private final BCryptPasswordEncoder passwordEncoder;
+	private final ApplicationEventPublisher publisher;
 
 	@Async
 	@Override
@@ -39,8 +36,8 @@ public class UserRedefinePasswordUseCaseImpl implements UserRedefinePasswordUseC
 
 		String key = generateRedefineKeyPassword();
 
-		kronusIntegrationToolRepository.sendMailTemplate(
-				SendMailTemplate.forgotPasswordMail(user.getEmail(), user.getName(), key));
+		publisher.publishEvent(
+				new SendMailEvent(SendMailTemplate.forgotPasswordMail(user.getEmail(), user.getName(), key)));
 
 		user.setRedefinePasswordKey(key);
 		user.setRedefinePasswordKeyCreatedAt(OffsetDateTime.now());

@@ -2,18 +2,17 @@ package com.moviemux.user.usecase.impl;
 
 import java.util.List;
 
+import com.moviemux.user.adapter.repository.InviteRepository;
 import com.moviemux.user.domain.Invite;
 import com.moviemux.user.usecase.SearchInviteUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import com.moviemux.user.adapter.repository.InviteRepository;
-
 @Service
+@RequiredArgsConstructor
 public class SearchInviteUseCaseImpl implements SearchInviteUseCase {
 
-	@Autowired
-	private InviteRepository repository;
+	private final InviteRepository repository;
 
 	@Override
 	public List<Invite> list() {

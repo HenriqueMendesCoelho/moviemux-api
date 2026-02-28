@@ -2,7 +2,7 @@ package com.moviemux.movie.usecase.impl;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -15,13 +15,11 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class CreateMovieGenreUseCaseImpl implements CreateMovieGenreUseCase {
 
-	@Autowired
-	private KronusIntegrationToolRepository kronusIntegrationToolRepository;
-
-	@Autowired
-	private MovieGenreRepository repository;
+	private final KronusIntegrationToolRepository kronusIntegrationToolRepository;
+	private final MovieGenreRepository repository;
 
 	@Scheduled(initialDelay = 5000, fixedDelayString = "P15D")
 	@Override

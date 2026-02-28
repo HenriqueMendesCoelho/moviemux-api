@@ -1,7 +1,7 @@
 package com.moviemux.movie.application.spring.controller;
 
-import com.moviemux.adapter.core.controller.dto.UserTokenDto;
-import com.moviemux.adapter.util.CredentialUtil;
+import com.moviemux.core.adapter.controller.dto.UserTokenDto;
+import com.moviemux.core.adapter.util.CredentialUtil;
 import com.moviemux.movie.adapter.controller.MovieController;
 import com.moviemux.movie.adapter.controller.dto.*;
 import com.moviemux.movie.usecase.exception.DuplicatedMovieException;

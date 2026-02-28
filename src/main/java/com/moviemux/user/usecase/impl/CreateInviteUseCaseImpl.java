@@ -1,17 +1,16 @@
 package com.moviemux.user.usecase.impl;
 
+import com.moviemux.user.adapter.repository.InviteRepository;
 import com.moviemux.user.domain.Invite;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.moviemux.user.usecase.CreateInviteUseCase;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import com.moviemux.user.adapter.repository.InviteRepository;
-import com.moviemux.user.usecase.CreateInviteUseCase;
-
 @Service
+@RequiredArgsConstructor
 public class CreateInviteUseCaseImpl implements CreateInviteUseCase {
 
-	@Autowired
-	InviteRepository repository;
+	private final InviteRepository repository;
 
 	@Override
 	public Invite create() {

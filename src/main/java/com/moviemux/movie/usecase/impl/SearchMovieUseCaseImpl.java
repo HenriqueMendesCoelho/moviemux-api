@@ -6,9 +6,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
@@ -20,10 +20,10 @@ import com.moviemux.movie.usecase.SearchMovieUseCase;
 import com.moviemux.movie.usecase.exception.MovieNoteNotFoundException;
 
 @Component
+@RequiredArgsConstructor
 public class SearchMovieUseCaseImpl implements SearchMovieUseCase {
 
-	@Autowired
-	private MovieRepository repository;
+	private final MovieRepository repository;
 
 	@Override
 	public Movie getById(UUID id, UUID userId) throws MovieNoteNotFoundException {

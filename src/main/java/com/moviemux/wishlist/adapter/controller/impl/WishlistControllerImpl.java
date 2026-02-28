@@ -15,10 +15,10 @@ import com.moviemux.wishlist.usecase.UpdateUserWishlistUseCase;
 import com.moviemux.wishlist.usecase.exception.WishlistMovieAlreadyExistsException;
 import com.moviemux.wishlist.usecase.exception.WishlistNotFoundException;
 import com.moviemux.wishlist.usecase.exception.WishlistUserReachedLimitException;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 
-import com.moviemux.adapter.core.controller.dto.UserTokenDto;
+import com.moviemux.core.adapter.controller.dto.UserTokenDto;
 import com.moviemux.movie.domain.Movie;
 import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
 import com.moviemux.wishlist.domain.Wishlist;
@@ -26,22 +26,14 @@ import com.moviemux.wishlist.usecase.SearchMoviesAlreadyRated;
 import com.moviemux.wishlist.usecase.exception.WishlistDuplicatedException;
 
 @Controller
+@RequiredArgsConstructor
 public class WishlistControllerImpl implements WishlistController {
 
-	@Autowired
-	private SearchUserWishlistUseCase searchUserWishlistUseCase;
-
-	@Autowired
-	private CreateUserWishlistUseCase createUserWishlistUseCase;
-
-	@Autowired
-	private UpdateUserWishlistUseCase updateUserWishlistUseCase;
-
-	@Autowired
-	private DeleteUserWishlistUseCase deleteUserWishlistUseCase;
-
-	@Autowired
-	private SearchMoviesAlreadyRated searchMoviesAlreadyRated;
+	private final SearchUserWishlistUseCase searchUserWishlistUseCase;
+	private final CreateUserWishlistUseCase createUserWishlistUseCase;
+	private final UpdateUserWishlistUseCase updateUserWishlistUseCase;
+	private final DeleteUserWishlistUseCase deleteUserWishlistUseCase;
+	private final SearchMoviesAlreadyRated searchMoviesAlreadyRated;
 
 	@Override
 	public List<WishlistResponseDto> getUserWishlists(UserTokenDto request) {

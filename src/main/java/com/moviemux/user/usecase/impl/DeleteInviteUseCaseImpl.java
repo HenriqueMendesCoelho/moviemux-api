@@ -1,17 +1,16 @@
 package com.moviemux.user.usecase.impl;
 
+import com.moviemux.user.adapter.repository.InviteRepository;
 import com.moviemux.user.domain.Invite;
 import com.moviemux.user.usecase.DeleteInviteUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import com.moviemux.user.adapter.repository.InviteRepository;
-
 @Component
+@RequiredArgsConstructor
 public class DeleteInviteUseCaseImpl implements DeleteInviteUseCase {
 
-	@Autowired
-	InviteRepository repository;
+	private final InviteRepository repository;
 
 	@Override
 	public void delete(String code) {

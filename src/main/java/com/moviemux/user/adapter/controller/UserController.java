@@ -1,6 +1,6 @@
 package com.moviemux.user.adapter.controller;
 
-import com.moviemux.adapter.core.controller.dto.UserTokenDto;
+import com.moviemux.core.adapter.controller.dto.UserTokenDto;
 import com.moviemux.user.adapter.controller.dto.*;
 import com.moviemux.user.usecase.exception.*;
 

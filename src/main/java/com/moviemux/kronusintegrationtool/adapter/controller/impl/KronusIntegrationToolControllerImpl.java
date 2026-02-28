@@ -10,23 +10,17 @@ import com.moviemux.kronusintegrationtool.usecase.MovieSumaryUseCase;
 import com.moviemux.kronusintegrationtool.usecase.SearchCreditUseCase;
 import com.moviemux.kronusintegrationtool.usecase.SearchMovieTmdbUseCase;
 import com.moviemux.kronusintegrationtool.usecase.SearchWatchProviedersUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 
 @Controller
+@RequiredArgsConstructor
 public class KronusIntegrationToolControllerImpl implements KronusIntegrationToolController {
 
-	@Autowired
-	private MovieSumaryUseCase movieSumaryUseCase;
-
-	@Autowired
-	private SearchMovieTmdbUseCase searchMovieTmdbUseCase;
-
-	@Autowired
-	private SearchWatchProviedersUseCase searchWatchProviedersUseCase;
-
-	@Autowired
-	private SearchCreditUseCase searchCreditUseCase;
+	private final MovieSumaryUseCase movieSumaryUseCase;
+	private final SearchMovieTmdbUseCase searchMovieTmdbUseCase;
+	private final SearchWatchProviedersUseCase searchWatchProviedersUseCase;
+	private final SearchCreditUseCase searchCreditUseCase;
 
 	@Override
 	public MovieSummaryResponseDto movieSummary(Long tmdbId) {

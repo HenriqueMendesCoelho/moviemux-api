@@ -10,8 +10,8 @@ import com.moviemux.user.adapter.repository.UserRepository;
 import com.moviemux.user.domain.Role;
 import com.moviemux.user.domain.User;
 import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Component;
 
@@ -19,19 +19,13 @@ import java.util.UUID;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class UpdateMovieUseCaseImpl implements UpdateMovieUseCase {
 
-	@Autowired
-	private MovieRepository repository;
-
-	@Autowired
-	private UserRepository userRepository;
-
-	@Autowired
-	private UpdateMessageWebhookUseCase updateMessageWebhookUseCase;
-
-	@Autowired
-	private MovieSocketRespository movieSocketRespository;
+	private final MovieRepository repository;
+	private final UserRepository userRepository;
+	private final UpdateMessageWebhookUseCase updateMessageWebhookUseCase;
+	private final MovieSocketRespository movieSocketRespository;
 
 	@Override
 	@CacheEvict(value = "statistics", allEntries = true)

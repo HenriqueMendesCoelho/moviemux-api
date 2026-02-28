@@ -1,23 +1,22 @@
 package com.moviemux.discord.adapter.repository.rest.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.moviemux.discord.adapter.repository.rest.DiscordRepository;
 import com.moviemux.discord.adapter.repository.rest.dto.DiscordWebhookRequestDto;
 import com.moviemux.discord.adapter.repository.rest.dto.DiscordWebhookResponseDto;
 import com.moviemux.discord.domain.DiscordWebhookInfo;
+import com.moviemux.movie.domain.Movie;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.web.firewall.RequestRejectedException;
 import org.springframework.stereotype.Repository;
-import org.springframework.web.reactive.function.client.WebClient;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.moviemux.movie.domain.Movie;
-
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.client.RestClient;
 
 @Repository
 @Slf4j
+@RequiredArgsConstructor
 public class DiscordRepositoryImpl implements DiscordRepository {
 
 	@Value("${discord.webhook.execute}")
@@ -29,11 +28,8 @@ public class DiscordRepositoryImpl implements DiscordRepository {
 	@Value("${discord.webhook.role.id}")
 	private String roleId;
 
-	@Autowired
-	private WebClient webClientDiscord;
-
-	@Autowired
-	private ObjectMapper mapper;
+	private final RestClient restClientDiscord;
+	private final ObjectMapper mapper;
 
 	@Override
 	public DiscordWebhookInfo execute(Movie movie) {
@@ -43,12 +39,11 @@ public class DiscordRepositoryImpl implements DiscordRepository {
 
 		DiscordWebhookRequestDto request = new DiscordWebhookRequestDto(movie, roleId);
 		try {
-			DiscordWebhookResponseDto response = webClientDiscord.post()
+			DiscordWebhookResponseDto response = restClientDiscord.post()
 					.uri("?wait=true")
-					.bodyValue(mapper.writeValueAsString(request))
+					.body(request)
 					.retrieve()
-					.bodyToMono(DiscordWebhookResponseDto.class)
-					.block();
+					.body(DiscordWebhookResponseDto.class);
 			return response.toDomain();
 		} catch (Exception e) {
 			log.error("Error on Discord Webhook create message request raised: ", e);
@@ -65,12 +60,11 @@ public class DiscordRepositoryImpl implements DiscordRepository {
 		String messageId = movie.getMovieDiscord().getMessageId();
 		DiscordWebhookRequestDto request = new DiscordWebhookRequestDto(movie, roleId);
 		try {
-			DiscordWebhookResponseDto response = webClientDiscord.patch()
-					.uri(String.format("/messages/%s?wait=true", messageId))
-					.bodyValue(mapper.writeValueAsString(request))
+			DiscordWebhookResponseDto response = restClientDiscord.patch()
+					.uri("/messages/%s?wait=true".formatted(messageId))
+					.body(request)
 					.retrieve()
-					.bodyToMono(DiscordWebhookResponseDto.class)
-					.block();
+					.body(DiscordWebhookResponseDto.class);
 			return response.toDomain();
 		} catch (Exception e) {
 			log.error("Error on Discord Webhook update message request raised: ", e);

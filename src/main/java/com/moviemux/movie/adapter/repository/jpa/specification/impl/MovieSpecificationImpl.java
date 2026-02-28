@@ -6,9 +6,9 @@ import com.moviemux.movie.domain.Movie;
 import com.moviemux.movie.domain.MovieGenre;
 import com.moviemux.movie.domain.MovieNote;
 import jakarta.persistence.criteria.*;
+import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -22,10 +22,10 @@ import java.util.List;
 import java.util.UUID;
 
 @Repository
+@RequiredArgsConstructor
 public class MovieSpecificationImpl implements MovieSpecification {
 
-	@Autowired
-	private MovieJpaRepository repository;
+	private final MovieJpaRepository repository;
 
 	@Override
 	public Page<Movie> findMovieFilteredCustom(List<String> titles, List<Long> genres, String sortJoin,

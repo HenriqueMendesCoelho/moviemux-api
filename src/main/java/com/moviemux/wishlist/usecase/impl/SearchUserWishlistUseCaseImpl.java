@@ -3,19 +3,18 @@ package com.moviemux.wishlist.usecase.impl;
 import java.util.List;
 import java.util.UUID;
 
-import com.moviemux.wishlist.usecase.SearchUserWishlistUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import com.moviemux.wishlist.adapter.repository.WishlistRepository;
 import com.moviemux.wishlist.domain.Wishlist;
+import com.moviemux.wishlist.usecase.SearchUserWishlistUseCase;
 import com.moviemux.wishlist.usecase.exception.WishlistNotFoundException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class SearchUserWishlistUseCaseImpl implements SearchUserWishlistUseCase {
 
-	@Autowired
-	private WishlistRepository repository;
+	private final WishlistRepository repository;
 
 	@Override
 	public List<Wishlist> list(UUID userId) {

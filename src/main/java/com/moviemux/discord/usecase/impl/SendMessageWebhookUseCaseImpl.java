@@ -6,19 +6,17 @@ import com.moviemux.discord.usecase.SendMessageWebhookUseCase;
 import com.moviemux.movie.adapter.repository.MovieRepository;
 import com.moviemux.movie.domain.Movie;
 import com.moviemux.movie.domain.MovieDiscord;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
 @Component
+@RequiredArgsConstructor
 public class SendMessageWebhookUseCaseImpl implements SendMessageWebhookUseCase {
 
-	@Autowired
-	private DiscordRepository repository;
-
-	@Autowired
-	private MovieRepository movieRepository;
+	private final DiscordRepository repository;
+	private final MovieRepository movieRepository;
 
 	@Override
 	public void sendMovieMessage(UUID movieId) {

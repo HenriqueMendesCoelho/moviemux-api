@@ -2,22 +2,21 @@ package com.moviemux.user.usecase.impl;
 
 import java.util.List;
 
+import com.moviemux.user.adapter.repository.UserRepository;
 import com.moviemux.user.domain.Role;
 import com.moviemux.user.domain.User;
 import com.moviemux.user.usecase.SearchUserUseCase;
 import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
 import com.moviemux.user.usecase.exception.UserNotFoundException;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
-import com.moviemux.user.adapter.repository.UserRepository;
-
 @Service
+@RequiredArgsConstructor
 public class SearchUserUseCaseImpl implements SearchUserUseCase {
 
-	@Autowired
-	UserRepository repository;
+	private final UserRepository repository;
 
 	@Override
 	public User getUserByEmail(String emailUserToFind, String emailUserLoged)

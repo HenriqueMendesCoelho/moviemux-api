@@ -2,7 +2,7 @@ package com.moviemux.movie.usecase.impl;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import com.moviemux.movie.adapter.repository.MovieGenreRepository;
@@ -10,10 +10,10 @@ import com.moviemux.movie.domain.MovieGenre;
 import com.moviemux.movie.usecase.SearchMovieGenreUseCase;
 
 @Component
+@RequiredArgsConstructor
 public class SearchMovieGenreUseCaseImpl implements SearchMovieGenreUseCase {
 
-	@Autowired
-	private MovieGenreRepository repository;
+	private final MovieGenreRepository repository;
 
 	@Override
 	public List<MovieGenre> list() {

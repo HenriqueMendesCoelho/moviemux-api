@@ -2,22 +2,19 @@ package com.moviemux.wishlist.usecase.impl;
 
 import java.util.UUID;
 
-import com.moviemux.wishlist.usecase.DeleteUserWishlistUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import com.moviemux.wishlist.adapter.repository.MoviesWishlistsRepository;
 import com.moviemux.wishlist.adapter.repository.WishlistRepository;
 import com.moviemux.wishlist.domain.Wishlist;
+import com.moviemux.wishlist.usecase.DeleteUserWishlistUseCase;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class DeleteUserWishlistUseCaseImpl implements DeleteUserWishlistUseCase {
 
-	@Autowired
-	private WishlistRepository repository;
-
-	@Autowired
-	private MoviesWishlistsRepository moviesWishlistsRepository;
+	private final WishlistRepository repository;
+	private final MoviesWishlistsRepository moviesWishlistsRepository;
 
 	@Override
 	public void delete(UUID wishlistId, UUID userId) {

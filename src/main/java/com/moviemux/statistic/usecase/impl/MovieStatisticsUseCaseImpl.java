@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.moviemux.statistic.usecase.MovieStatisticsUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
@@ -25,19 +25,15 @@ import com.moviemux.movie.domain.MovieNote;
 import com.moviemux.statistic.domain.MovieStatistic;
 
 @Component
+@RequiredArgsConstructor
 public class MovieStatisticsUseCaseImpl implements MovieStatisticsUseCase {
 
 	private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("0.00", new DecimalFormatSymbols(Locale.US));
 	private static final int NUMBER_OF_MONTHS = 6;
 
-	@Autowired
-	private MovieRepository repository;
-
-	@Autowired
-	private MovieGenreRepository genreRepository;
-
-	@Autowired
-	private MovieNoteRepository movieNoteRepository;
+	private final MovieRepository repository;
+	private final MovieGenreRepository genreRepository;
+	private final MovieNoteRepository movieNoteRepository;
 
 	@Override
 	@Cacheable("statistics")

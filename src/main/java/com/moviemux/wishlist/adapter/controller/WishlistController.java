@@ -3,7 +3,7 @@ package com.moviemux.wishlist.adapter.controller;
 import java.util.List;
 import java.util.UUID;
 
-import com.moviemux.adapter.core.controller.dto.UserTokenDto;
+import com.moviemux.core.adapter.controller.dto.UserTokenDto;
 import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
 import com.moviemux.wishlist.adapter.controller.dto.MoviesAlreadyRatedResponseDto;
 import com.moviemux.wishlist.adapter.controller.dto.WishlistRequestDto;

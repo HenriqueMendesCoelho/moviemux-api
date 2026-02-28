@@ -3,23 +3,20 @@ package com.moviemux.user.usecase.impl;
 import java.util.List;
 import java.util.UUID;
 
-import com.moviemux.user.domain.User;
-import com.moviemux.user.usecase.DeleteUserUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 import com.moviemux.movie.adapter.repository.MovieRepository;
 import com.moviemux.movie.domain.Movie;
 import com.moviemux.user.adapter.repository.UserRepository;
+import com.moviemux.user.domain.User;
+import com.moviemux.user.usecase.DeleteUserUseCase;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class DeleteUserUseCaseImpl implements DeleteUserUseCase {
 
-	@Autowired
-	UserRepository repository;
-
-	@Autowired
-	MovieRepository movieRepository;
+	private final UserRepository repository;
+	private final MovieRepository movieRepository;
 
 	@Override
 	public void deleteUser(UUID id) {

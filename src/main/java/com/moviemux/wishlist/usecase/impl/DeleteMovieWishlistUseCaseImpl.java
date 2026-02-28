@@ -2,22 +2,20 @@ package com.moviemux.wishlist.usecase.impl;
 
 import java.util.List;
 
+import com.moviemux.wishlist.adapter.repository.MovieWishlistRepository;
+import com.moviemux.wishlist.domain.MovieWishlist;
 import com.moviemux.wishlist.usecase.DeleteMovieWishlistUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import com.moviemux.wishlist.adapter.repository.MovieWishlistRepository;
-import com.moviemux.wishlist.domain.MovieWishlist;
-
-import lombok.extern.slf4j.Slf4j;
-
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class DeleteMovieWishlistUseCaseImpl implements DeleteMovieWishlistUseCase {
 
-	@Autowired
-	private MovieWishlistRepository repository;
+	private final MovieWishlistRepository repository;
 
 	@Scheduled(initialDelay = 10000, fixedDelayString = "P1D")
 	@Override

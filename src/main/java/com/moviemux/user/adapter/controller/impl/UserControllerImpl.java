@@ -1,13 +1,13 @@
 package com.moviemux.user.adapter.controller.impl;
 
-import com.moviemux.adapter.core.controller.dto.UserTokenDto;
+import com.moviemux.core.adapter.controller.dto.UserTokenDto;
 import com.moviemux.user.adapter.controller.UserController;
 import com.moviemux.user.adapter.controller.dto.*;
 import com.moviemux.user.domain.Invite;
 import com.moviemux.user.domain.User;
 import com.moviemux.user.usecase.*;
 import com.moviemux.user.usecase.exception.*;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 
 import java.util.List;
@@ -15,31 +15,17 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Controller
+@RequiredArgsConstructor
 public class UserControllerImpl implements UserController {
 
-	@Autowired
-	private CreateUserUseCase createUserUseCase;
-
-	@Autowired
-	private SearchUserUseCase searchUserUseCase;
-
-	@Autowired
-	private UpdateUserUseCase updateUserUseCase;
-
-	@Autowired
-	private DeleteUserUseCase deleteUserUseCase;
-
-	@Autowired
-	private SearchInviteUseCase searchInviteUseCase;
-
-	@Autowired
-	private CreateInviteUseCase createInviteUseCase;
-
-	@Autowired
-	private DeleteInviteUseCase deleteInviteUseCase;
-
-	@Autowired
-	private UserRedefinePasswordUseCase redefinePasswordUseCase;
+	private final CreateUserUseCase createUserUseCase;
+	private final SearchUserUseCase searchUserUseCase;
+	private final UpdateUserUseCase updateUserUseCase;
+	private final DeleteUserUseCase deleteUserUseCase;
+	private final SearchInviteUseCase searchInviteUseCase;
+	private final CreateInviteUseCase createInviteUseCase;
+	private final DeleteInviteUseCase deleteInviteUseCase;
+	private final UserRedefinePasswordUseCase redefinePasswordUseCase;
 
 	@Override
 	public UserResponseDto getUserByEmail(UserTokenDto request, String email)

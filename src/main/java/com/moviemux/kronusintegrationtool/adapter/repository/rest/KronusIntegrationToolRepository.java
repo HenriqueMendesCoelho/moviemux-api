@@ -1,6 +1,9 @@
 package com.moviemux.kronusintegrationtool.adapter.repository.rest;
 
-import com.moviemux.kronusintegrationtool.domain.*;
+import com.moviemux.kronusintegrationtool.domain.Credit;
+import com.moviemux.kronusintegrationtool.domain.MovieSearch;
+import com.moviemux.kronusintegrationtool.domain.MovieSummary;
+import com.moviemux.kronusintegrationtool.domain.WatchProviders;
 import com.moviemux.movie.domain.MovieGenre;
 
 import java.util.List;
@@ -27,8 +30,6 @@ public interface KronusIntegrationToolRepository {
 
 	MovieSearch discoverMovies(String sortByParam, Integer page, Integer primaryReleaseYear, String with_genres,
 			String without_genres);
-
-	void sendMailTemplate(SendMailTemplate request);
 
 	List<MovieGenre> listGenres();
 

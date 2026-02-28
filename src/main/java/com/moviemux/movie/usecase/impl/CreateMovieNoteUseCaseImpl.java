@@ -12,8 +12,8 @@ import com.moviemux.movie.usecase.exception.DuplicatedMovieNoteException;
 import com.moviemux.movie.usecase.exception.MovieNotFoundException;
 import com.moviemux.user.adapter.repository.UserRepository;
 import com.moviemux.user.domain.User;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Component;
 
@@ -21,22 +21,14 @@ import java.util.UUID;
 
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class CreateMovieNoteUseCaseImpl implements CreateMovieNoteUseCase {
 
-	@Autowired
-	private MovieNoteRepository repository;
-
-	@Autowired
-	private MovieRepository movieRepository;
-
-	@Autowired
-	private UserRepository userRepository;
-
-	@Autowired
-	private UpdateMessageWebhookUseCase updateMessageWebhookUseCase;
-
-	@Autowired
-	private MovieSocketRespository movieSocketRespository;
+	private final MovieNoteRepository repository;
+	private final MovieRepository movieRepository;
+	private final UserRepository userRepository;
+	private final UpdateMessageWebhookUseCase updateMessageWebhookUseCase;
+	private final MovieSocketRespository movieSocketRespository;
 
 	@Override
 	@CacheEvict(value = "statistics", allEntries = true)

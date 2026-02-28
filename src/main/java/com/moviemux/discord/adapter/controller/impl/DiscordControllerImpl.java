@@ -3,20 +3,17 @@ package com.moviemux.discord.adapter.controller.impl;
 import java.util.UUID;
 
 import com.moviemux.discord.adapter.controller.DiscordController;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Controller;
-
 import com.moviemux.discord.usecase.SendMessageWebhookUseCase;
 import com.moviemux.discord.usecase.UpdateMessageWebhookUseCase;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Controller;
 
 @Controller
+@RequiredArgsConstructor
 public class DiscordControllerImpl implements DiscordController {
 
-	@Autowired
-	private SendMessageWebhookUseCase sendMessageWebhook;
-
-	@Autowired
-	private UpdateMessageWebhookUseCase updateMessageWebhook;
+	private final SendMessageWebhookUseCase sendMessageWebhook;
+	private final UpdateMessageWebhookUseCase updateMessageWebhook;
 
 	@Override
 	public void execute(UUID movieId) {

@@ -1,7 +1,7 @@
 package com.moviemux.user.usecase.impl;
 
-import com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository;
-import com.moviemux.kronusintegrationtool.domain.SendMailTemplate;
+import com.moviemux.mail.domain.SendMailEvent;
+import com.moviemux.mail.domain.SendMailTemplate;
 import com.moviemux.user.adapter.repository.InviteRepository;
 import com.moviemux.user.adapter.repository.UserRepository;
 import com.moviemux.user.domain.*;
@@ -10,6 +10,7 @@ import com.moviemux.user.usecase.exception.DuplicatedUserException;
 import com.moviemux.user.usecase.exception.InviteNotValidException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +21,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class CreateUserUseCaseImpl implements CreateUserUseCase {
 
-	private final KronusIntegrationToolRepository kronusIntegrationToolRepository;
+	private final ApplicationEventPublisher publisher;
 	private final UserRepository userRepository;
 	private final InviteRepository inviteRepository;
 	private final BCryptPasswordEncoder passwordEncoder;
@@ -53,8 +54,7 @@ public class CreateUserUseCaseImpl implements CreateUserUseCase {
 
 	private void sendWelcomeMail(User user) {
 		try {
-			kronusIntegrationToolRepository.sendMailTemplate(
-					SendMailTemplate.welcomeMail(user.getEmail(), user.getName()));
+			publisher.publishEvent(new SendMailEvent(SendMailTemplate.welcomeMail(user.getEmail(), user.getName())));
 		} catch (Exception e) {
 			log.error("Error to send welcome mail to {}", user.getName());
 		}

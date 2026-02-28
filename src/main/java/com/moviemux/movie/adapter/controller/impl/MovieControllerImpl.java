@@ -8,12 +8,12 @@ import com.moviemux.movie.usecase.exception.DuplicatedMovieException;
 import com.moviemux.movie.usecase.exception.DuplicatedMovieNoteException;
 import com.moviemux.movie.usecase.exception.MovieNotFoundException;
 import com.moviemux.movie.usecase.exception.MovieNoteNotFoundException;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Controller;
 
-import com.moviemux.adapter.core.controller.dto.UserTokenDto;
+import com.moviemux.core.adapter.controller.dto.UserTokenDto;
 import com.moviemux.movie.adapter.controller.MovieController;
 import com.moviemux.movie.adapter.controller.dto.MovieGenreResponseDto;
 import com.moviemux.movie.adapter.controller.dto.MovieNoteRequestDto;
@@ -35,34 +35,18 @@ import com.moviemux.movie.usecase.UpdateMovieUseCase;
 import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
 
 @Controller
+@RequiredArgsConstructor
 public class MovieControllerImpl implements MovieController {
 
-	@Autowired
-	private CreateMovieUseCase createMovieUseCase;
-
-	@Autowired
-	private SearchMovieUseCase searchMovieUseCase;
-
-	@Autowired
-	private UpdateMovieUseCase updateMovieUseCase;
-
-	@Autowired
-	private DeleteMovieUseCase deleteMovieUseCase;
-
-	@Autowired
-	private CreateMovieNoteUseCase createMovieNoteUseCase;
-
-	@Autowired
-	private SearchMovieNoteUseCase searchMovieNoteUseCase;
-
-	@Autowired
-	private UpdateMovieNoteUseCase updateMovieNoteUseCase;
-
-	@Autowired
-	private DeleteMovieNoteUseCase deleteMovieNoteUseCase;
-
-	@Autowired
-	private SearchMovieGenreUseCase searchMovieGenreUseCase;
+	private final CreateMovieUseCase createMovieUseCase;
+	private final SearchMovieUseCase searchMovieUseCase;
+	private final UpdateMovieUseCase updateMovieUseCase;
+	private final DeleteMovieUseCase deleteMovieUseCase;
+	private final CreateMovieNoteUseCase createMovieNoteUseCase;
+	private final SearchMovieNoteUseCase searchMovieNoteUseCase;
+	private final UpdateMovieNoteUseCase updateMovieNoteUseCase;
+	private final DeleteMovieNoteUseCase deleteMovieNoteUseCase;
+	private final SearchMovieGenreUseCase searchMovieGenreUseCase;
 
 	@Override
 	public Page<MovieResponseDto> listAllMovies(String title, String genre, String sortJoin, Pageable pageable,

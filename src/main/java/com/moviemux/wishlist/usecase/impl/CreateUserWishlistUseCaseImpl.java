@@ -3,22 +3,21 @@ package com.moviemux.wishlist.usecase.impl;
 import java.util.List;
 import java.util.UUID;
 
-import com.moviemux.wishlist.usecase.CreateUserWishlistUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Component;
-
 import com.moviemux.user.domain.User;
 import com.moviemux.wishlist.adapter.repository.WishlistRepository;
 import com.moviemux.wishlist.domain.Wishlist;
+import com.moviemux.wishlist.usecase.CreateUserWishlistUseCase;
 import com.moviemux.wishlist.usecase.exception.WishlistDuplicatedException;
 import com.moviemux.wishlist.usecase.exception.WishlistUserReachedLimitException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class CreateUserWishlistUseCaseImpl implements CreateUserWishlistUseCase {
 
-	@Autowired
-	private WishlistRepository repository;
+	private final WishlistRepository repository;
 
 	@Override
 	public Wishlist create(String name, UUID userId)

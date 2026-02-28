@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import com.moviemux.movie.adapter.repository.MovieRepository;
@@ -14,10 +14,10 @@ import com.moviemux.movie.usecase.SearchMovieNoteUseCase;
 import com.moviemux.movie.usecase.exception.MovieNotFoundException;
 
 @Component
+@RequiredArgsConstructor
 public class SearchMovieNoteUseCaseImpl implements SearchMovieNoteUseCase {
 
-	@Autowired
-	private MovieRepository repository;
+	private final MovieRepository repository;
 
 	@Override
 	public List<MovieNote> list(UUID movieId, UUID userId) throws MovieNotFoundException {

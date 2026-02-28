@@ -10,7 +10,7 @@ import com.moviemux.movie.usecase.exception.MovieNoteNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-import com.moviemux.adapter.core.controller.dto.UserTokenDto;
+import com.moviemux.core.adapter.controller.dto.UserTokenDto;
 import com.moviemux.movie.adapter.controller.dto.MovieGenreResponseDto;
 import com.moviemux.movie.adapter.controller.dto.MovieNoteRequestDto;
 import com.moviemux.movie.adapter.controller.dto.MovieNoteResponseDto;

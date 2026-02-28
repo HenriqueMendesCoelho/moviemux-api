@@ -2,7 +2,7 @@ package com.moviemux.movie.usecase.impl;
 
 import java.util.UUID;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Component;
 
@@ -19,19 +19,13 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class CreateMovieUseCaseImpl implements CreateMovieUseCase {
 
-	@Autowired
-	private MovieRepository repository;
-
-	@Autowired
-	private UserRepository userRepository;
-
-	@Autowired
-	private SendMessageWebhookUseCase sendMessageWebhook;
-
-	@Autowired
-	private MovieSocketRespository socketRepository;
+	private final MovieRepository repository;
+	private final UserRepository userRepository;
+	private final SendMessageWebhookUseCase sendMessageWebhook;
+	private final MovieSocketRespository socketRepository;
 
 	@Override
 	@CacheEvict(value = "statistics", allEntries = true)

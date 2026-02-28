@@ -4,8 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.moviemux.movie.adapter.repository.MovieRepository;
@@ -15,13 +15,11 @@ import com.moviemux.wishlist.domain.Wishlist;
 import com.moviemux.wishlist.usecase.SearchMoviesAlreadyRated;
 
 @Component
+@RequiredArgsConstructor
 public class SearchMoviesAlreadyRatedImpl implements SearchMoviesAlreadyRated {
 
-	@Autowired
-	private WishlistRepository repository;
-
-	@Autowired
-	private MovieRepository movieRepository;
+	private final WishlistRepository repository;
+	private final MovieRepository movieRepository;
 
 	@Override
 	public List<Movie> findMovies(UUID wishlistId) {

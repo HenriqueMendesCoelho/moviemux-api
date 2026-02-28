@@ -1,7 +1,7 @@
 package com.moviemux.user.application.spring.controller;
 
-import com.moviemux.adapter.core.controller.dto.UserTokenDto;
-import com.moviemux.adapter.util.CredentialUtil;
+import com.moviemux.core.adapter.controller.dto.UserTokenDto;
+import com.moviemux.core.adapter.util.CredentialUtil;
 import com.moviemux.user.adapter.controller.UserController;
 import com.moviemux.user.adapter.controller.dto.UserResponseDto;
 import com.moviemux.user.usecase.exception.UserNotAuthorizedException;

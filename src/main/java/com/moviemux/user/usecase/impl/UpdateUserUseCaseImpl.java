@@ -6,20 +6,18 @@ import com.moviemux.user.domain.User;
 import com.moviemux.user.usecase.UpdateUserUseCase;
 import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
 import com.moviemux.user.usecase.exception.UserNotFoundException;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class UpdateUserUseCaseImpl implements UpdateUserUseCase {
 
-	@Autowired
-	UserRepository repository;
-
-	@Autowired
-	private BCryptPasswordEncoder passwordEncoder;
+	private final UserRepository repository;
+	private final BCryptPasswordEncoder passwordEncoder;
 
 	@Override
 	public User update(User user, UUID userId, String emailUserLoged)

@@ -2,7 +2,7 @@ package com.moviemux.discord.usecase.impl;
 
 import java.util.UUID;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import com.moviemux.discord.adapter.repository.rest.DiscordRepository;
@@ -11,13 +11,11 @@ import com.moviemux.movie.adapter.repository.MovieRepository;
 import com.moviemux.movie.domain.Movie;
 
 @Component
+@RequiredArgsConstructor
 public class UpdateMessageWebhookUseCaseImpl implements UpdateMessageWebhookUseCase {
 
-	@Autowired
-	private DiscordRepository repository;
-
-	@Autowired
-	private MovieRepository movieRepository;
+	private final DiscordRepository repository;
+	private final MovieRepository movieRepository;
 
 	@Override
 	public void updateMovieMessage(UUID movieId) {

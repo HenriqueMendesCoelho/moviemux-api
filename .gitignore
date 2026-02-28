@@ -31,3 +31,15 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### AI ###
+.claude
+CLAUDE.md
+AGENTS.md
+
+### dotenv environment variable files ###
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local

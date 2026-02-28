@@ -4,12 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.moviemux.movie.adapter.repository.rest.MovieSocketRespository;
 import com.moviemux.movie.adapter.repository.rest.dto.MovieNoteRestRequestDto;
 import com.moviemux.movie.domain.MovieNote;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.web.firewall.RequestRejectedException;
 import org.springframework.stereotype.Repository;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.client.RestClient;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,13 +17,11 @@ import java.util.UUID;
 
 @Repository
 @Slf4j
+@RequiredArgsConstructor
 public class MovieSocketRestRespositoryImpl implements MovieSocketRespository {
 
-	@Autowired
-	private WebClient webClientSocketApi;
-
-	@Autowired
-	private ObjectMapper mapper;
+	private final RestClient restClientSocketApi;
+	private final ObjectMapper mapper;
 
 	@Override
 	public void emitAllMoviesEvent(String event) {
@@ -32,12 +30,11 @@ public class MovieSocketRestRespositoryImpl implements MovieSocketRespository {
 				event = "update";
 			}
 
-			webClientSocketApi.post()
+			restClientSocketApi.post()
 					.uri("/api/v1/movie/all/emit/%s".formatted(event))
-					.bodyValue(mapper.writeValueAsString(Map.of("event", event)))
+					.body(Map.of("event", event))
 					.retrieve()
-					.bodyToMono(Void.class)
-					.block();
+					.toBodilessEntity();
 		} catch (Exception e) {
 			log.error("Error on Socket Api emit event all movies:", e);
 			throw new RequestRejectedException(e.getMessage());
@@ -61,13 +58,11 @@ public class MovieSocketRestRespositoryImpl implements MovieSocketRespository {
 				map.put("emmitedByUserId", emmitedByUserId);
 			}
 
-			String body = mapper.writeValueAsString(map);
-			webClientSocketApi.post()
+			restClientSocketApi.post()
 					.uri("/api/v1/movie/%s/note/emit/%s".formatted(movieId, event))
-					.bodyValue(body)
+					.body(map)
 					.retrieve()
-					.bodyToMono(Void.class)
-					.block();
+					.toBodilessEntity();
 		} catch (Exception e) {
 			log.error("Error on Socket Api emit event movie:", e);
 			throw new RequestRejectedException(e.getMessage());

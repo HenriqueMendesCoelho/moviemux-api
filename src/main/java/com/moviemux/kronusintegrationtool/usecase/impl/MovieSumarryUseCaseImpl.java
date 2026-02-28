@@ -1,17 +1,16 @@
 package com.moviemux.kronusintegrationtool.usecase.impl;
 
+import com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository;
 import com.moviemux.kronusintegrationtool.domain.MovieSummary;
 import com.moviemux.kronusintegrationtool.usecase.MovieSumaryUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository;
-
 @Component
+@RequiredArgsConstructor
 public class MovieSumarryUseCaseImpl implements MovieSumaryUseCase {
 
-	@Autowired
-	private KronusIntegrationToolRepository repository;
+	private final KronusIntegrationToolRepository repository;
 
 	@Override
 	public MovieSummary execute(Long tmdbId) {

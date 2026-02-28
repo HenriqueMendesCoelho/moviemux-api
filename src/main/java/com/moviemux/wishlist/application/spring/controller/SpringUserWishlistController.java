@@ -1,7 +1,7 @@
 package com.moviemux.wishlist.application.spring.controller;
 
-import com.moviemux.adapter.core.controller.dto.UserTokenDto;
-import com.moviemux.adapter.util.CredentialUtil;
+import com.moviemux.core.adapter.controller.dto.UserTokenDto;
+import com.moviemux.core.adapter.util.CredentialUtil;
 import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
 import com.moviemux.wishlist.adapter.controller.WishlistController;
 import com.moviemux.wishlist.adapter.controller.dto.MoviesAlreadyRatedResponseDto;
@@ -12,8 +12,8 @@ import com.moviemux.wishlist.usecase.exception.WishlistMovieAlreadyExistsExcepti
 import com.moviemux.wishlist.usecase.exception.WishlistNotFoundException;
 import com.moviemux.wishlist.usecase.exception.WishlistUserReachedLimitException;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,10 +24,10 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/user/wishlist")
+@RequiredArgsConstructor
 public class SpringUserWishlistController {
 
-	@Autowired
-	private WishlistController controller;
+	private final WishlistController controller;
 
 	@GetMapping
 	public ResponseEntity<List<WishlistResponseDto>> listUserWishlists(@RequestHeader("Authorization") String token) {
