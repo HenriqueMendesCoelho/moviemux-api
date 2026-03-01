@@ -48,6 +48,17 @@ public class SendMailTemplate {
 				.build();
 	}
 
+	public static SendMailTemplate passwordUpdatedMail(String to, String username) {
+		LinkedHashMap<String, String> map = new LinkedHashMap<>();
+		map.put("user", username);
+		return SendMailTemplate.builder()
+				.to(to)
+				.params(map)
+				.templateId(FORGOT_PASSWORD_TEMPLATEID)
+				.ignoreNotifyPreferences(true)
+				.build();
+	}
+
 	public static SendMailTemplate accountBlockedMail(String to, String username) {
 		LinkedHashMap<String, String> map = new LinkedHashMap<>();
 		map.put("user", username);

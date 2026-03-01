@@ -66,7 +66,12 @@ public class UserRedefinePasswordUseCaseImpl implements UserRedefinePasswordUseC
 		}
 
 		user.setPassword(passwordEncoder.encode(password));
-		return cleanRedefinePassowordKeyAndSave(user);
+		User userPasswordUpdated = cleanRedefinePassowordKeyAndSave(user);
+
+		publisher.publishEvent(
+				new SendMailEvent(SendMailTemplate.passwordUpdatedMail(user.getEmail(), user.getName())));
+		
+		return userPasswordUpdated;
 	}
 
 	private User cleanRedefinePassowordKeyAndSave(User user) {
