@@ -11,9 +11,10 @@ import java.util.LinkedHashMap;
 @AllArgsConstructor
 public class SendMailTemplate {
 
-	private static final String WELCOME_TEMPLATEID = "welcome";
-	private static final String FORGOT_PASSWORD_TEMPLATEID = "reset_password";
-	private static final String BLOCKED_ACCOUNT_TEMPLATEID = "account_blocked";
+	private static final String WELCOME_TEMPLATE_ID = "welcome";
+	private static final String FORGOT_PASSWORD_TEMPLATE_ID = "reset_password";
+	private static final String BLOCKED_ACCOUNT_TEMPLATE_ID = "account_blocked";
+	private static final String PASSOWORD_UPDATED_TEMPLATE_ID = "password_updated";
 	private static final String MOVIE_MUX_FRONTEND_URL = "https://www.moviemux.com";
 
 	@Builder.Default
@@ -31,7 +32,7 @@ public class SendMailTemplate {
 		return SendMailTemplate.builder()
 				.to(to)
 				.params(map)
-				.templateId(WELCOME_TEMPLATEID)
+				.templateId(WELCOME_TEMPLATE_ID)
 				.ignoreNotifyPreferences(true)
 				.build();
 	}
@@ -43,7 +44,7 @@ public class SendMailTemplate {
 		return SendMailTemplate.builder()
 				.to(to)
 				.params(map)
-				.templateId(FORGOT_PASSWORD_TEMPLATEID)
+				.templateId(FORGOT_PASSWORD_TEMPLATE_ID)
 				.ignoreNotifyPreferences(true)
 				.build();
 	}
@@ -54,7 +55,7 @@ public class SendMailTemplate {
 		return SendMailTemplate.builder()
 				.to(to)
 				.params(map)
-				.templateId(FORGOT_PASSWORD_TEMPLATEID)
+				.templateId(PASSOWORD_UPDATED_TEMPLATE_ID)
 				.ignoreNotifyPreferences(true)
 				.build();
 	}
@@ -65,7 +66,7 @@ public class SendMailTemplate {
 		return SendMailTemplate.builder()
 				.to(to)
 				.params(map)
-				.templateId(BLOCKED_ACCOUNT_TEMPLATEID)
+				.templateId(BLOCKED_ACCOUNT_TEMPLATE_ID)
 				.ignoreNotifyPreferences(true)
 				.build();
 	}
