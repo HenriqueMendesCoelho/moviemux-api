@@ -5,6 +5,7 @@ import com.moviemux.mail.domain.SendMailEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -16,6 +17,7 @@ public class SendMailListenerUseCaseImpl {
 
 	private final MovieMailRestRepository movieMailRestRepository;
 
+	@Async
 	@EventListener
 	public void onSendMailEvent(SendMailEvent event) {
 		if (!sendMail)
