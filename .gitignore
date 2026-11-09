@@ -31,3 +31,16 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Private local instructions and specifications ###
+.claude/
+.agents/
+.codex/
+CLAUDE.md
+AGENTS.md
+/openspec/
+
+### Local environment configuration ###
+.env
+.env.*
+!.env.example

@@ -10,7 +10,7 @@ Inspired by IMDB and TMDB.
 ## Technologies
 
 ```
-Java 21, Spring Boot, JPA, Spring Security, Lombok, Spring Validation, Actuator
+Java 25, Spring Boot, JPA, Spring Security, Lombok, Spring Validation, Actuator
 ```
 
 ### Link
@@ -21,7 +21,7 @@ This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 ## Verification
 
-Java 21 and Maven are required. No external API credentials are needed.
+Java 25 and Maven are required. No external API credentials are needed.
 
 - Fast unit, serialization, HTTP/security and architecture tests: `./mvnw test`.
 - Full suite: `./mvnw clean verify`, then `python3 scripts/check-test-reports.py`.
@@ -64,11 +64,21 @@ models. Cross-module ownership uses IDs and public identity projections. The
 architecture tests check both core dependencies and the complete module graph,
 including adapters and entities, without a temporary dependency allowlist.
 
-Multi-write operations use local database transactions. Welcome/reset email and
-socket notifications are dispatched after a successful commit. Dispatch failures
-are recorded but are not retried automatically; there is no durable outbox.
-Password-reset state is saved before its email is dispatched. Discord remains a
-synchronous external effect and cannot be rolled back by a database transaction.
+Multi-write operations use local database transactions. Email and socket
+notifications are dispatched after a successful commit. Mail delivery runs on a
+bounded asynchronous executor; a saturated queue or transport failure is recorded
+without retrying or undoing the committed operation. There is no durable outbox,
+and pending mail can be lost when the process stops. Socket delivery remains
+synchronous after commit. Password-reset state is saved before its email is
+queued; a successful reset by key also queues a password-updated notification.
+Discord remains a synchronous external effect and cannot be rolled back by a
+database transaction.
+
+Copy `.env.example` to configure development with your own values. Mail uses the
+separate `MOVIEMUX_MAIL_URL` provider at `/api/mail/send`, with template identifiers
+and metadata rather than the KIT bearer token. KIT, mail, Discord and socket use
+independently configured synchronous HTTP clients; tests verify their contracts
+against local stubs. Never commit real environment files or credentials.
 
 ## Database migrations
 
