@@ -132,6 +132,59 @@ class FlywayMigrationIT {
     }
 
     @Test
+    void explicitlyAdoptedDevelopSchemaPreservesCatalogAndTranslatesOnlyKnownWishlistDuplicates() throws Exception {
+        try (Connection connection = connection(); var statement = connection.createStatement()) {
+            statement.execute("set search_path to " + schema);
+            ScriptUtils.executeSqlScript(connection, new org.springframework.core.io.ByteArrayResource(
+                    SchemaExportTest.developLegacySchema().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            statement.execute("insert into user_invites(code) values ('synthetic-develop-invite')");
+        }
+        List<String> before = catalog();
+        assertThat(before).anyMatch(definition -> definition.contains("ukt52x8vytfwq3vic32in8tb8y8"));
+        assertThatThrownBy(() -> flyway().migrate()).isInstanceOf(FlywayException.class).hasMessageContaining("non-empty");
+        flyway().baseline(); // Explicit adoption is permitted only for this inspected, disposable fixture.
+        assertThat(flyway().migrate().migrationsExecuted).isZero();
+        validateJpa();
+        assertThat(catalog()).isEqualTo(before);
+
+        var app = new org.springframework.boot.SpringApplication(com.moviemux.MovieMuxApplication.class);
+        try (var context = app.run("--spring.profiles.active=test", "--server.address=127.0.0.1", "--server.port=0",
+                "--spring.datasource.url=" + url, "--spring.datasource.username=" + user,
+                "--spring.datasource.password=" + password, "--spring.datasource.hikari.schema=" + schema,
+                "--spring.flyway.default-schema=" + schema, "--spring.flyway.schemas=" + schema,
+                "--spring.jpa.properties.hibernate.default_schema=" + schema)) {
+            var users = context.getBean(com.moviemux.user.adapter.repository.UserRepository.class);
+            var wishlists = context.getBean(com.moviemux.wishlist.domain.repository.WishlistRepository.class);
+            var owner = users.saveAndFlush(com.moviemux.user.adapter.repository.postgres.entity.UserEntity.builder()
+                    .name("Synthetic legacy owner").email("legacy-" + UUID.randomUUID() + "@example.invalid")
+                    .password("synthetic-hash").build());
+            var wishlist = com.moviemux.wishlist.domain.model.Wishlist.builder()
+                    .name("Legacy duplicate").shareable(false).moviesWishlists(List.of())
+                    .user(new com.moviemux.wishlist.domain.model.WishlistOwner(owner.getId(), owner.getName())).build();
+            var original = wishlists.save(wishlist);
+            Throwable duplicate = catchThrowable(() -> wishlists.save(wishlist));
+            assertThat(duplicate).isInstanceOf(com.moviemux.wishlist.domain.exception.WishlistPersistenceConflict.class);
+            Throwable cause = duplicate;
+            while (cause != null && !(cause instanceof org.hibernate.exception.ConstraintViolationException)) {
+                cause = cause.getCause();
+            }
+            assertThat(cause).isInstanceOf(org.hibernate.exception.ConstraintViolationException.class);
+            var violation = (org.hibernate.exception.ConstraintViolationException) cause;
+            assertThat(violation.getSQLState()).isEqualTo("23505");
+            assertThat(violation.getConstraintName()).isEqualTo("ukt52x8vytfwq3vic32in8tb8y8");
+            wishlist.setUser(new com.moviemux.wishlist.domain.model.WishlistOwner(UUID.randomUUID(), "Missing owner"));
+            assertThatThrownBy(() -> wishlists.save(wishlist))
+                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+                    .isNotInstanceOf(com.moviemux.wishlist.domain.exception.WishlistPersistenceConflict.class);
+            assertThat(wishlists.findByUserIdOrderByCreatedAtDesc(owner.getId()))
+                    .extracting(com.moviemux.wishlist.domain.model.Wishlist::getId).containsExactly(original.getId());
+        }
+        assertThat(catalog()).isEqualTo(before);
+        assertThat(count("select id from " + schema + ".user_invites where code='synthetic-develop-invite'")).isEqualTo(1);
+        assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='1' and type='BASELINE' and success")).isEqualTo(1);
+    }
+
+    @Test
     void changedAppliedMigrationChecksumFailsWithoutRepair() throws Exception {
         flyway().migrate();
         String migration = new String(new ClassPathResource("db/migration/V1__initial_schema.sql").getInputStream().readAllBytes());

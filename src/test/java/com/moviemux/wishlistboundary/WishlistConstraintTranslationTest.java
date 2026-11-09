@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.hibernate.exception.ConstraintViolationException;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -44,6 +45,14 @@ class WishlistConstraintTranslationTest {
   void recognizedUniqueConstraintPreservesCauseInBusinessConflict(Target target) {
     DataIntegrityViolationException failure = failure("23505", target.constraint);
     assertThatThrownBy(operation(target, failure)::run)
+        .isInstanceOf(WishlistPersistenceConflict.class)
+        .hasCause(failure);
+  }
+
+  @Test
+  void historicalDevelopWishlistUniqueConstraintPreservesCauseInBusinessConflict() {
+    DataIntegrityViolationException failure = failure("23505", "ukt52x8vytfwq3vic32in8tb8y8");
+    assertThatThrownBy(operation(Target.WISHLIST, failure)::run)
         .isInstanceOf(WishlistPersistenceConflict.class)
         .hasCause(failure);
   }
@@ -76,7 +85,17 @@ class WishlistConstraintTranslationTest {
                     Arguments.of(target, "23502", target.constraint),
                     Arguments.of(target, "23505", "unrecognized_unique_constraint"),
                     Arguments.of(target, "23505", null),
+                    Arguments.of(target, "23503", "ukt52x8vytfwq3vic32in8tb8y8"),
+                    Arguments.of(target, "23502", "ukt52x8vytfwq3vic32in8tb8y8"),
+                    Arguments.of(target, null, "ukt52x8vytfwq3vic32in8tb8y8"),
                     Arguments.of(target, null, target.constraint)));
+  }
+
+  @ParameterizedTest
+  @EnumSource(value = Target.class, names = {"CATALOG_MOVIE", "MEMBERSHIP"})
+  void historicalWishlistNameIsNotAcceptedForOtherAdapters(Target target) {
+    DataIntegrityViolationException failure = failure("23505", "ukt52x8vytfwq3vic32in8tb8y8");
+    assertThatThrownBy(operation(target, failure)::run).isSameAs(failure);
   }
 
   private Runnable operation(Target target, DataIntegrityViolationException failure) {
