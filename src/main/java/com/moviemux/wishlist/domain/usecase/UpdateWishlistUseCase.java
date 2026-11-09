@@ -9,6 +9,7 @@ import com.moviemux.wishlist.domain.exception.WishlistNotFoundException;
 import com.moviemux.wishlist.domain.exception.WishlistPersistenceConflict;
 import com.moviemux.wishlist.domain.model.MovieWishlist;
 import com.moviemux.wishlist.domain.model.MoviesWishlists;
+import com.moviemux.wishlist.domain.model.MoviesWishlistsKey;
 import com.moviemux.wishlist.domain.model.Wishlist;
 import com.moviemux.wishlist.domain.repository.MovieWishlistRepository;
 import com.moviemux.wishlist.domain.repository.MoviesWishlistsRepository;
@@ -20,8 +21,8 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Component
@@ -45,27 +46,31 @@ public class UpdateWishlistUseCase {
           UserNotAuthorizedException {
     Wishlist userWishlist = command.wishlist();
     UUID userId = command.actorId();
-    Wishlist userWishlistToUpdate = repository.findById(userWishlist.getId()).orElse(null);
+    Wishlist userWishlistToUpdate = repository.findByIdForUpdate(userWishlist.getId()).orElse(null);
 
-    if (userWishlistToUpdate == null || userWishlistToUpdate.getMoviesWishlists().size() > LIMIT) {
+    if (userWishlistToUpdate == null) {
       throw new WishlistNotFoundException();
     }
 
-    if (!userWishlistToUpdate.getUser().getId().equals(userId)) {
+    if (userWishlistToUpdate.getUser() == null
+        || !userWishlistToUpdate.getUser().getId().equals(userId)) {
       throw new UserNotAuthorizedException();
     }
 
+    if (userWishlist.getMoviesWishlists().size() > LIMIT) {
+      throw new WishlistNotFoundException();
+    }
+
     List<MovieWishlist> moviesToCheck =
-        userWishlistToUpdate.getMoviesWishlists().stream()
-            .map(MoviesWishlists::getMovieWishlist)
-            .toList();
+        userWishlist.getMoviesWishlists().stream().map(MoviesWishlists::getMovieWishlist).toList();
     createIfNotExistMovieWishlist(moviesToCheck);
 
     removeMoviesIfNeeded(userWishlistToUpdate, userWishlist);
     userWishlistToUpdate =
         userWishlistToUpdate.toBuilder()
             .name(userWishlist.getName())
-            .moviesWishlists(setOrder(userWishlist.getMoviesWishlists()))
+            .moviesWishlists(
+                setOrder(userWishlistToUpdate.getId(), userWishlist.getMoviesWishlists()))
             .shareable(userWishlist.isShareable())
             .updatedAt(OffsetDateTime.now())
             .build();
@@ -111,12 +116,19 @@ public class UpdateWishlistUseCase {
     return result;
   }
 
-  private List<MoviesWishlists> setOrder(List<MoviesWishlists> moviesToAdd) {
+  private List<MoviesWishlists> setOrder(UUID wishlistId, List<MoviesWishlists> moviesToAdd) {
+    List<MoviesWishlists> memberships = new ArrayList<>();
     for (int i = 0; i < moviesToAdd.size(); i++) {
-      moviesToAdd.get(i).setWishlistOrder(i + 1);
+      MovieWishlist movie = moviesToAdd.get(i).getMovieWishlist();
+      memberships.add(
+          MoviesWishlists.builder()
+              .id(new MoviesWishlistsKey(wishlistId, movie.getTmdbId()))
+              .wishlist(Wishlist.builder().id(wishlistId).build())
+              .movieWishlist(movie)
+              .wishlistOrder(i + 1)
+              .build());
     }
-
-    return moviesToAdd;
+    return memberships;
   }
 
   private void removeMoviesIfNeeded(Wishlist userWishlistToUpdate, Wishlist request) {

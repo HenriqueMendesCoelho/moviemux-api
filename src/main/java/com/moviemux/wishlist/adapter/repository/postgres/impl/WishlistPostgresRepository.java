@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Repository
@@ -27,6 +28,19 @@ public class WishlistPostgresRepository implements WishlistRepository {
   @Transactional(readOnly = true)
   public Optional<Wishlist> findById(UUID id) {
     return repository.findById(id).map(mapper::toDomain);
+  }
+
+  @Override
+  @Transactional(propagation = Propagation.MANDATORY)
+  public Optional<Wishlist> findByIdForUpdate(UUID id) {
+    // The row is locked before the mapper initializes the membership collection.
+    return repository.findByIdForUpdate(id).map(mapper::toDomain);
+  }
+
+  @Override
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void lockOwner(UUID ownerId) {
+    repository.lockOwner(ownerId);
   }
 
   @Override

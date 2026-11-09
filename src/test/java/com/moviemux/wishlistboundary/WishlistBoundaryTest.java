@@ -166,8 +166,14 @@ class WishlistBoundaryTest {
     MovieWishlistRepository movies = mock(MovieWishlistRepository.class);
     MoviesWishlistsRepository memberships = mock(MoviesWishlistsRepository.class);
     KronusCatalogRepository catalog = mock(KronusCatalogRepository.class);
-    when(wishlists.findById(id))
-        .thenReturn(Optional.of(Wishlist.builder().id(id).moviesWishlists(List.of()).build()));
+    when(wishlists.findByIdForUpdate(id))
+        .thenReturn(
+            Optional.of(
+                Wishlist.builder()
+                    .id(id)
+                    .user(new WishlistOwner(owner, "Owner"))
+                    .moviesWishlists(List.of())
+                    .build()));
     IllegalStateException unavailable = new IllegalStateException("synthetic catalog failure");
     when(catalog.movieSummary(99L)).thenThrow(unavailable);
     AddWishlistMovieUseCase useCase =

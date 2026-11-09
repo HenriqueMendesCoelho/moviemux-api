@@ -12,6 +12,7 @@ import com.moviemux.user.domain.usecase.CreateUserUseCase;
 import com.moviemux.wishlist.adapter.repository.postgres.impl.WishlistPostgresRepository;
 import com.moviemux.wishlist.domain.command.CreateWishlistCommand;
 import com.moviemux.wishlist.domain.exception.WishlistDuplicatedException;
+import com.moviemux.wishlist.domain.exception.WishlistUserReachedLimitException;
 import com.moviemux.wishlist.domain.model.Wishlist;
 import com.moviemux.wishlist.domain.repository.WishlistRepository;
 import com.moviemux.wishlist.domain.usecase.CreateUserWishlistUseCase;
@@ -96,7 +97,7 @@ class BusinessConcurrencyIT {
 
   @BeforeEach
   void resetSchedules() {
-    wishlists.readBarrier = null;
+    wishlists.beforeOwnerLock = null;
     invites.readBarrier = null;
     invites.firstCommitted = null;
   }
@@ -115,7 +116,7 @@ class BusinessConcurrencyIT {
   @Test
   void sameOwnerAndNameAllowOnlyOneCommittedWishlistWithIntactStoredState() throws Exception {
     UUID owner = owner();
-    wishlists.readBarrier = new CyclicBarrier(2);
+    wishlists.beforeOwnerLock = new CyclicBarrier(2);
     List<Outcome> outcomes =
         race(
             () -> createWishlist.execute(new CreateWishlistCommand("Shared name", owner)),
@@ -160,7 +161,7 @@ class BusinessConcurrencyIT {
   }
 
   @Test
-  void legacyCountThenInsertRaceCanExceedTenWishlistsWithoutAnAdditionalConcurrencyMechanism()
+  void concurrentCreatesAtNineWishlistsCommitOnlyOneAndRespectTheTenWishlistLimit()
       throws Exception {
     UUID owner = owner();
     for (int i = 0; i < 9; i++) {
@@ -171,20 +172,38 @@ class BusinessConcurrencyIT {
           false,
           owner);
     }
-    wishlists.readBarrier = new CyclicBarrier(2);
+    wishlists.beforeOwnerLock = new CyclicBarrier(2);
     List<Outcome> outcomes =
         race(
             () -> createWishlist.execute(new CreateWishlistCommand("Concurrent A", owner)),
             () -> createWishlist.execute(new CreateWishlistCommand("Concurrent B", owner)));
-    assertThat(outcomes).allMatch(Outcome::succeeded);
+    assertThat(outcomes.stream().filter(Outcome::succeeded)).hasSize(1);
+    assertThat(outcomes.stream().filter(result -> !result.succeeded()).map(Outcome::failure))
+        .singleElement()
+        .isInstanceOf(WishlistUserReachedLimitException.class);
     assertThat(
             jdbc.queryForObject(
                 "select count(*) from user_wishlist where user_id=?", Integer.class, owner))
-        .isEqualTo(11);
+        .isEqualTo(10);
+    Wishlist committed =
+        outcomes.stream()
+            .filter(Outcome::succeeded)
+            .map(Outcome::value)
+            .map(Wishlist.class::cast)
+            .findFirst()
+            .orElseThrow();
     assertThat(
             jdbc.queryForList(
-                "select name from user_wishlist where user_id=?", String.class, owner))
-        .contains("Concurrent A", "Concurrent B");
+                "select name from user_wishlist where user_id=? and name like 'Concurrent %'",
+                String.class, owner))
+        .containsExactly(committed.getName());
+    assertThat(
+            jdbc.queryForObject(
+                "select id from user_wishlist where user_id=? and name=?",
+                UUID.class,
+                owner,
+                committed.getName()))
+        .isEqualTo(committed.getId());
   }
 
   @Test
@@ -295,7 +314,7 @@ class BusinessConcurrencyIT {
 
   static class BarrierWishlists implements WishlistRepository {
     final WishlistPostgresRepository delegate;
-    volatile CyclicBarrier readBarrier;
+    volatile CyclicBarrier beforeOwnerLock;
 
     BarrierWishlists(WishlistPostgresRepository delegate) {
       this.delegate = delegate;
@@ -305,10 +324,19 @@ class BusinessConcurrencyIT {
       return delegate.findById(id);
     }
 
+    public Optional<Wishlist> findByIdForUpdate(UUID id) {
+      return delegate.findByIdForUpdate(id);
+    }
+
+    public void lockOwner(UUID ownerId) {
+      // Both transactions compete for the same owner lock before either reads the count.
+      // A barrier after acquiring the lock would deadlock the serialized operations.
+      await(beforeOwnerLock);
+      delegate.lockOwner(ownerId);
+    }
+
     public List<Wishlist> findByUserIdOrderByCreatedAtDesc(UUID userId) {
-      var snapshot = delegate.findByUserIdOrderByCreatedAtDesc(userId);
-      await(readBarrier);
-      return snapshot;
+      return delegate.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
     public Wishlist save(Wishlist value) {

@@ -19,8 +19,8 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Component
@@ -43,9 +43,12 @@ public class AddWishlistMovieUseCase {
     UUID wishlistId = command.wishlistId();
     UUID userId = command.actorId();
     Long tmdbId = command.tmdbId();
-    Wishlist userWishlistToUpdate = repository.findById(wishlistId).orElse(null);
+    Wishlist userWishlistToUpdate = repository.findByIdForUpdate(wishlistId).orElse(null);
 
-    if (userWishlistToUpdate == null || userWishlistToUpdate.getMoviesWishlists().size() >= LIMIT) {
+    if (userWishlistToUpdate == null
+        || userWishlistToUpdate.getUser() == null
+        || !userWishlistToUpdate.getUser().id().equals(userId)
+        || userWishlistToUpdate.getMoviesWishlists().size() >= LIMIT) {
       throw new WishlistNotFoundException();
     }
 

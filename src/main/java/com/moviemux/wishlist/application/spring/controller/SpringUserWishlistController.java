@@ -95,6 +95,9 @@ public class SpringUserWishlistController {
       @RequestBody @Valid WishlistRequestDto request) {
     try {
       UserTokenDto user = CredentialUtil.getUserFromToken(token);
+      if (!id.equals(request.getId())) {
+        throw new WishlistNotFoundException();
+      }
       WishlistResponseDto response = controller.updateUserWishlist(request, user);
       return ResponseEntity.ok(response);
     } catch (WishlistNotFoundException

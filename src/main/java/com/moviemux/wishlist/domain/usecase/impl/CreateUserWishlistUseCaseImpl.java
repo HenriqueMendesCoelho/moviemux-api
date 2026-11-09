@@ -11,8 +11,8 @@ import com.moviemux.wishlist.domain.usecase.CreateUserWishlistUseCase;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
@@ -27,6 +27,7 @@ public class CreateUserWishlistUseCaseImpl implements CreateUserWishlistUseCase 
     String name = command.name();
     UUID userId = command.actorId();
 
+    repository.lockOwner(userId);
     if (hasUserReachedLimit(userId)) {
       throw new WishlistUserReachedLimitException();
     }

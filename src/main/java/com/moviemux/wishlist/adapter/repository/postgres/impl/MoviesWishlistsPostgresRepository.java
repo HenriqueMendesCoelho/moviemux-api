@@ -42,13 +42,31 @@ public class MoviesWishlistsPostgresRepository implements MoviesWishlistsReposit
   @Override
   @Transactional
   public void deleteAll(List<MoviesWishlists> memberships) {
-    repository.deleteAllById(
+    var ids =
         memberships.stream()
             .map(
                 item ->
                     new com.moviemux.wishlist.adapter.repository.postgres.entity
                         .MoviesWishlistsKeyEntity(
                         item.getId().getWishlistId(), item.getId().getMovieId()))
-            .toList());
+            .toList();
+    var entities = repository.findAllById(ids);
+    for (var entity : entities) {
+      // Keep both managed collections consistent: wishlist cascade must not persist a removed row.
+      if (entity.getWishlist() != null && entity.getWishlist().getMoviesWishlists() != null) {
+        entity
+            .getWishlist()
+            .getMoviesWishlists()
+            .removeIf(item -> item.getId().equals(entity.getId()));
+      }
+      if (entity.getMovieWishlist() != null && entity.getMovieWishlist().getWishlists() != null) {
+        entity
+            .getMovieWishlist()
+            .getWishlists()
+            .removeIf(item -> item.getId().equals(entity.getId()));
+      }
+    }
+    repository.deleteAll(entities);
+    repository.flush();
   }
 }
