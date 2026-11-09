@@ -1,5 +1,5 @@
-# Temporary coupling inherited from the original implementation.
-# Each source capability owns removal as its domain and persistence boundaries separate.
+# Temporary ORM coupling inherited from the original implementation.
+# These persistence representations move behind adapters after vertical extraction.
 # This list may only shrink; new dependencies fail the architecture test.
 com.moviemux.movie.domain.Movie -> jakarta.persistence.CascadeType
 com.moviemux.movie.domain.Movie -> jakarta.persistence.Column

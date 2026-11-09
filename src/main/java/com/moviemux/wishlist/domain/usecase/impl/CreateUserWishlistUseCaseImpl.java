@@ -11,10 +11,12 @@ import com.moviemux.wishlist.domain.usecase.CreateUserWishlistUseCase;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@Transactional(rollbackFor = Exception.class)
 public class CreateUserWishlistUseCaseImpl implements CreateUserWishlistUseCase {
 
   private final WishlistRepository repository;

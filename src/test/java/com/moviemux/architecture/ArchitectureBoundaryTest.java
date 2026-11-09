@@ -28,7 +28,9 @@ class ArchitectureBoundaryTest {
                 || target.startsWith("com.fasterxml.jackson.") || target.startsWith("jakarta.servlet.")) return true;
         if (target.startsWith("org.springframework.")) {
             return !(useCase && Set.of("org.springframework.stereotype.Service", "org.springframework.stereotype.Component",
-                    "org.springframework.transaction.annotation.Transactional").contains(target));
+                    "org.springframework.transaction.annotation.Transactional",
+                    "org.springframework.transaction.annotation.Isolation",
+                    "org.springframework.transaction.annotation.Propagation").contains(target));
         }
         return false;
     }
@@ -59,5 +61,7 @@ class ArchitectureBoundaryTest {
         assertThat(forbidden("com.moviemux.movie.domain.usecase.Save", "org.springframework.transaction.annotation.Transactional")).isFalse();
         assertThat(forbidden("com.moviemux.movie.usecase.Search", "org.springframework.stereotype.Component")).isFalse();
         assertThat(forbidden("com.moviemux.movie.domain.Movie", "java.util.UUID")).isFalse();
+        assertThat(forbidden("com.moviemux.movie.domain.usecase.Save", "org.springframework.transaction.annotation.Propagation")).isFalse();
+        assertThat(forbidden("com.moviemux.movie.domain.usecase.Save", "org.springframework.transaction.PlatformTransactionManager")).isTrue();
     }
 }

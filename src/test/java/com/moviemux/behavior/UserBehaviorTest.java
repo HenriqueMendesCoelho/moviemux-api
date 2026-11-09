@@ -3,7 +3,7 @@ package com.moviemux.behavior;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.moviemux.kronusintegrationtool.domain.repository.EmailGateway;
+import com.moviemux.user.domain.repository.UserMailSender;
 import com.moviemux.user.domain.Role;
 import com.moviemux.user.domain.exception.DuplicatedUserException;
 import com.moviemux.user.domain.exception.InviteNotValidException;
@@ -37,7 +37,7 @@ class UserBehaviorTest {
   @Mock UserRepository repository;
   @Mock InviteRepository inviteRepository;
   @Mock PasswordHasher passwordEncoder;
-  @Mock EmailGateway kronusIntegrationToolRepository;
+  @Mock UserMailSender kronusIntegrationToolRepository;
   @Mock java.time.Clock clock;
 
   @org.junit.jupiter.api.BeforeEach
@@ -229,7 +229,7 @@ class UserBehaviorTest {
   }
 
   @Test
-  void legacyResetSendsEmailBeforePersistingGeneratedKey() {
+  void resetPersistsGeneratedKeyBeforeRequestingEmail() {
     User u = user();
     when(repository.findByEmail(u.getEmail())).thenReturn(u);
     reset.createRedefinePassword(u.getEmail());
@@ -237,12 +237,12 @@ class UserBehaviorTest {
     assertThat(u.getRedefinePasswordKeyCreatedAt()).isNotNull();
     InOrder order = inOrder(kronusIntegrationToolRepository, repository);
     order.verify(repository).findByEmail(u.getEmail());
-    order.verify(kronusIntegrationToolRepository).sendEmail(any());
     order.verify(repository).save(u);
+    order.verify(kronusIntegrationToolRepository).sendEmail(any());
   }
 
   @Test
-  void failedResetEmailLeavesNoPersistedKey() {
+  void resetRequestsEmailOnlyAfterKeyHasBeenSaved() {
     User u = user();
     when(repository.findByEmail(u.getEmail())).thenReturn(u);
     doThrow(new IllegalStateException("stub unavailable"))
@@ -250,8 +250,8 @@ class UserBehaviorTest {
         .sendEmail(any());
     assertThatThrownBy(() -> reset.createRedefinePassword(u.getEmail()))
         .isInstanceOf(IllegalStateException.class);
-    assertThat(u.getRedefinePasswordKey()).isNull();
-    verify(repository, never()).save(any());
+    assertThat(u.getRedefinePasswordKey()).isNotNull();
+    verify(repository).save(u);
   }
 
   @Test

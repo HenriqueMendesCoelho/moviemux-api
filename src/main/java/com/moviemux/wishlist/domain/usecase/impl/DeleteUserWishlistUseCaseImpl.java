@@ -7,10 +7,12 @@ import com.moviemux.wishlist.domain.repository.WishlistRepository;
 import com.moviemux.wishlist.domain.usecase.DeleteUserWishlistUseCase;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@Transactional(rollbackFor = Exception.class)
 public class DeleteUserWishlistUseCaseImpl implements DeleteUserWishlistUseCase {
 
   private final WishlistRepository repository;

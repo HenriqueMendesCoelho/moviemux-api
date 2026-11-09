@@ -12,6 +12,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@org.springframework.test.context.ActiveProfiles("test")
 @SpringBootTest
 class MovieMuxApplicationIT {
     @DynamicPropertySource
