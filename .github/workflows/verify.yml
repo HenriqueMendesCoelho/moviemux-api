@@ -1,0 +1,55 @@
+name: Backend verification
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_DB: moviemux_test
+          POSTGRES_USER: moviemux_test
+          POSTGRES_PASSWORD: moviemux_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: jdbc:postgresql://127.0.0.1:5432/moviemux_test
+      TEST_DATABASE_USER: moviemux_test
+      TEST_DATABASE_PASSWORD: moviemux_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Unit, HTTP, architecture and PostgreSQL tests
+        run: ./mvnw --batch-mode clean verify
+      - name: Require collected, successful tests
+        run: |
+          python3 scripts/check-test-reports.py
+          python3 scripts/check-coverage.py
+          python3 scripts/test_quality_gates.py
+      - name: Mutation checks for wishlist creation
+        run: ./mvnw --batch-mode -Pmutation org.pitest:pitest-maven:mutationCoverage
+      - name: Preserve verification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-${{ github.sha }}
+          path: |
+            target/surefire-reports
+            target/failsafe-reports
+            target/site/jacoco*
+            target/pit-reports
+          retention-days: 14

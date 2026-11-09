@@ -37,3 +37,14 @@ Java 21 and Maven are required. No external API credentials are needed.
 The CI verification job runs against PostgreSQL 14 with synthetic data. This is
 not evidence of compatibility with an uninspected production schema or of a
 successful deployment. Container packaging does not replace the verification job.
+
+Coverage gates are measured separately by module and layer. The initial unit
+ratchet is in `scripts/coverage-ratchet.json`; untested layers remain visible in
+reports and are not excluded from coverage. Run `python3 scripts/check-coverage.py`
+after tests. Combined unit/integration coverage is in `target/site/jacoco-all`.
+
+Selective mutation testing: `./mvnw -Pmutation test org.pitest:pitest-maven:mutationCoverage`.
+It currently protects wishlist-creation decisions; the 100% gate applies only to
+that small selection, not to the whole application. Reports are in
+`target/pit-reports`. CI also tests its collection and coverage gates with
+`python3 scripts/test_quality_gates.py`.

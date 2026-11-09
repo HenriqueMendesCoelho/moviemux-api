@@ -1,0 +1,52 @@
+{
+  "movie/adapter": {
+    "LINE": 17,
+    "BRANCH": 16
+  },
+  "discord/adapter": {
+    "LINE": 47,
+    "BRANCH": 50
+  },
+  "movie/usecase": {
+    "LINE": 49,
+    "BRANCH": 47
+  },
+  "application/application": {
+    "LINE": 50,
+    "BRANCH": 38
+  },
+  "kronusintegrationtool/adapter": {
+    "LINE": 21,
+    "BRANCH": 16
+  },
+  "wishlist/usecase": {
+    "LINE": 69,
+    "BRANCH": 65
+  },
+  "user/application": {
+    "LINE": 12
+  },
+  "statistic/usecase": {
+    "LINE": 97,
+    "BRANCH": 100
+  },
+  "user/usecase": {
+    "LINE": 78,
+    "BRANCH": 67
+  },
+  "movie/application": {
+    "LINE": 11,
+    "BRANCH": 33
+  },
+  "user/domain": {
+    "LINE": 70,
+    "BRANCH": 28
+  },
+  "movie/domain": {
+    "LINE": 100,
+    "BRANCH": 50
+  },
+  "kronusintegrationtool/domain": {
+    "LINE": 71
+  }
+}

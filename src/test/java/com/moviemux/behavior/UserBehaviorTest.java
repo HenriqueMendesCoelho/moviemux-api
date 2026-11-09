@@ -205,4 +205,10 @@ class UserBehaviorTest {
         assertThat(u.getRedefinePasswordKey()).isNull();
         assertThat(u.getRedefinePasswordKeyCreatedAt()).isNull();
     }
+
+    @Test void populatedUserDirectoryReturnsTheRecordedAccounts() throws Exception {
+        var owner = user();
+        when(repository.findAll()).thenReturn(List.of(owner));
+        assertThat(search.getAllUsers()).containsExactly(owner);
+    }
 }
