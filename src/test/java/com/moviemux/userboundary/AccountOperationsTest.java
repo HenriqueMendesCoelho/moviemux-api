@@ -128,7 +128,7 @@ class AccountOperationsTest {
     when(users.findByRedefinePasswordKey("key")).thenReturn(user);
     PasswordHasher hash = mock(PasswordHasher.class);
     when(hash.encode("new")).thenReturn("new-hash");
-    var operation = new RedeemPasswordResetUseCase(users, clock, hash);
+    var operation = new RedeemPasswordResetUseCase(users, clock, hash, mock(com.moviemux.user.domain.repository.UserMailSender.class));
     var command = new RedeemPasswordResetCommand("key", user.getEmail(), "new");
     if (seconds < 3600) {
       assertThat(operation.execute(command).getPassword()).isEqualTo("new-hash");

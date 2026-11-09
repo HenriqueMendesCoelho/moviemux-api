@@ -1,6 +1,6 @@
 package com.moviemux.user.domain.usecase;
 
-import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
+import com.moviemux.mail.domain.model.SendMailTemplate;
 import com.moviemux.user.domain.repository.UserMailSender;
 import com.moviemux.user.domain.model.User;
 import com.moviemux.user.domain.repository.CodeGenerator;
@@ -18,7 +18,7 @@ public class RequestPasswordResetUseCase {
   private final UserRepository repository;
   private final Clock clock;
   private final CodeGenerator codes;
-  private final UserMailSender kronusIntegrationToolRepository;
+  private final UserMailSender mailSender;
 
   public void execute(String email) {
     User user = repository.findByEmail(email);
@@ -33,7 +33,7 @@ public class RequestPasswordResetUseCase {
 
     repository.save(user);
 
-    kronusIntegrationToolRepository.sendEmail(
+    mailSender.sendEmail(
         SendMailTemplate.forgotPasswordMail(user.getEmail(), user.getName(), key));
   }
 }

@@ -6,8 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 import com.moviemux.adapter.core.effects.AfterCommitEffects;
-import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
-import com.moviemux.kronusintegrationtool.domain.repository.EmailGateway;
+import com.moviemux.mail.domain.model.SendMailTemplate;
+import com.moviemux.mail.domain.repository.MailDispatcher;
 import com.moviemux.user.adapter.notification.AfterCommitUserMailSender;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
@@ -80,26 +80,27 @@ class AfterCommitEffectsTest {
   }
 
   @Test
-  void mailUsesDetachedSnapshotAndRemoteFailureNeverReachesCaller() {
+  void mailUsesImmutableSnapshotAndDispatchFailureNeverReachesCaller() {
     begin();
-    EmailGateway gateway = mock(EmailGateway.class);
+    MailDispatcher gateway = mock(MailDispatcher.class);
     var sender = new AfterCommitUserMailSender(gateway, effects);
-    SendMailTemplate mail = SendMailTemplate.welcomeMail("synthetic@example.test", "Original");
+    var metadata = new java.util.LinkedHashMap<String, String>();
+    metadata.put("user", "Original");
+    SendMailTemplate mail = new SendMailTemplate("synthetic@example.test", "welcome", metadata);
     sender.sendEmail(mail);
-    mail.setTo("changed@example.test");
-    mail.getParams().put("user", "Changed");
+    metadata.put("user", "Changed");
     verifyNoInteractions(gateway);
-    doThrow(new IllegalStateException("synthetic failure")).when(gateway).sendEmail(any());
+    doThrow(new IllegalStateException("synthetic failure")).when(gateway).dispatch(any());
     assertThatCode(
             () ->
                 TransactionSynchronizationManager.getSynchronizations()
                     .forEach(TransactionSynchronization::afterCommit))
         .doesNotThrowAnyException();
     verify(gateway)
-        .sendEmail(
+        .dispatch(
             argThat(
                 snapshot ->
-                    snapshot.getTo().equals("synthetic@example.test")
-                        && snapshot.getParams().get("user").equals("Original")));
+                    snapshot.to().equals("synthetic@example.test")
+                        && snapshot.metadata().get("user").equals("Original")));
   }
 }

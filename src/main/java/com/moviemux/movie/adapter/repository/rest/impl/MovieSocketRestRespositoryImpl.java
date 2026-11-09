@@ -4,15 +4,12 @@ import com.moviemux.movie.adapter.repository.rest.mapper.NotificationMapper;
 import com.moviemux.movie.domain.model.NotificationNote;
 import com.moviemux.movie.domain.repository.MovieNotificationRepository;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.moviemux.movie.adapter.repository.rest.dto.MovieNoteRestRequestDto;
-import com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteEntity;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import com.moviemux.movie.domain.exception.NotificationFailure;
 import org.springframework.stereotype.Repository;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.client.RestClient;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -22,11 +19,11 @@ import java.util.UUID;
 @Slf4j
 public class MovieSocketRestRespositoryImpl implements MovieNotificationRepository {
 
-	@Autowired
-	private WebClient webClientSocketApi;
+	private final RestClient restClientSocketApi;
 
-	@Autowired
-	private ObjectMapper mapper;
+	public MovieSocketRestRespositoryImpl(@Qualifier("restClientSocketApi") RestClient restClientSocketApi) {
+		this.restClientSocketApi = restClientSocketApi;
+	}
 
     @Override
     public void notifyAllMovies(String event) {
@@ -35,12 +32,11 @@ public class MovieSocketRestRespositoryImpl implements MovieNotificationReposito
 				event = "update";
 			}
 
-			webClientSocketApi.post()
+			restClientSocketApi.post()
 					.uri("/api/v1/movie/all/emit/%s".formatted(event))
-					.bodyValue(mapper.writeValueAsString(Map.of("event", event)))
+					.body(Map.of("event", event))
 					.retrieve()
-					.bodyToMono(Void.class)
-					.block();
+					.toBodilessEntity();
 		} catch (Exception e) {
 			log.error("Error on Socket Api emit event all movies:", e);
 			throw new NotificationFailure(e);
@@ -64,13 +60,11 @@ public class MovieSocketRestRespositoryImpl implements MovieNotificationReposito
 				map.put("emmitedByUserId", emmitedByUserId);
 			}
 
-			String body = mapper.writeValueAsString(map);
-			webClientSocketApi.post()
+			restClientSocketApi.post()
 					.uri("/api/v1/movie/%s/note/emit/%s".formatted(movieId, event))
-					.bodyValue(body)
+					.body(map)
 					.retrieve()
-					.bodyToMono(Void.class)
-					.block();
+					.toBodilessEntity();
             return Delivery.SENT;
 		} catch (Exception e) {
 			log.error("Error on Socket Api emit event movie:", e);

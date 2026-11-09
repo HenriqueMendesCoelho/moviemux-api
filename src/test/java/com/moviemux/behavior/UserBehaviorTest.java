@@ -51,7 +51,7 @@ class UserBehaviorTest {
             new com.moviemux.user.domain.usecase.RequestPasswordResetUseCase(
                 repository, clock, codes, kronusIntegrationToolRepository),
             new com.moviemux.user.domain.usecase.RedeemPasswordResetUseCase(
-                repository, clock, passwordEncoder));
+                repository, clock, passwordEncoder, kronusIntegrationToolRepository));
     update =
         new com.moviemux.user.adapter.controller.UserUpdateOperations(
             new com.moviemux.user.domain.usecase.UpdateAccountUseCase(repository),
@@ -105,7 +105,9 @@ class UserBehaviorTest {
     order.verify(repository).count();
     order.verify(repository).findByEmail(u.getEmail());
     order.verify(repository).save(u);
-    order.verify(kronusIntegrationToolRepository).sendEmail(any());
+    order.verify(kronusIntegrationToolRepository).sendEmail(argThat(mail ->
+        mail.templateId().equals("welcome") && mail.to().equals(u.getEmail())
+            && mail.metadata().equals(java.util.Map.of("user", u.getName()))));
     verifyNoInteractions(inviteRepository);
   }
 
@@ -210,6 +212,7 @@ class UserBehaviorTest {
     when(repository.save(u)).thenReturn(u);
     assertThat(update.updateUserPassoword(u.getId(), "old", "new").getPassword())
         .isEqualTo("new-hash");
+    verifyNoInteractions(kronusIntegrationToolRepository);
   }
 
   @Test
@@ -238,7 +241,10 @@ class UserBehaviorTest {
     InOrder order = inOrder(kronusIntegrationToolRepository, repository);
     order.verify(repository).findByEmail(u.getEmail());
     order.verify(repository).save(u);
-    order.verify(kronusIntegrationToolRepository).sendEmail(any());
+    order.verify(kronusIntegrationToolRepository).sendEmail(argThat(mail ->
+        mail.templateId().equals("reset_password") && mail.to().equals(u.getEmail())
+            && mail.metadata().get("reset_link").equals(
+                "https://www.moviemux.com/password/change/" + u.getRedefinePasswordKey())));
   }
 
   @Test
@@ -283,7 +289,7 @@ class UserBehaviorTest {
     assertThat(u.getRedefinePasswordKey()).isNull();
     assertThat(u.getRedefinePasswordKeyCreatedAt()).isNull();
     verify(repository).save(u);
-    verifyNoInteractions(passwordEncoder);
+    verifyNoInteractions(passwordEncoder, kronusIntegrationToolRepository);
   }
 
   @Test
@@ -298,6 +304,8 @@ class UserBehaviorTest {
     assertThat(u.getPassword()).isEqualTo("hash");
     assertThat(u.getRedefinePasswordKey()).isNull();
     assertThat(u.getRedefinePasswordKeyCreatedAt()).isNull();
+    verify(kronusIntegrationToolRepository).sendEmail(argThat(mail -> mail.templateId().equals("password_updated")
+        && mail.to().equals(u.getEmail()) && mail.metadata().get("user").equals(u.getName())));
   }
 
     @Test void populatedUserDirectoryReturnsTheRecordedAccounts() throws Exception {

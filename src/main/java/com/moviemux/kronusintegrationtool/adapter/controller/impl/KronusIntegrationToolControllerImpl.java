@@ -17,37 +17,39 @@ import com.moviemux.kronusintegrationtool.domain.usecase.RecommendedMoviesUseCas
 import com.moviemux.kronusintegrationtool.domain.usecase.SimilarMoviesUseCase;
 import com.moviemux.kronusintegrationtool.domain.usecase.DiscoverMoviesUseCase;
 import com.moviemux.kronusintegrationtool.domain.usecase.SearchWatchProviedersUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 
 @Controller
 public class KronusIntegrationToolControllerImpl implements KronusIntegrationToolController {
 
-	@Autowired
-	private MovieSumaryUseCase movieSumaryUseCase;
+	private final MovieSumaryUseCase movieSumaryUseCase;
 
-	@Autowired
-	private SearchCatalogMoviesUseCase searchByNameUseCase;
-	@Autowired
-	private PopularMoviesUseCase moviesPopularUseCase;
-	@Autowired
-	private NowPlayingMoviesUseCase moviesNowPlayingUseCase;
-	@Autowired
-	private UpcomingMoviesUseCase moviesUpcomingUseCase;
-	@Autowired
-	private TopRatedMoviesUseCase moviesTopRatedUseCase;
-	@Autowired
-	private RecommendedMoviesUseCase moviesRecommendationsUseCase;
-	@Autowired
-	private SimilarMoviesUseCase moviesSimilarUseCase;
-	@Autowired
-	private DiscoverMoviesUseCase discoverMoviesUseCase;
+	private final SearchCatalogMoviesUseCase searchByNameUseCase;
+	private final PopularMoviesUseCase moviesPopularUseCase;
+	private final NowPlayingMoviesUseCase moviesNowPlayingUseCase;
+	private final UpcomingMoviesUseCase moviesUpcomingUseCase;
+	private final TopRatedMoviesUseCase moviesTopRatedUseCase;
+	private final RecommendedMoviesUseCase moviesRecommendationsUseCase;
+	private final SimilarMoviesUseCase moviesSimilarUseCase;
+	private final DiscoverMoviesUseCase discoverMoviesUseCase;
 
-	@Autowired
-	private SearchWatchProviedersUseCase searchWatchProviedersUseCase;
+	private final SearchWatchProviedersUseCase searchWatchProviedersUseCase;
 
-	@Autowired
-	private SearchCreditUseCase searchCreditUseCase;
+	private final SearchCreditUseCase searchCreditUseCase;
+
+	public KronusIntegrationToolControllerImpl(MovieSumaryUseCase movieSumaryUseCase, SearchCatalogMoviesUseCase searchByNameUseCase, PopularMoviesUseCase moviesPopularUseCase, NowPlayingMoviesUseCase moviesNowPlayingUseCase, UpcomingMoviesUseCase moviesUpcomingUseCase, TopRatedMoviesUseCase moviesTopRatedUseCase, RecommendedMoviesUseCase moviesRecommendationsUseCase, SimilarMoviesUseCase moviesSimilarUseCase, DiscoverMoviesUseCase discoverMoviesUseCase, SearchWatchProviedersUseCase searchWatchProviedersUseCase, SearchCreditUseCase searchCreditUseCase) {
+		this.movieSumaryUseCase = movieSumaryUseCase;
+		this.searchByNameUseCase = searchByNameUseCase;
+		this.moviesPopularUseCase = moviesPopularUseCase;
+		this.moviesNowPlayingUseCase = moviesNowPlayingUseCase;
+		this.moviesUpcomingUseCase = moviesUpcomingUseCase;
+		this.moviesTopRatedUseCase = moviesTopRatedUseCase;
+		this.moviesRecommendationsUseCase = moviesRecommendationsUseCase;
+		this.moviesSimilarUseCase = moviesSimilarUseCase;
+		this.discoverMoviesUseCase = discoverMoviesUseCase;
+		this.searchWatchProviedersUseCase = searchWatchProviedersUseCase;
+		this.searchCreditUseCase = searchCreditUseCase;
+	}
 
 	@Override
 	public MovieSummaryResponseDto movieSummary(Long tmdbId) {

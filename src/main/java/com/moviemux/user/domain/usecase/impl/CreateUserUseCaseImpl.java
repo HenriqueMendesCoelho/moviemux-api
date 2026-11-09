@@ -1,6 +1,6 @@
 package com.moviemux.user.domain.usecase.impl;
 
-import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
+import com.moviemux.mail.domain.model.SendMailTemplate;
 import com.moviemux.user.domain.repository.UserMailSender;
 import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.exception.DuplicatedUserException;
@@ -26,7 +26,7 @@ public class CreateUserUseCaseImpl implements CreateUserUseCase {
   private final UserRepository repository;
   private final InviteRepository inviteRepository;
   private final PasswordHasher passwordEncoder;
-  private final UserMailSender kronusIntegrationToolRepository;
+  private final UserMailSender mailSender;
 
   @Override
   public User execute(com.moviemux.user.domain.command.RegisterUserCommand command)
@@ -62,10 +62,10 @@ public class CreateUserUseCaseImpl implements CreateUserUseCase {
 
   private void sendWelcomeMail(User user) {
     try {
-      kronusIntegrationToolRepository.sendEmail(
+      mailSender.sendEmail(
           SendMailTemplate.welcomeMail(user.getEmail(), user.getName()));
     } catch (Exception e) {
-      log.error(String.format("Error to send welcome mail to %s", user.getName()));
+      log.warn("Best effort welcome mail could not be scheduled ({})", e.getClass().getSimpleName());
     }
   }
 }

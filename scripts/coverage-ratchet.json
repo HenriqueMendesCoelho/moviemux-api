@@ -48,5 +48,15 @@
   },
   "kronusintegrationtool/domain": {
     "LINE": 71
+  },
+  "mail/adapter": {
+    "LINE": 100,
+    "BRANCH": 100
+  },
+  "mail/domain": {
+    "LINE": 100
+  },
+  "mail/application": {
+    "LINE": 100
   }
 }

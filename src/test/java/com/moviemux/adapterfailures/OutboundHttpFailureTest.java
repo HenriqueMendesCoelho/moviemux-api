@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.moviemux.discord.adapter.repository.rest.impl.DiscordRepositoryImpl;
 import com.moviemux.discord.domain.exception.WebhookFailure;
 import com.moviemux.discord.domain.model.WebhookDelivery;
@@ -29,16 +28,14 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 class OutboundHttpFailureTest {
   private static final UUID MOVIE_ID = UUID.fromString("00000000-0000-0000-0000-000000000042");
-  private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
   private final BlockingQueue<Request> requests = new LinkedBlockingQueue<>();
   private HttpServer server;
-  private WebClient client;
+  private RestClient client;
   private volatile int responseStatus = 200;
   private volatile String responseBody = "{\"id\":\"existing-message\"}";
 
@@ -81,7 +78,7 @@ class OutboundHttpFailureTest {
           }
         });
     server.start();
-    client = WebClient.create("http://127.0.0.1:" + server.getAddress().getPort());
+    client = RestClient.create("http://127.0.0.1:" + server.getAddress().getPort());
   }
 
   @AfterEach
@@ -105,8 +102,8 @@ class OutboundHttpFailureTest {
         .isInstanceOf(operation.failureType)
         .satisfies(
             failure -> {
-              assertThat(failure.getCause()).isInstanceOf(WebClientResponseException.class);
-              assertThat(((WebClientResponseException) failure.getCause()).getStatusCode().value())
+              assertThat(failure.getCause()).isInstanceOf(RestClientResponseException.class);
+              assertThat(((RestClientResponseException) failure.getCause()).getStatusCode().value())
                   .isEqualTo(status);
             });
 
@@ -131,7 +128,7 @@ class OutboundHttpFailureTest {
         .hasCauseInstanceOf(
             body.isEmpty()
                 ? NullPointerException.class
-                : org.springframework.core.codec.DecodingException.class);
+                : org.springframework.web.client.RestClientException.class);
 
     assertSingleRequest(operation);
   }
@@ -179,9 +176,7 @@ class OutboundHttpFailureTest {
   @ValueSource(booleans = {true, false})
   void webhookControlFlagsAreIndependentAndDisabledOperationDoesNotReadPayload(boolean enableSend)
       throws Exception {
-    var adapter = discord();
-    ReflectionTestUtils.setField(adapter, "execute", enableSend);
-    ReflectionTestUtils.setField(adapter, "update", !enableSend);
+    var adapter = new DiscordRepositoryImpl(client, enableSend, !enableSend, "synthetic-role");
     var unreadable = mock(WebhookMovieSource.class);
     WebhookDelivery skipped = enableSend ? adapter.edit(unreadable) : adapter.send(unreadable);
     assertThat(skipped.status()).isEqualTo(WebhookDelivery.Status.DISABLED);
@@ -214,18 +209,12 @@ class OutboundHttpFailureTest {
   }
 
   private DiscordRepositoryImpl discord() {
-    var adapter = new DiscordRepositoryImpl();
-    ReflectionTestUtils.setField(adapter, "webClientDiscord", client);
-    ReflectionTestUtils.setField(adapter, "mapper", json);
-    ReflectionTestUtils.setField(adapter, "execute", true);
-    ReflectionTestUtils.setField(adapter, "update", true);
+    var adapter = new DiscordRepositoryImpl(client, true, true, "synthetic-role");
     return adapter;
   }
 
   private MovieSocketRestRespositoryImpl socket() {
-    var adapter = new MovieSocketRestRespositoryImpl();
-    ReflectionTestUtils.setField(adapter, "webClientSocketApi", client);
-    ReflectionTestUtils.setField(adapter, "mapper", json);
+    var adapter = new MovieSocketRestRespositoryImpl(client);
     return adapter;
   }
 

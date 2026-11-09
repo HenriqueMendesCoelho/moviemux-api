@@ -4,14 +4,17 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.moviemux.adapter.core.effects.AfterCommitEffects;
-import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
-import com.moviemux.kronusintegrationtool.domain.repository.EmailGateway;
+import com.moviemux.mail.domain.model.SendMailTemplate;
+import com.moviemux.mail.domain.repository.EmailGateway;
 import com.moviemux.movie.adapter.repository.rest.impl.MovieSocketRestRespositoryImpl;
 import com.moviemux.movie.domain.command.CreateMovieCommand;
 import com.moviemux.movie.domain.model.Movie;
 import com.moviemux.movie.domain.repository.MovieAnnouncement;
 import com.moviemux.movie.domain.usecase.CreateMovieUseCase;
 import com.moviemux.user.domain.command.RegisterUserCommand;
+import com.moviemux.user.domain.command.RedeemPasswordResetCommand;
+import com.moviemux.user.domain.exception.UserRedefinePasswordKeyInvalid;
+import com.moviemux.user.domain.usecase.RedeemPasswordResetUseCase;
 import com.moviemux.user.domain.exception.DuplicatedUserException;
 import com.moviemux.user.domain.model.User;
 import com.moviemux.user.domain.usecase.CreateUserUseCase;
@@ -87,6 +90,9 @@ class TransactionEffectsIT {
   @Autowired JdbcTemplate jdbc;
   @Autowired CreateUserUseCase register;
   @Autowired RequestPasswordResetUseCase reset;
+  @Autowired RedeemPasswordResetUseCase redeem;
+  @MockitoBean(name = "mailExecutor") java.util.concurrent.ThreadPoolExecutor mailExecutor;
+  private final java.util.ArrayDeque<Runnable> queuedMail = new java.util.ArrayDeque<>();
   @Autowired RecordingEmailGateway mail;
   @Autowired ProbeOperations probe;
   @Autowired CreateMovieUseCase movies;
@@ -99,6 +105,10 @@ class TransactionEffectsIT {
 
   @BeforeEach
   void resetSyntheticProbeState() {
+    queuedMail.clear();
+    reset(mailExecutor);
+    doAnswer(call -> { queuedMail.add(call.getArgument(0)); return null; })
+        .when(mailExecutor).execute(any(Runnable.class));
     mail.calls.clear();
     mail.fail = false;
     announcements.calls.clear();
@@ -176,6 +186,7 @@ class TransactionEffectsIT {
     User created =
         register.execute(new RegisterUserCommand(candidate(email, "Created"), invitation));
     assertThat(created.getId()).isNotNull();
+    deliverOneQueuedMail();
     assertThat(mail.calls).hasSize(1);
     assertThat(mail.calls.getFirst().committedAccountVisible()).isTrue();
     assertThat(
@@ -189,16 +200,109 @@ class TransactionEffectsIT {
   }
 
   @Test
+  void rejectedMailQueueDoesNotUndoCommittedAccountAndNeverSendsOrRetries() throws Exception {
+    seedExistingAccount();
+    String invitation = invite();
+    String email = "rejected-" + UUID.randomUUID() + "@example.test";
+    doThrow(new java.util.concurrent.RejectedExecutionException("Synthetic saturation"))
+        .when(mailExecutor).execute(any(Runnable.class));
+    User created = register.execute(new RegisterUserCommand(candidate(email, "Created"), invitation));
+    assertThat(created.getId()).isNotNull();
+    assertThat(jdbc.queryForObject(
+        "select count(*) from \"user\" where email=?", Integer.class, email)).isEqualTo(1);
+    assertThat(jdbc.queryForObject(
+        "select count(*) from user_invites where code=?", Integer.class, invitation)).isZero();
+    assertThat(mail.calls).isEmpty();
+    assertThat(queuedMail).isEmpty();
+    verify(mailExecutor, times(1)).execute(any(Runnable.class));
+  }
+
+  @Test
   void resetKeyIsCommittedBeforeDeliveryAndSurvivesEmailFailureWithoutRetry() {
     String email = seedExistingAccount();
     mail.fail = true;
     assertThatCode(() -> reset.execute(email)).doesNotThrowAnyException();
+    deliverOneQueuedMail();
     assertThat(mail.calls).hasSize(1);
     assertThat(mail.calls.getFirst().committedKeyVisible()).isTrue();
     assertThat(
             jdbc.queryForObject(
                 "select redefine_password_key from \"user\" where email=?", String.class, email))
         .hasSize(200);
+  }
+
+  private void deliverOneQueuedMail() {
+    assertThat(mail.calls).isEmpty();
+    assertThat(queuedMail).hasSize(1);
+    assertThatCode(queuedMail.remove()::run).doesNotThrowAnyException();
+    assertThat(queuedMail).isEmpty();
+  }
+
+  private RedeemPasswordResetCommand seedResetAccount(int ageHours) {
+    String email = seedExistingAccount();
+    String key = "synthetic-reset-" + UUID.randomUUID();
+    jdbc.update(
+        "update \"user\" set redefine_password_key=?, redefine_password_key_created_at="
+            + "now() - (? * interval '1 hour') where email=?",
+        key, ageHours, email);
+    return new RedeemPasswordResetCommand(key, email, "SyntheticChangedPassword1!");
+  }
+
+  @Test
+  void successfulResetConfirmationObservesCommittedPasswordAndClearedKeyWithoutRetry()
+      throws Exception {
+    var command = seedResetAccount(0);
+    mail.fail = true;
+    var changed = redeem.execute(command);
+    assertThat(changed.getPassword()).isNotEqualTo("synthetic-hash");
+    deliverOneQueuedMail();
+    assertThat(mail.calls).singleElement().satisfies(call -> {
+      assertThat(call.templateId()).isEqualTo("password_updated");
+      assertThat(call.committedAccountVisible()).isTrue();
+      assertThat(call.committedKeyVisible()).isFalse();
+      assertThat(call.committedPassword()).isEqualTo(changed.getPassword());
+      assertThat(call.keyTimestampCleared()).isTrue();
+    });
+  }
+
+  @Test
+  void expiredKeyCleanupCommitsButNeverQueuesPasswordUpdatedMail() {
+    var command = seedResetAccount(2);
+    assertThatThrownBy(() -> redeem.execute(command))
+        .isInstanceOf(UserRedefinePasswordKeyInvalid.class);
+    assertThat(jdbc.queryForObject(
+        "select redefine_password_key is null and redefine_password_key_created_at is null"
+            + " and password='synthetic-hash' from \"user\" where email=?",
+        Boolean.class, command.email())).isTrue();
+    assertThat(queuedMail).isEmpty();
+    assertThat(mail.calls).isEmpty();
+  }
+
+  @Test
+  void rollbackAfterSuccessfulResetSuppressesConfirmationAndRestoresPasswordAndKey() {
+    var command = seedResetAccount(0);
+    assertThatThrownBy(() -> probe.redeemThenFail(command))
+        .isInstanceOf(SyntheticCheckedFailure.class);
+    assertResetUnchanged(command);
+  }
+
+  @Test
+  void resetCommitFailureSuppressesConfirmationAndRestoresPasswordAndKey() {
+    var command = seedResetAccount(0);
+    assertThatThrownBy(() -> probe.redeemThenFailAtCommit(command))
+        .isInstanceOf(RuntimeException.class);
+    assertResetUnchanged(command);
+  }
+
+  private void assertResetUnchanged(RedeemPasswordResetCommand command) {
+    assertThat(jdbc.queryForObject(
+        "select redefine_password_key from \"user\" where email=?", String.class, command.email()))
+        .isEqualTo(command.key());
+    assertThat(jdbc.queryForObject(
+        "select password from \"user\" where email=?", String.class, command.email()))
+        .isEqualTo("synthetic-hash");
+    assertThat(queuedMail).isEmpty();
+    assertThat(mail.calls).isEmpty();
   }
 
   @Test
@@ -359,7 +463,8 @@ class TransactionEffectsIT {
     }
   }
 
-  record MailCall(boolean committedAccountVisible, boolean committedKeyVisible) {}
+  record MailCall(String templateId, boolean committedAccountVisible, boolean committedKeyVisible,
+      String committedPassword, boolean keyTimestampCleared) {}
 
   static class RecordingEmailGateway implements EmailGateway {
     final List<MailCall> calls = new ArrayList<>();
@@ -370,11 +475,12 @@ class TransactionEffectsIT {
       try (var connection = DriverManager.getConnection(url, username, password);
           var query =
               connection.prepareStatement(
-                  "select redefine_password_key from " + SCHEMA + ".\"user\" where email=?")) {
-        query.setString(1, request.getTo());
+                  "select redefine_password_key, password, redefine_password_key_created_at from " + SCHEMA + ".\"user\" where email=?")) {
+        query.setString(1, request.to());
         try (var rows = query.executeQuery()) {
           boolean found = rows.next();
-          calls.add(new MailCall(found, found && rows.getString(1) != null));
+          calls.add(new MailCall(request.templateId(), found, found && rows.getString(1) != null,
+              found ? rows.getString(2) : null, found && rows.getObject(3) == null));
         }
       } catch (Exception failure) {
         throw new IllegalStateException("Synthetic independent-connection probe failed", failure);
@@ -390,11 +496,26 @@ class TransactionEffectsIT {
     private final JdbcTemplate jdbc;
     private final AfterCommitEffects effects;
     private final CreateMovieUseCase movies;
+    private final RedeemPasswordResetUseCase redeem;
 
-    ProbeOperations(JdbcTemplate jdbc, AfterCommitEffects effects, CreateMovieUseCase movies) {
+    ProbeOperations(JdbcTemplate jdbc, AfterCommitEffects effects, CreateMovieUseCase movies,
+        RedeemPasswordResetUseCase redeem) {
       this.jdbc = jdbc;
       this.effects = effects;
       this.movies = movies;
+      this.redeem = redeem;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void redeemThenFail(RedeemPasswordResetCommand command) throws Exception {
+      redeem.execute(command);
+      throw new SyntheticCheckedFailure();
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void redeemThenFailAtCommit(RedeemPasswordResetCommand command) throws Exception {
+      redeem.execute(command);
+      jdbc.update("insert into effect_probe values (1,999)");
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -439,8 +560,9 @@ class TransactionEffectsIT {
 
     @Bean
     ProbeOperations probeOperations(
-        JdbcTemplate jdbc, AfterCommitEffects effects, CreateMovieUseCase movies) {
-      return new ProbeOperations(jdbc, effects, movies);
+        JdbcTemplate jdbc, AfterCommitEffects effects, CreateMovieUseCase movies,
+        RedeemPasswordResetUseCase redeem) {
+      return new ProbeOperations(jdbc, effects, movies, redeem);
     }
   }
 }

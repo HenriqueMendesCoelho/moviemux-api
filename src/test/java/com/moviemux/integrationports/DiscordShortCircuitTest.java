@@ -15,12 +15,11 @@ import com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 class DiscordShortCircuitTest {
   private final UUID id = UUID.fromString("00000000-0000-0000-0000-000000000042");
   private final MovieRepository movies = mock(MovieRepository.class);
-  private final DiscordRepositoryImpl webhook = new DiscordRepositoryImpl();
+  private DiscordRepositoryImpl webhook = new DiscordRepositoryImpl(null, false, false, "role");
 
   private org.springframework.transaction.support.TransactionTemplate transactions() {
     return new org.springframework.transaction.support.TransactionTemplate() {
@@ -69,7 +68,7 @@ class DiscordShortCircuitTest {
   void hiddenMovieUpdateDoesNotReadReferenceOrRelationshipsEvenWhenAdapterEnabled() {
     var movie = unreadableRelationships();
     when(movie.isShowNotes()).thenReturn(false);
-    ReflectionTestUtils.setField(webhook, "update", true);
+    webhook = new DiscordRepositoryImpl(null, false, true, "role");
     new UpdateMessageWebhookUseCaseImpl(
             webhook,
             new DiscordMovieBridge(
@@ -103,7 +102,7 @@ class DiscordShortCircuitTest {
     var movie = unreadableRelationships();
     when(movie.isShowNotes()).thenReturn(true);
     when(movie.getMovieDiscord()).thenReturn(null);
-    ReflectionTestUtils.setField(webhook, "update", true);
+    webhook = new DiscordRepositoryImpl(null, false, true, "role");
     new UpdateMessageWebhookUseCaseImpl(
             webhook,
             new DiscordMovieBridge(
@@ -121,7 +120,7 @@ class DiscordShortCircuitTest {
     var movie = unreadableRelationships();
     when(movie.isShowNotes()).thenReturn(true);
     when(movie.getMovieDiscord()).thenReturn(new MovieDiscordEntity(null, " ", movie));
-    ReflectionTestUtils.setField(webhook, "update", true);
+    webhook = new DiscordRepositoryImpl(null, false, true, "role");
     new UpdateMessageWebhookUseCaseImpl(
             webhook,
             new DiscordMovieBridge(
@@ -141,23 +140,12 @@ class DiscordShortCircuitTest {
         .when(movie)
         .getMovieDiscord();
     when(movies.findById(id)).thenReturn(Optional.of(movie));
-    var client =
-        org.springframework.web.reactive.function.client.WebClient.builder()
-            .exchangeFunction(
-                request ->
-                    reactor.core.publisher.Mono.just(
-                        org.springframework.web.reactive.function.client.ClientResponse.create(
-                                org.springframework.http.HttpStatus.OK)
-                            .header("Content-Type", "application/json")
-                            .body("{\"id\":\"remote-message\"}")
-                            .build()))
-            .build();
-    ReflectionTestUtils.setField(webhook, "execute", true);
-    ReflectionTestUtils.setField(
-        webhook,
-        "mapper",
-        new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
-    ReflectionTestUtils.setField(webhook, "webClientDiscord", client);
+    var builder = org.springframework.web.client.RestClient.builder().baseUrl("http://127.0.0.1:1");
+    var server = org.springframework.test.web.client.MockRestServiceServer.bindTo(builder).build();
+    server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo("http://127.0.0.1:1?wait=true"))
+        .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess(
+            "{\"id\":\"remote-message\"}", org.springframework.http.MediaType.APPLICATION_JSON));
+    webhook = new DiscordRepositoryImpl(builder.build(), true, false, "role");
     new SendMessageWebhookUseCaseImpl(
             webhook,
             new DiscordMovieBridge(
@@ -168,6 +156,7 @@ class DiscordShortCircuitTest {
         .execute(id);
     verify(movie, never()).getMovieDiscord();
     verify(movies).saveAndFlush(same(movie));
+    server.verify();
   }
 
   @Test

@@ -21,7 +21,7 @@ public final class WebhookRequestMapper {
         String footer = movie.registeredBy() == null ? "🔴 Cadastrado por: Usuário desconhecido"
                 : "Cadastrado por: %s".formatted(movie.registeredBy());
         var embed = new EmbedRequestDto(title, new EmbedRequestDto.Image(movie.imageUrl()), 3447003,
-                "https://www.cine.kronusboss.com/movie/" + movie.id(), new EmbedRequestDto.Footer(footer),
+                "https://www.moviemux.com/movie/" + movie.id(), new EmbedRequestDto.Footer(footer),
                 fields, movie.createdAt());
         return new DiscordWebhookRequestDto(roleId == null ? "" : "<@&%s>".formatted(roleId), List.of(embed));
     }

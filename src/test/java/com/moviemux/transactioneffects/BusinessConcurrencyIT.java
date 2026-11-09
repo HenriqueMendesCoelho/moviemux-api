@@ -2,7 +2,7 @@ package com.moviemux.transactioneffects;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.moviemux.kronusintegrationtool.domain.repository.EmailGateway;
+import com.moviemux.mail.domain.repository.EmailGateway;
 import com.moviemux.user.adapter.repository.postgres.InvitePostgresRepository;
 import com.moviemux.user.domain.command.RegisterUserCommand;
 import com.moviemux.user.domain.model.Invite;

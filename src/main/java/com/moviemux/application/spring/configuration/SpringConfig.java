@@ -13,7 +13,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.core.task.support.TaskExecutorAdapter;
-import org.springframework.http.codec.json.Jackson2JsonDecoder;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.web.servlet.LocaleResolver;
 import org.springframework.web.servlet.i18n.SessionLocaleResolver;
@@ -38,11 +37,6 @@ public class SpringConfig {
 				.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 				.enable(SerializationFeature.WRITE_DATES_WITH_ZONE_ID)
 				.setTimeZone(TimeZone.getTimeZone("America/Sao_Paulo"));
-	}
-
-	@Bean
-	Jackson2JsonDecoder jackson2JsonDecoder() {
-		return new Jackson2JsonDecoder(objectMapper());
 	}
 
 	@Bean

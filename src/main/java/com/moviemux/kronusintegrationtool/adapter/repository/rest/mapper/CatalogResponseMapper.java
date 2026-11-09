@@ -39,8 +39,4 @@ public final class CatalogResponseMapper {
                 .originalName(value.getOriginalName()).profilePath(value.getProfilePath()).character(value.getCharacter())
                 .department(value.getDepartment()).job(value.getJob()).build();
     }
-    public static SendMailTemplateRequestDto mail(SendMailTemplate value) {
-        return new SendMailTemplateRequestDto(value.getFrom(), value.getTo(), value.getTemplateId(),
-                value.getSubject(), value.getParams());
-    }
 }

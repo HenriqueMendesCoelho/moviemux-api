@@ -10,8 +10,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.client.RestClient;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -25,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AdditionalHttpCoverageTest {
     private HttpServer server;
-    private WebClient client;
+    private RestClient client;
     private volatile String response = "{}";
     private final ObjectMapper json = new ObjectMapper().findAndRegisterModules();
     private final LinkedBlockingQueue<Request> requests = new LinkedBlockingQueue<>();
@@ -44,7 +43,7 @@ class AdditionalHttpCoverageTest {
             exchange.close();
         });
         server.start();
-        client = WebClient.create("http://127.0.0.1:" + server.getAddress().getPort());
+        client = RestClient.create("http://127.0.0.1:" + server.getAddress().getPort());
     }
 
     @AfterEach
@@ -57,8 +56,7 @@ class AdditionalHttpCoverageTest {
     }
 
     private KronusIntegrationToolRepositoryImpl catalog() {
-        var adapter = new KronusIntegrationToolRepositoryImpl();
-        ReflectionTestUtils.setField(adapter, "webClientKit", client);
+        var adapter = new KronusIntegrationToolRepositoryImpl(client);
         return adapter;
     }
 
@@ -90,10 +88,7 @@ class AdditionalHttpCoverageTest {
     @Test
     void webhookUpdateUsesPatchAndExistingReferenceWithSortedRatingFields() throws Exception {
         response = "{\"id\":\"existing-message\"}";
-        var adapter = new DiscordRepositoryImpl();
-        ReflectionTestUtils.setField(adapter, "webClientDiscord", client);
-        ReflectionTestUtils.setField(adapter, "mapper", json);
-        ReflectionTestUtils.setField(adapter, "update", true);
+        var adapter = new DiscordRepositoryImpl(client, true, true, "synthetic-role");
         var movie = new WebhookMovie(UUID.fromString("00000000-0000-0000-0000-000000000042"),
                 "Synthetic movie", null, true, "Owner", OffsetDateTime.parse("2020-01-02T03:04:05Z"),
                 "existing-message", List.of(new WebhookMovie.Rating("Alice", 8)));
@@ -111,6 +106,35 @@ class AdditionalHttpCoverageTest {
         var body = json.readTree(sent.body());
         assertThat(body.get("embeds").get(0).get("title").asText()).isEqualTo("Synthetic movie | Nota: 8.0");
         assertThat(body.get("embeds").get(0).get("fields").get(0).get("name").asText()).isEqualTo("Alice");
+        assertThat(requests).isEmpty();
+    }
+
+    @Test
+    void catalogListsAndRecommendationsPreserveDevelopRoutesAndQueryDefaults() throws Exception {
+        response = "{\"page\":2,\"results\":[],\"totalPages\":3,\"totalResults\":0}";
+        var catalog = catalog();
+        catalog.moviesPopular(2);
+        assertThat(request().path()).isEqualTo("/api/v1/tmdb/movie/popular?page=2&language=pt-Br&region=BR");
+        catalog.moviesNowPlaying(2);
+        assertThat(request().path()).isEqualTo("/api/v1/tmdb/movie/now_playing?page=2&language=pt-Br&region=BR");
+        catalog.moviesUpcoming(2);
+        assertThat(request().path()).isEqualTo("/api/v1/tmdb/movie/upcoming?page=2&language=pt-Br&region=BR");
+        catalog.moviesTopRated(2);
+        assertThat(request().path()).isEqualTo("/api/v1/tmdb/movie/top_rated?page=2&language=pt-Br&region=BR");
+        catalog.moviesRecommendations(42L, 2);
+        assertThat(request().path()).isEqualTo("/api/v1/tmdb/movie/42/recommendations?page=2&language=pt-Br");
+        catalog.moviesSimilar(42L, 2);
+        assertThat(request().path()).isEqualTo("/api/v1/tmdb/movie/42/similar?page=2&language=pt-Br");
+        assertThat(requests).isEmpty();
+    }
+
+    @Test
+    void discoveryPreservesOptionalFiltersAndOmitsAbsentOnes() throws Exception {
+        response = "{\"page\":2,\"results\":[],\"totalPages\":3,\"totalResults\":0}";
+        catalog().discoverMovies("popularity.desc", 2, 2020, "18,35", "27");
+        assertThat(request().path()).isEqualTo("/api/v1/tmdb/discover/movie?page=2&language=pt-Br&include_adult=false&vote_count.gte=300&sort_by=popularity.desc&primary_release_year=2020&with_genres=18,35&without_genres=27");
+        catalog().discoverMovies(null, 2, null, "", null);
+        assertThat(request().path()).isEqualTo("/api/v1/tmdb/discover/movie?page=2&language=pt-Br&include_adult=false&vote_count.gte=300");
         assertThat(requests).isEmpty();
     }
 }

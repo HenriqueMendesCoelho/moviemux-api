@@ -1,10 +1,9 @@
 package com.moviemux.integrationports;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.moviemux.kronusintegrationtool.adapter.repository.rest.impl.KronusIntegrationToolRepositoryImpl;
 import com.moviemux.kronusintegrationtool.domain.exception.IntegrationFailure;
-import com.moviemux.kronusintegrationtool.domain.repository.EmailGateway;
-import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
+import com.moviemux.mail.domain.repository.EmailGateway;
+import com.moviemux.mail.domain.model.SendMailTemplate;
 import com.moviemux.discord.adapter.repository.rest.impl.DiscordRepositoryImpl;
 import com.moviemux.discord.domain.model.*;
 import com.moviemux.movie.adapter.repository.rest.impl.MovieSocketRestRespositoryImpl;
@@ -13,27 +12,34 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.reactive.function.client.ClientResponse;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
+import com.moviemux.mail.adapter.repository.rest.MovieMailRestRepository;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.mock.http.client.MockClientHttpRequest;
+import org.springframework.mock.http.client.MockClientHttpResponse;
+import org.springframework.web.client.RestClient;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeoutException;
+import java.net.SocketTimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.*;
 
 class RemoteFailureContractTest {
     private final AtomicInteger calls = new AtomicInteger();
-    private KronusIntegrationToolRepositoryImpl kit(Mono<ClientResponse> response) {
-        var client = WebClient.builder().exchangeFunction(request -> { calls.incrementAndGet(); return response; }).build();
-        var repository = new KronusIntegrationToolRepositoryImpl();
-        ReflectionTestUtils.setField(repository, "webClientKit", client);
-        ReflectionTestUtils.setField(repository, "mapper", new ObjectMapper());
-        return repository;
+    private RestClient client(ClientHttpRequestFactory requests) {
+        return RestClient.builder().baseUrl("http://127.0.0.1:1").requestFactory(requests).build();
     }
-    private Mono<ClientResponse> response(int status, String body) {
-        return Mono.just(ClientResponse.create(HttpStatus.valueOf(status)).header("Content-Type", "application/json").body(body).build());
+    private KronusIntegrationToolRepositoryImpl kit(ClientHttpRequestFactory requests) {
+        return new KronusIntegrationToolRepositoryImpl(client(requests));
+    }
+    private ClientHttpRequestFactory response(int status, String body) {
+        return (uri, method) -> {
+            calls.incrementAndGet();
+            var request = new MockClientHttpRequest(method, uri);
+            var response = new MockClientHttpResponse(body.getBytes(java.nio.charset.StandardCharsets.UTF_8), HttpStatus.valueOf(status));
+            response.getHeaders().setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            request.setResponse(response);
+            return request;
+        };
     }
     @ParameterizedTest @ValueSource(strings = {"", "not-json", "{}", "{\"id\":42,\"results\":null}"})
     void absentOrMalformedBodyIsInvalidResponseNotSuccessfulAbsence(String body) {
@@ -50,7 +56,7 @@ class RemoteFailureContractTest {
         assertThat(calls).hasValue(1);
     }
     @Test void timeoutIsTechnicalFailureWithoutAutomaticRetry() {
-        assertThatThrownBy(() -> kit(Mono.error(new TimeoutException("synthetic timeout"))).getWatchProviders(42L))
+        assertThatThrownBy(() -> kit((uri, method) -> { calls.incrementAndGet(); throw new SocketTimeoutException("synthetic timeout"); }).getWatchProviders(42L))
                 .isInstanceOfSatisfying(IntegrationFailure.class, failure -> assertThat(failure.getKind()).isEqualTo(IntegrationFailure.Kind.TRANSPORT));
         assertThat(calls).hasValue(1);
     }
@@ -58,18 +64,19 @@ class RemoteFailureContractTest {
         assertThat(kit(response(200, "{\"id\":42,\"results\":{}}")).getWatchProviders(42L).getResults()).isEmpty();
     }
     @Test void emailDisabledIsDistinctFromSentWithoutEvaluatingPayload() {
-        var repository = kit(response(200, ""));
+        var client = client(response(200, ""));
+        var repository = new MovieMailRestRepository(client, false);
         assertThat(repository.sendEmail(null)).isEqualTo(EmailGateway.Delivery.DISABLED);
         assertThat(calls).hasValue(0);
-        ReflectionTestUtils.setField(repository, "sendMail", true);
-        assertThat(repository.sendEmail(SendMailTemplate.builder().to("synthetic@example.test").build())).isEqualTo(EmailGateway.Delivery.SENT);
+        repository = new MovieMailRestRepository(client, true);
+        assertThat(repository.sendEmail(new SendMailTemplate("synthetic@example.test", "welcome", java.util.Map.of()))).isEqualTo(EmailGateway.Delivery.SENT);
         assertThat(calls).hasValue(1);
     }
     @Test void discordDisabledAndMissingReferenceAreDifferentOutcomes() {
-        var repository = new DiscordRepositoryImpl();
+        var repository = new DiscordRepositoryImpl(null, false, false, "role");
         assertThat(repository.send(null).status()).isEqualTo(WebhookDelivery.Status.DISABLED);
         assertThat(repository.edit(null).status()).isEqualTo(WebhookDelivery.Status.DISABLED);
-        ReflectionTestUtils.setField(repository, "update", true);
+        repository = new DiscordRepositoryImpl(null, false, true, "role");
         var movie = new WebhookMovie(UUID.randomUUID(), "Movie", null, true, null, null, null, List.of());
         assertThat(repository.edit(new com.moviemux.discord.domain.repository.WebhookMovieSource() {
             public boolean showNotes() { return movie.showNotes(); }
@@ -78,7 +85,7 @@ class RemoteFailureContractTest {
         }).status()).isEqualTo(WebhookDelivery.Status.MISSING_REFERENCE);
     }
     @Test void socketInvalidInputReturnsExplicitSkippedWithoutCallingClient() {
-        var repository = new MovieSocketRestRespositoryImpl();
+        var repository = new MovieSocketRestRespositoryImpl(null);
         assertThat(repository.notifyMovie(null, "update", null, null)).isEqualTo(MovieNotificationRepository.Delivery.SKIPPED);
         assertThat(repository.notifyMovie(UUID.randomUUID(), " ", null, null)).isEqualTo(MovieNotificationRepository.Delivery.SKIPPED);
     }

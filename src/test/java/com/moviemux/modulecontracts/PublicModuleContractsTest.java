@@ -12,12 +12,13 @@ import org.junit.jupiter.api.Test;
 class PublicModuleContractsTest {
   private static final Map<String, Set<String>> ALLOWED =
       Map.of(
-          "user", Set.of("kronusintegrationtool"),
+          "user", Set.of("mail"),
           "movie", Set.of("user", "kronusintegrationtool"),
           "wishlist", Set.of("user", "movie", "kronusintegrationtool"),
           "statistic", Set.of("movie"),
           "discord", Set.of(),
-          "kronusintegrationtool", Set.of());
+          "kronusintegrationtool", Set.of(),
+          "mail", Set.of());
 
   static boolean allowed(String source, String target) {
     return source.equals(target) || ALLOWED.getOrDefault(source, Set.of()).contains(target);
@@ -34,7 +35,7 @@ class PublicModuleContractsTest {
       String name = source.getName();
       String[] parts = name.split("\\.");
       if (parts.length < 4 || !ALLOWED.containsKey(parts[2])) continue;
-      // Legacy ORM is checked by the separate shrinking dependency baseline until relocation.
+      // Domain-only contract checks complement the complete graph check, including adapters.
       if (!(name.contains(".domain.model.")
           || name.contains(".domain.usecase.")
           || name.contains(".domain.repository."))) continue;
@@ -59,6 +60,9 @@ class PublicModuleContractsTest {
 
   @Test
   void allowedContractGraphCannotIntroduceAReverseBusinessDependency() {
+    assertThat(allowed("user", "mail")).isTrue();
+    assertThat(allowed("mail", "user")).isFalse();
+    assertThat(allowed("user", "kronusintegrationtool")).isFalse();
     assertThat(allowed("user", "movie")).isFalse();
     assertThat(allowed("user", "wishlist")).isFalse();
     assertThat(allowed("kronusintegrationtool", "movie")).isFalse();

@@ -1,8 +1,8 @@
 package com.moviemux.user.domain.repository;
 
-import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
+import com.moviemux.mail.domain.model.SendMailTemplate;
 
-/** Account mail is best effort after the local account change has committed. */
+/** Account mail is dispatched asynchronously, best effort, after the local change has committed. */
 public interface UserMailSender {
   void sendEmail(SendMailTemplate message);
 }

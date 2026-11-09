@@ -8,8 +8,9 @@ import com.moviemux.discord.domain.model.WebhookMovie;
 import com.moviemux.movie.adapter.repository.rest.mapper.NotificationMapper;
 import com.moviemux.movie.domain.model.NotificationNote;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
-import org.springframework.core.codec.DecodingException;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.mock.http.MockHttpInputMessage;
 import java.time.OffsetDateTime;
 import java.util.*;
 import static org.assertj.core.api.Assertions.*;
@@ -35,14 +36,25 @@ class IntegrationMapperTest {
         assertThat(result.id()).isEqualTo(18L); assertThat(result.name()).isEqualTo("Drama");
     }
     @Test void failureMappingRetainsStatusButDoesNotExposeBodyAsPublicMessage() {
-        var failure = IntegrationFailureMapper.map(WebClientResponseException.create(404, "Not found", null, new byte[0], null));
+        var failure = IntegrationFailureMapper.map(HttpClientErrorException.create(org.springframework.http.HttpStatus.NOT_FOUND, "Not found", org.springframework.http.HttpHeaders.EMPTY, new byte[0], null));
         assertThat(failure.getKind()).isEqualTo(IntegrationFailure.Kind.REMOTE_STATUS);
         assertThat(failure.getStatus()).isEqualTo(404);
         assertThat(failure.getMessage()).isEqualTo("External integration failed");
     }
     @Test void malformedAndTransportFailuresAreDistinct() {
-        assertThat(IntegrationFailureMapper.map(new DecodingException("bad body")).getKind()).isEqualTo(IntegrationFailure.Kind.INVALID_RESPONSE);
+        assertThat(IntegrationFailureMapper.map(new HttpMessageNotReadableException("bad body", new MockHttpInputMessage(new byte[0]))).getKind()).isEqualTo(IntegrationFailure.Kind.INVALID_RESPONSE);
         assertThat(IntegrationFailureMapper.map(new java.util.concurrent.TimeoutException()).getKind()).isEqualTo(IntegrationFailure.Kind.TRANSPORT);
+    }
+    @Test void existingTypedFailureIsNotWrappedOrReclassified() {
+        var existing = new IntegrationFailure(IntegrationFailure.Kind.TRANSPORT, null, new java.io.IOException());
+        assertThat(IntegrationFailureMapper.map(existing)).isSameAs(existing);
+    }
+    @Test void nestedConversionFailureIsInvalidResponseWhileTransportRemainsTechnical() {
+        var malformed = new HttpMessageNotReadableException("bad JSON", new MockHttpInputMessage(new byte[0]));
+        var wrapped = new org.springframework.web.client.RestClientException("response decoding failed", malformed);
+        assertThat(IntegrationFailureMapper.map(wrapped).getKind()).isEqualTo(IntegrationFailure.Kind.INVALID_RESPONSE);
+        var transport = new org.springframework.web.client.ResourceAccessException("connection failed", new java.io.IOException());
+        assertThat(IntegrationFailureMapper.map(transport).getKind()).isEqualTo(IntegrationFailure.Kind.TRANSPORT);
     }
     @Test void webhookPayloadPreservesRoundingOrderAndUnknownUserFooter() {
         var movie = new WebhookMovie(UUID.fromString("00000000-0000-0000-0000-000000000042"), "Movie", "/image", true, null,
@@ -51,6 +63,7 @@ class IntegrationMapperTest {
         assertThat(request.getContent()).isEqualTo("<@&role>");
         var embed = request.getEmbeds().getFirst();
         assertThat(embed.getTitle()).isEqualTo("Movie | Nota: 8.0");
+        assertThat(embed.getUrl()).isEqualTo("https://www.moviemux.com/movie/" + movie.id());
         assertThat(embed.getFooter().getText()).isEqualTo("🔴 Cadastrado por: Usuário desconhecido");
         assertThat(embed.getFields()).extracting(field -> field.getName()).containsExactly("Ana", "Zoe");
         assertThat(embed.getTimestamp()).isEqualTo(movie.createdAt());

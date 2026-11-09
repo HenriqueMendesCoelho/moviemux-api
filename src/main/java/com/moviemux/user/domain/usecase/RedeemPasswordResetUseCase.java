@@ -1,5 +1,7 @@
 package com.moviemux.user.domain.usecase;
 
+import com.moviemux.mail.domain.model.SendMailTemplate;
+import com.moviemux.user.domain.repository.UserMailSender;
 import com.moviemux.user.domain.exception.UserNotAuthorizedException;
 import com.moviemux.user.domain.exception.UserRedefinePasswordKeyInvalid;
 import com.moviemux.user.domain.exception.UserRedefinePasswordKeyNotFound;
@@ -11,13 +13,16 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
+@Transactional(rollbackFor = Exception.class, noRollbackFor = UserRedefinePasswordKeyInvalid.class)
 public class RedeemPasswordResetUseCase {
   private final UserRepository repository;
   private final Clock clock;
   private final PasswordHasher passwordEncoder;
+  private final UserMailSender mailSender;
 
   public User execute(com.moviemux.user.domain.command.RedeemPasswordResetCommand command)
       throws UserRedefinePasswordKeyNotFound,
@@ -46,7 +51,9 @@ public class RedeemPasswordResetUseCase {
     }
 
     user.setPassword(passwordEncoder.encode(password));
-    return cleanRedefinePassowordKeyAndSave(user);
+    User saved = cleanRedefinePassowordKeyAndSave(user);
+    mailSender.sendEmail(SendMailTemplate.passwordUpdatedMail(saved.getEmail(), saved.getName()));
+    return saved;
   }
 
   private User cleanRedefinePassowordKeyAndSave(User user) {

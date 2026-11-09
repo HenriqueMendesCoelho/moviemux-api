@@ -20,12 +20,11 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.client.RestClient;
 
 class ExternalHttpContractTest {
   private HttpServer server;
-  private WebClient client;
+  private RestClient client;
   private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
   private final BlockingQueue<Request> requests = new LinkedBlockingQueue<>();
   private volatile int responseStatus = 200;
@@ -52,7 +51,7 @@ class ExternalHttpContractTest {
         });
     server.start();
     client =
-        WebClient.builder()
+        RestClient.builder()
             .baseUrl("http://127.0.0.1:" + server.getAddress().getPort())
             .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
             .build();
@@ -70,16 +69,12 @@ class ExternalHttpContractTest {
   }
 
   private KronusIntegrationToolRepositoryImpl kit() {
-    var repository = new KronusIntegrationToolRepositoryImpl();
-    ReflectionTestUtils.setField(repository, "webClientKit", client);
-    ReflectionTestUtils.setField(repository, "mapper", mapper);
+    var repository = new KronusIntegrationToolRepositoryImpl(client);
     return repository;
   }
 
   private MovieSocketRestRespositoryImpl socket() {
-    var repository = new MovieSocketRestRespositoryImpl();
-    ReflectionTestUtils.setField(repository, "webClientSocketApi", client);
-    ReflectionTestUtils.setField(repository, "mapper", mapper);
+    var repository = new MovieSocketRestRespositoryImpl(client);
     return repository;
   }
 
@@ -146,7 +141,7 @@ class ExternalHttpContractTest {
 
   @Test
   void disabledMailDoesNotSendEvenWithMissingPayload() {
-    kit().sendEmail(null);
+    new com.moviemux.mail.adapter.repository.rest.MovieMailRestRepository(client, false).sendEmail(null);
     assertThat(requests).isEmpty();
   }
 
@@ -190,20 +185,14 @@ class ExternalHttpContractTest {
 
   @Test
   void disabledDiscordDoesNotConstructOrSendPayload() {
-    var repository = new DiscordRepositoryImpl();
-    ReflectionTestUtils.setField(repository, "webClientDiscord", client);
+    var repository = new DiscordRepositoryImpl(client, false, false, "synthetic-role");
     assertThat(repository.send(null).info()).isNull();
     assertThat(repository.edit(null).info()).isNull();
     assertThat(requests).isEmpty();
   }
 
   private DiscordRepositoryImpl discord() {
-    var repository = new DiscordRepositoryImpl();
-    ReflectionTestUtils.setField(repository, "webClientDiscord", client);
-    ReflectionTestUtils.setField(repository, "mapper", mapper);
-    ReflectionTestUtils.setField(repository, "execute", true);
-    ReflectionTestUtils.setField(repository, "update", true);
-    ReflectionTestUtils.setField(repository, "roleId", "synthetic-role");
+    var repository = new DiscordRepositoryImpl(client, true, true, "synthetic-role");
     return repository;
   }
 
@@ -242,6 +231,8 @@ class ExternalHttpContractTest {
     assertThat(body.get("content").asText()).isEqualTo("<@&synthetic-role>");
     assertThat(body.get("embeds").get(0).get("title").asText()).isEqualTo("Synthetic movie");
     assertThat(body.get("embeds").get(0).get("fields").isEmpty()).isTrue();
+    assertThat(body.get("embeds").get(0).get("url").asText())
+        .isEqualTo("https://www.moviemux.com/movie/00000000-0000-0000-0000-000000000042");
   }
 
   @Test
@@ -252,22 +243,20 @@ class ExternalHttpContractTest {
 
   @Test
   void enabledEmailUsesSnakeCaseTemplateIdAndDoesNotExposeInternalFlags() throws Exception {
-    var repository = kit();
-    ReflectionTestUtils.setField(repository, "sendMail", true);
+    var repository = new com.moviemux.mail.adapter.repository.rest.MovieMailRestRepository(client, true);
     repository.sendEmail(
-        com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate.builder()
-            .from("sender@example.test")
-            .to("recipient@example.test")
-            .templateId("synthetic-template")
-            .subject("Synthetic subject")
-            .ignoreNotifyPreferences(true)
-            .build());
+        new com.moviemux.mail.domain.model.SendMailTemplate(
+            "recipient@example.test", "synthetic-template", java.util.Map.of("user", "Synthetic user")));
     var request = received();
     assertThat(request.method()).isEqualTo("POST");
-    assertThat(request.uri()).isEqualTo("/api/v1/sendgrid/template");
+    assertThat(request.uri()).isEqualTo("/api/mail/send");
     var body = mapper.readTree(request.body());
     assertThat(body.get("template_id").asText()).isEqualTo("synthetic-template");
     assertThat(body.get("to").asText()).isEqualTo("recipient@example.test");
+    assertThat(body.get("metadata").get("user").asText()).isEqualTo("Synthetic user");
+    assertThat(body.has("from")).isFalse();
+    assertThat(body.has("subject")).isFalse();
+    assertThat(body.has("params")).isFalse();
     assertThat(body.has("ignoreNotifyPreferences")).isFalse();
     assertThat(body.has("ignore_notify_preferences")).isFalse();
   }

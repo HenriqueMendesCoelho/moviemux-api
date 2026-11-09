@@ -141,7 +141,8 @@ class ArchitectureBoundaryTest {
                         "wishlist",
                         "statistic",
                         "discord",
-                        "kronusintegrationtool")
+                        "kronusintegrationtool",
+                        "mail")
                     .contains(targetModule)) {
                   assertThat(target)
                       .as("Other business modules expose only public domain contracts")
