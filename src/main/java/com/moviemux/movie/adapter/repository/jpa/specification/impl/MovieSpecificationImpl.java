@@ -8,7 +8,6 @@ import com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteEntity;
 import jakarta.persistence.criteria.*;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -24,8 +23,11 @@ import java.util.UUID;
 @Repository
 public class MovieSpecificationImpl implements MovieSpecification {
 
-	@Autowired
-	private MovieJpaRepository repository;
+	private final MovieJpaRepository repository;
+
+	public MovieSpecificationImpl(MovieJpaRepository repository) {
+		this.repository = repository;
+	}
 
 	@Override
 	public Page<MovieEntity> findMovieFilteredCustom(List<String> titles, List<Long> genres, String sortJoin,

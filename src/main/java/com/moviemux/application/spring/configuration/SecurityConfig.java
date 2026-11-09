@@ -27,12 +27,16 @@ import static org.springframework.security.config.Customizer.withDefaults;
 public class SecurityConfig {
 
 	private static final String[] PUBLIC_MATCHERS = { "/public/**" };
-	@Autowired
-	private UserDetailsService userDetailsService;
-	@Autowired
-	private AuthenticationConfiguration authenticationConfiguration;
-	@Autowired
-	private JWTUtil jwtUtil;
+	private final UserDetailsService userDetailsService;
+	private final AuthenticationConfiguration authenticationConfiguration;
+	private final JWTUtil jwtUtil;
+
+	public SecurityConfig(UserDetailsService userDetailsService,
+			AuthenticationConfiguration authenticationConfiguration, JWTUtil jwtUtil) {
+		this.userDetailsService = userDetailsService;
+		this.authenticationConfiguration = authenticationConfiguration;
+		this.jwtUtil = jwtUtil;
+	}
 
 	@Autowired
 	protected void configure(AuthenticationManagerBuilder auth) throws Exception {

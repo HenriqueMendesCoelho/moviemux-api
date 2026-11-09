@@ -4,7 +4,6 @@ import java.util.List;
 
 import com.moviemux.movie.adapter.repository.jpa.MovieGenreJpaRepository;
 import com.moviemux.movie.adapter.repository.jpa.specification.MovieGenreSpecification;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 
@@ -20,8 +19,11 @@ import jakarta.persistence.criteria.Root;
 @Repository
 public class MovieGenreSpecificationImpl implements MovieGenreSpecification {
 
-	@Autowired
-	private MovieGenreJpaRepository repository;
+	private final MovieGenreJpaRepository repository;
+
+	public MovieGenreSpecificationImpl(MovieGenreJpaRepository repository) {
+		this.repository = repository;
+	}
 
 	@Override
 	public List<MovieGenreEntity> findAllGenresHaveMovieAssociated() {

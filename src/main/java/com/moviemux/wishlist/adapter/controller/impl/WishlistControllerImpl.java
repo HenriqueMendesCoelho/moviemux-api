@@ -20,21 +20,29 @@ import com.moviemux.wishlist.domain.usecase.SearchMoviesAlreadyRated;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 
 @Controller
 public class WishlistControllerImpl implements WishlistController {
 
-  @Autowired private WishlistQueryOperations searchUserWishlistUseCase;
+  private final WishlistQueryOperations searchUserWishlistUseCase;
+  private final CreateUserWishlistUseCase createUserWishlistUseCase;
+  private final WishlistUpdateOperations updateUserWishlistUseCase;
+  private final DeleteUserWishlistUseCase deleteUserWishlistUseCase;
+  private final SearchMoviesAlreadyRated searchMoviesAlreadyRated;
 
-  @Autowired private CreateUserWishlistUseCase createUserWishlistUseCase;
-
-  @Autowired private WishlistUpdateOperations updateUserWishlistUseCase;
-
-  @Autowired private DeleteUserWishlistUseCase deleteUserWishlistUseCase;
-
-  @Autowired private SearchMoviesAlreadyRated searchMoviesAlreadyRated;
+  public WishlistControllerImpl(
+      WishlistQueryOperations searchUserWishlistUseCase,
+      CreateUserWishlistUseCase createUserWishlistUseCase,
+      WishlistUpdateOperations updateUserWishlistUseCase,
+      DeleteUserWishlistUseCase deleteUserWishlistUseCase,
+      SearchMoviesAlreadyRated searchMoviesAlreadyRated) {
+    this.searchUserWishlistUseCase = searchUserWishlistUseCase;
+    this.createUserWishlistUseCase = createUserWishlistUseCase;
+    this.updateUserWishlistUseCase = updateUserWishlistUseCase;
+    this.deleteUserWishlistUseCase = deleteUserWishlistUseCase;
+    this.searchMoviesAlreadyRated = searchMoviesAlreadyRated;
+  }
 
   @Override
   public List<WishlistResponseDto> getUserWishlists(UserTokenDto request) {

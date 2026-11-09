@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.apache.commons.collections4.CollectionUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,7 +24,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/user/wishlist")
 public class SpringUserWishlistController {
 
-  @Autowired private WishlistController controller;
+  private final WishlistController controller;
+
+  public SpringUserWishlistController(WishlistController controller) {
+    this.controller = controller;
+  }
 
   @GetMapping
   public ResponseEntity<List<WishlistResponseDto>> listUserWishlists(
