@@ -13,13 +13,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class AccountRemovalBridge implements AccountRemoval {
   private final AccountRemovalPreparation users;
   private final MovieOwnershipRemoval movies;
+  private final com.moviemux.wishlist.domain.repository.WishlistOwnershipRemoval wishlists;
 
   @Override
   @Transactional(rollbackFor = Exception.class)
   public void remove(UUID id) {
     var target = users.prepare(id);
     if (target == null) return;
-    movies.detach(target.ownedMovieIds());
+    movies.detach(target.userId());
+    wishlists.removeOwnedBy(target.userId());
     target.deleteAfterMoviesDetached();
   }
 }

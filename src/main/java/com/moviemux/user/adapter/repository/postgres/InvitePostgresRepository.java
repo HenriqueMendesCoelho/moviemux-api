@@ -25,10 +25,14 @@ public class InvitePostgresRepository implements InviteRepository {
 
   public Invite save(Invite invite) {
     return map(
-        legacy.saveAndFlush(new com.moviemux.user.adapter.repository.postgres.entity.InviteEntity(invite.id(), invite.code())));
+        legacy.saveAndFlush(
+            new com.moviemux.user.adapter.repository.postgres.entity.InviteEntity(
+                invite.id(), invite.code())));
   }
 
   public void delete(Invite invite) {
-    legacy.delete(new com.moviemux.user.adapter.repository.postgres.entity.InviteEntity(invite.id(), invite.code()));
+    legacy.delete(
+        new com.moviemux.user.adapter.repository.postgres.entity.InviteEntity(
+            invite.id(), invite.code()));
   }
 }

@@ -42,6 +42,7 @@ class WishlistPersistenceIT {
   @Autowired MovieWishlistRepository movies;
   @Autowired MoviesWishlistsRepository memberships;
   @Autowired com.moviemux.user.adapter.repository.UserRepository users;
+  @Autowired com.moviemux.user.domain.repository.AccountRemoval accountRemoval;
   private UUID owner;
   private final List<Long> createdMovies = new ArrayList<>();
 
@@ -58,7 +59,7 @@ class WishlistPersistenceIT {
 
   @AfterEach
   void removeOnlyOwnedFixtures() {
-    if (owner != null) users.deleteById(owner);
+    if (owner != null) accountRemoval.remove(owner);
     for (Long id : createdMovies) movies.findById(id).ifPresent(movies::delete);
   }
 

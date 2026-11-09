@@ -13,21 +13,25 @@ import org.springframework.transaction.annotation.Transactional;
 public class MoviePostgresRepository implements MovieRepository {
   private final com.moviemux.movie.adapter.repository.MovieRepository repository;
   private final EntityManager entities;
+  private final com.moviemux.user.domain.repository.UserIdentityLookup identities;
 
   public MoviePostgresRepository(
-      com.moviemux.movie.adapter.repository.MovieRepository repository, EntityManager entities) {
+      com.moviemux.movie.adapter.repository.MovieRepository repository,
+      EntityManager entities,
+      com.moviemux.user.domain.repository.UserIdentityLookup identities) {
     this.repository = repository;
     this.entities = entities;
+    this.identities = identities;
   }
 
   @Transactional(readOnly = true)
   public Optional<Movie> findById(UUID id) {
-    return repository.findById(id).map(MovieEntityMapper::movie);
+    return repository.findById(id).map(entity -> MovieEntityMapper.movie(entity, identities));
   }
 
   @Transactional(readOnly = true)
   public Movie findByTmdbId(Long id) {
-    return MovieEntityMapper.movie(repository.findByTmdbId(id));
+    return MovieEntityMapper.movie(repository.findByTmdbId(id), identities);
   }
 
   @Transactional
@@ -35,19 +39,22 @@ public class MoviePostgresRepository implements MovieRepository {
     var entity =
         model.getId() == null
             ? new com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity()
-            : repository.findById(model.getId()).orElseGet(com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity::new);
+            : repository
+                .findById(model.getId())
+                .orElseGet(com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity::new);
     MovieEntityMapper.copyScalars(model, entity);
-    entity.setUser(
-        model.getUser() == null
-            ? null
-            : entities.getReference(com.moviemux.user.adapter.repository.postgres.entity.UserEntity.class, model.getUser().id()));
+    entity.setUserId(model.getUser() == null ? null : model.getUser().id());
     if (model.getGenres() != null)
       entity.setGenres(
           model.getGenres().stream()
               .map(
-                  g -> entities.getReference(com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity.class, g.getId()))
+                  g ->
+                      entities.getReference(
+                          com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity
+                              .class,
+                          g.getId()))
               .collect(java.util.stream.Collectors.toCollection(ArrayList::new)));
-    return MovieEntityMapper.movie(repository.saveAndFlush(entity));
+    return MovieEntityMapper.movie(repository.saveAndFlush(entity), identities);
   }
 
   @Transactional
@@ -60,7 +67,9 @@ public class MoviePostgresRepository implements MovieRepository {
     var page =
         repository.findMovieFilteredCustom(titles, genres, query.sortJoin(), pageable(query));
     return new MoviePage(
-        page.getContent().stream().map(MovieEntityMapper::movie).toList(),
+        page.getContent().stream()
+            .map(entity -> MovieEntityMapper.movie(entity, identities))
+            .toList(),
         page.getTotalElements(),
         query);
   }

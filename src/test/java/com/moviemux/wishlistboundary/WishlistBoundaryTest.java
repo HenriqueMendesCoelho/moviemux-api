@@ -28,7 +28,9 @@ import org.junit.jupiter.api.Test;
 class WishlistBoundaryTest {
   private final UUID id = UUID.fromString("00000000-0000-0000-0000-000000000010");
   private final UUID owner = UUID.fromString("00000000-0000-0000-0000-000000000020");
-  private final WishlistEntityMapper mapper = new WishlistEntityMapper();
+  private final com.moviemux.user.domain.repository.UserIdentityLookup identities =
+      org.mockito.Mockito.mock(com.moviemux.user.domain.repository.UserIdentityLookup.class);
+  private final WishlistEntityMapper mapper = new WishlistEntityMapper(identities);
 
   private MoviesWishlists item(long tmdb, int order) {
     return MoviesWishlists.builder()
@@ -90,6 +92,11 @@ class WishlistBoundaryTest {
             .updatedAt(created.plusHours(2))
             .moviesWishlists(List.of(item(20, 1), item(10, 2)))
             .build();
+    org.mockito.Mockito.when(identities.find(owner))
+        .thenReturn(
+            java.util.Optional.of(
+                new com.moviemux.user.domain.model.UserIdentity(
+                    owner, "Owner", "owner@example.test", java.util.Set.of())));
     Wishlist result = mapper.toDomain(mapper.toEntity(original));
     assertThat(result).usingRecursiveComparison().isEqualTo(original);
     assertThat(result.getMoviesWishlists())
@@ -102,9 +109,20 @@ class WishlistBoundaryTest {
 
   @Test
   void mapperRetainsNullMembershipCollectionsAndNullAssociations() {
-    assertThat(mapper.toDomain((com.moviemux.wishlist.adapter.repository.postgres.entity.WishlistEntity) null)).isNull();
-    assertThat(mapper.toDomain((com.moviemux.wishlist.adapter.repository.postgres.entity.MovieWishlistEntity) null)).isNull();
-    assertThat(mapper.toDomain((com.moviemux.wishlist.adapter.repository.postgres.entity.MoviesWishlistsEntity) null)).isNull();
+    assertThat(
+            mapper.toDomain(
+                (com.moviemux.wishlist.adapter.repository.postgres.entity.WishlistEntity) null))
+        .isNull();
+    assertThat(
+            mapper.toDomain(
+                (com.moviemux.wishlist.adapter.repository.postgres.entity.MovieWishlistEntity)
+                    null))
+        .isNull();
+    assertThat(
+            mapper.toDomain(
+                (com.moviemux.wishlist.adapter.repository.postgres.entity.MoviesWishlistsEntity)
+                    null))
+        .isNull();
     assertThat(
             mapper
                 .toDomain(mapper.toEntity(Wishlist.builder().id(id).build()))

@@ -1,6 +1,6 @@
 package com.moviemux.movie.application.spring;
 
-import com.moviemux.application.spring.effects.AfterCommitEffects;
+import com.moviemux.adapter.core.effects.AfterCommitEffects;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 

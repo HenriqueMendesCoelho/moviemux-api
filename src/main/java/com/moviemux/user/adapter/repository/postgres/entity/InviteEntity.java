@@ -1,6 +1,5 @@
 package com.moviemux.user.adapter.repository.postgres.entity;
 
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;

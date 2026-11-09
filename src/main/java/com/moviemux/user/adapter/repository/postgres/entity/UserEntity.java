@@ -1,14 +1,10 @@
 package com.moviemux.user.adapter.repository.postgres.entity;
 
-import com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity;
-import com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteEntity;
 import com.moviemux.user.domain.model.Role;
-import com.moviemux.wishlist.adapter.repository.postgres.entity.WishlistEntity;
 import jakarta.persistence.*;
 import java.io.Serializable;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -54,15 +50,6 @@ public class UserEntity implements Serializable {
   @PrimaryKeyJoinColumn
   private StatisticsEntity statistics;
 
-  @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-  private List<MovieNoteEntity> notes;
-
-  @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-  private List<MovieEntity> movies;
-
-  @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-  private List<WishlistEntity> wishlists;
-
   @CreationTimestamp
   @Column(nullable = false, columnDefinition = "timestamp with time zone")
   private OffsetDateTime createdAt;
@@ -88,15 +75,13 @@ public class UserEntity implements Serializable {
       String email,
       String password,
       PreferencesEntity preferences,
-      StatisticsEntity statistics,
-      List<MovieNoteEntity> notes) {
+      StatisticsEntity statistics) {
     this.id = id;
     this.name = name;
     this.email = email;
     this.password = password;
     this.preferences = preferences;
     this.statistics = statistics;
-    this.notes = notes;
     addRole(Role.USER);
   }
 

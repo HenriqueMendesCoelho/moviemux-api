@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class MovieWebhookAccessAdapter implements MovieWebhookAccess {
   private final MovieRepository repository;
+  private final com.moviemux.user.domain.repository.UserIdentityLookup identities;
+  private final org.springframework.transaction.support.TransactionTemplate transactions;
 
   @Override
   public Optional<Target> find(UUID id) {
@@ -35,21 +37,31 @@ public class MovieWebhookAccessAdapter implements MovieWebhookAccess {
 
                   @Override
                   public MovieWebhookSnapshot snapshot() {
-                    return new MovieWebhookSnapshot(
-                        movie.getId(),
-                        movie.getPortugueseTitle(),
-                        movie.getUrlImage(),
-                        movie.isShowNotes(),
-                        movie.getUser() == null ? null : movie.getUser().getName(),
-                        movie.getCreatedAt(),
-                        movie.getNotes() == null
-                            ? null
-                            : movie.getNotes().stream()
-                                .map(
-                                    note ->
-                                        new MovieWebhookSnapshot.Rating(
-                                            note.getUser().getName(), note.getNote()))
-                                .toList());
+                    return transactions.execute(
+                        status -> {
+                          var snapshotMovie = repository.findById(movie.getId()).orElseThrow();
+                          return new MovieWebhookSnapshot(
+                              movie.getId(),
+                              movie.getPortugueseTitle(),
+                              movie.getUrlImage(),
+                              movie.isShowNotes(),
+                              movie.getUserId() == null
+                                  ? null
+                                  : identities.find(movie.getUserId()).orElseThrow().name(),
+                              movie.getCreatedAt(),
+                              snapshotMovie.getNotes() == null
+                                  ? null
+                                  : snapshotMovie.getNotes().stream()
+                                      .map(
+                                          note ->
+                                              new MovieWebhookSnapshot.Rating(
+                                                  identities
+                                                      .find(note.getId().getUserId())
+                                                      .orElseThrow()
+                                                      .name(),
+                                                  note.getNote()))
+                                      .toList());
+                        });
                   }
 
                   @Override

@@ -1,4 +1,4 @@
-package com.moviemux.application.spring.effects;
+package com.moviemux.adapter.core.effects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

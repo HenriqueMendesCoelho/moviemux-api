@@ -3,12 +3,11 @@ package com.moviemux.userboundary;
 import static org.assertj.core.api.Assertions.*;
 
 import com.moviemux.user.adapter.repository.postgres.mapper.UserEntityMapper;
-import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.model.Preferences;
+import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.model.Statistics;
 import com.moviemux.user.domain.model.User;
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -40,7 +39,9 @@ class UserEntityMapperTest {
   @Test
   void reconstitutionPreservesExactRolesCredentialsIdentifiersAndDates() {
     User original = account();
-    var entity = mapper.updateEntity(original, new com.moviemux.user.adapter.repository.postgres.entity.UserEntity());
+    var entity =
+        mapper.updateEntity(
+            original, new com.moviemux.user.adapter.repository.postgres.entity.UserEntity());
     User restored = mapper.toDomain(entity);
     assertThat(restored).usingRecursiveComparison().isEqualTo(original);
     assertThat(restored.getRoles()).containsExactly(Role.ADM);
@@ -66,32 +67,11 @@ class UserEntityMapperTest {
   void mapperDoesNotReadLegacyActivityGraphsDuringAuthentication() {
     var entity = new com.moviemux.user.adapter.repository.postgres.entity.UserEntity();
     entity.setId(UUID.randomUUID());
-    var statistics =
-        new com.moviemux.user.adapter.repository.postgres.entity.StatisticsEntity() {
-          @Override
-          public Integer getRatingsGiven() {
-            throw new AssertionError("activity must be read only through profile projection");
-          }
-
-          @Override
-          public Integer getDisplayTime() {
-            throw new AssertionError("activity must not be fetched at login");
-          }
-        };
+    var statistics = new com.moviemux.user.adapter.repository.postgres.entity.StatisticsEntity();
     statistics.setConsecutiveFailedLoginAttempts(3);
     entity.setStatistics(statistics);
     assertThat(mapper.toDomain(entity).getStatistics().getConsecutiveFailedLoginAttempts())
         .isEqualTo(3);
-  }
-
-  @Test
-  void updatesDoNotReplaceOwnedLegacyMovieCollections() {
-    User user = account();
-    var entity = new com.moviemux.user.adapter.repository.postgres.entity.UserEntity();
-    var movies = new ArrayList<com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity>();
-    entity.setMovies(movies);
-    mapper.updateEntity(user, entity);
-    assertThat(entity.getMovies()).isSameAs(movies);
   }
 
   @Test

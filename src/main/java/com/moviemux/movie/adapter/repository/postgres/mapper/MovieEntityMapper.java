@@ -1,20 +1,20 @@
 package com.moviemux.movie.adapter.repository.postgres.mapper;
 
 import com.moviemux.movie.domain.model.*;
-import com.moviemux.user.domain.model.Role;
 import java.util.*;
 
 /** Every conversion returns detached models, never Hibernate-managed objects. */
 public final class MovieEntityMapper {
   private MovieEntityMapper() {}
 
-  public static MovieActor actor(com.moviemux.user.adapter.repository.postgres.entity.UserEntity source) {
-    return source == null
-        ? null
-        : new MovieActor(source.getId(), source.getName(), source.getEmail(), source.getRoles());
+  public static MovieActor actor(
+      UUID id, com.moviemux.user.domain.repository.UserIdentityLookup identities) {
+    return id == null ? null : identities.find(id).map(MovieActor::from).orElse(null);
   }
 
-  public static Movie shallow(com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity source) {
+  public static Movie shallow(
+      com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity source,
+      com.moviemux.user.domain.repository.UserIdentityLookup identities) {
     if (source == null) return null;
     Movie result = new Movie();
     result.setId(source.getId());
@@ -33,12 +33,14 @@ public final class MovieEntityMapper {
     result.setShowNotes(source.isShowNotes());
     result.setCreatedAt(source.getCreatedAt());
     result.setUpdatedAt(source.getUpdatedAt());
-    result.setUser(actor(source.getUser()));
+    result.setUser(actor(source.getUserId(), identities));
     return result;
   }
 
-  public static Movie movie(com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity source) {
-    Movie result = shallow(source);
+  public static Movie movie(
+      com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity source,
+      com.moviemux.user.domain.repository.UserIdentityLookup identities) {
+    Movie result = shallow(source, identities);
     if (result == null) return null;
     if (source.getGenres() != null)
       result.setGenres(
@@ -48,18 +50,19 @@ public final class MovieEntityMapper {
     if (source.getNotes() != null)
       result.setNotes(
           source.getNotes().stream()
-              .map(MovieEntityMapper::note)
+              .map(note -> note(note, identities))
               .collect(java.util.stream.Collectors.toCollection(ArrayList::new)));
     if (source.getMovieDiscord() != null)
       result.setMovieDiscord(
           new MovieDiscord(
               source.getMovieDiscord().getId(),
               source.getMovieDiscord().getMessageId(),
-              shallow(source)));
+              shallow(source, identities)));
     return result;
   }
 
-  public static MovieGenre genre(com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity source) {
+  public static MovieGenre genre(
+      com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity source) {
     return source == null
         ? null
         : MovieGenre.builder()
@@ -69,18 +72,21 @@ public final class MovieEntityMapper {
             .build();
   }
 
-  public static MovieNote note(com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteEntity source) {
+  public static MovieNote note(
+      com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteEntity source,
+      com.moviemux.user.domain.repository.UserIdentityLookup identities) {
     if (source == null) return null;
     return new MovieNote(
         new MovieNoteKey(source.getId().getUserId(), source.getId().getMovieId()),
         source.getNote(),
         source.getCreatedAt(),
         source.getUpdatedAt(),
-        actor(source.getUser()),
-        shallow(source.getMovie()));
+        actor(source.getUserId(), identities),
+        shallow(source.getMovie(), identities));
   }
 
-  public static void copyScalars(Movie source, com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity result) {
+  public static void copyScalars(
+      Movie source, com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity result) {
     result.setId(source.getId());
     result.setPortugueseTitle(source.getPortugueseTitle());
     result.setEnglishTitle(source.getEnglishTitle());

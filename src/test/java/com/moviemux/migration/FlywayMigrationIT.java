@@ -68,6 +68,50 @@ class FlywayMigrationIT {
     }
 
     @Test
+    void completeCatalogMatchesHistoricalExportIncludingAllTwelveForeignKeys() throws Exception {
+        flyway().migrate();
+        String historical = schema + "_historical";
+        try (Connection connection = connection(); var statement = connection.createStatement()) {
+            statement.execute("create schema " + historical);
+            try {
+                statement.execute("set search_path to " + historical);
+                for (String ddl : SchemaExportTest.baseline().split(";")) {
+                    if (!ddl.isBlank()) statement.execute(ddl);
+                }
+                assertThat(count("select count(*) from information_schema.tables where table_schema='" + schema
+                        + "' and table_name <> 'flyway_schema_history'")).isEqualTo(13);
+                assertThat(count("select count(*) from pg_constraint c join pg_namespace n on n.oid=c.connamespace where n.nspname='"
+                        + schema + "' and c.contype='f'")).isEqualTo(12);
+                assertThat(catalog()).containsExactlyElementsOf(catalog(historical));
+            } finally {
+                statement.execute("drop schema " + historical + " cascade");
+            }
+        }
+    }
+
+    @Test
+    void sqlOwnedUserForeignKeysRejectOrphanOwnersAndRatings() throws Exception {
+        flyway().migrate();
+        String missingUser = UUID.randomUUID().toString();
+        String movie = UUID.randomUUID().toString();
+        try (Connection connection = connection(); var statement = connection.createStatement()) {
+            statement.execute("set search_path to " + schema);
+            statement.execute("insert into movie(id,created_at,description,director,english_title,portuguese_title) values ('"
+                    + movie + "',now(),'synthetic','synthetic','synthetic','synthetic')");
+            for (String sql : List.of(
+                    "update movie set user_id='" + missingUser + "' where id='" + movie + "'",
+                    "insert into movie_note(movie_id,user_id,created_at,note) values ('" + movie + "','" + missingUser + "',now(),5)",
+                    "insert into user_wishlist(id,user_id,created_at,shareable) values ('" + UUID.randomUUID() + "','" + missingUser + "',now(),false)")) {
+                assertThatThrownBy(() -> statement.execute(sql)).isInstanceOf(java.sql.SQLException.class)
+                        .satisfies(error -> assertThat(((java.sql.SQLException) error).getSQLState()).isEqualTo("23503"));
+            }
+            assertThat(count("select count(*) from " + schema + ".movie where user_id is null")).isEqualTo(1);
+            assertThat(count("select count(*) from " + schema + ".movie_note")).isZero();
+            assertThat(count("select count(*) from " + schema + ".user_wishlist")).isZero();
+        }
+    }
+
+    @Test
     void existingSchemaRequiresExplicitBaselineAndPreservesRowsIdentityAndCatalog() throws Exception {
         try (Connection connection = connection()) {
             connection.createStatement().execute("set search_path to " + schema);
@@ -115,6 +159,19 @@ class FlywayMigrationIT {
         }
         assertThatCode(() -> flyway().validate()).doesNotThrowAnyException();
         assertThat(catalog()).isNotEqualTo(expected);
+        assertThatThrownBy(() -> assertCatalogMatches(expected)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Schema drift");
+    }
+
+    @Test
+    void missingSqlOwnedForeignKeyIsDetectedEvenWhenFlywayAndJpaValidate() throws Exception {
+        flyway().migrate();
+        List<String> expected = catalog();
+        try (Connection connection = connection(); var statement = connection.createStatement()) {
+            statement.execute("alter table " + schema + ".movie drop constraint FKgga7gitf0nti7b7dh2nn9sb7");
+        }
+        assertThatCode(() -> flyway().validate()).doesNotThrowAnyException();
+        assertThatCode(this::validateJpa).doesNotThrowAnyException();
         assertThatThrownBy(() -> assertCatalogMatches(expected)).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Schema drift");
     }
@@ -242,7 +299,9 @@ class FlywayMigrationIT {
         if (!catalog().equals(expected)) throw new IllegalStateException("Schema drift requires review before baseline");
     }
 
-    private List<String> catalog() throws Exception {
+    private List<String> catalog() throws Exception { return catalog(schema); }
+
+    private List<String> catalog(String schema) throws Exception {
         List<String> definitions = new ArrayList<>();
         try (Connection connection = connection(); var statement = connection.createStatement()) {
             statement.execute("set search_path to " + schema);
@@ -250,7 +309,7 @@ class FlywayMigrationIT {
                     "select table_name || ':' || column_name || ':' || data_type || ':' || udt_name || ':' || coalesce(character_maximum_length::text,'') || ':' || is_nullable || ':' || coalesce(column_default,'') || ':' || is_identity || ':' || coalesce(identity_generation,'') from information_schema.columns where table_schema='" + schema + "' and table_name <> 'flyway_schema_history' order by table_name,ordinal_position",
                     "select c.relname || ':' || con.conname || ':' || pg_get_constraintdef(con.oid) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='" + schema + "' and c.relname <> 'flyway_schema_history' order by c.relname,con.conname",
                     "select tablename || ':' || indexname || ':' || indexdef from pg_indexes where schemaname='" + schema + "' and tablename <> 'flyway_schema_history' order by tablename,indexname")) {
-                try (ResultSet result = statement.executeQuery(query)) { while (result.next()) definitions.add(result.getString(1)); }
+                try (ResultSet result = statement.executeQuery(query)) { while (result.next()) definitions.add(result.getString(1).replace(schema + ".", "<schema>.")); }
             }
         }
         return definitions;

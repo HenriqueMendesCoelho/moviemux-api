@@ -55,7 +55,8 @@ public class UserEntityMapper {
     target.setRedefinePasswordKeyCreatedAt(source.getRedefinePasswordKeyCreatedAt());
     if (source.getPreferences() != null) {
       var p = target.getPreferences();
-      if (p == null) p = new com.moviemux.user.adapter.repository.postgres.entity.PreferencesEntity();
+      if (p == null)
+        p = new com.moviemux.user.adapter.repository.postgres.entity.PreferencesEntity();
       p.setId(source.getPreferences().getId());
       p.setNotify(source.getPreferences().isNotify());
       p.setUser(target);
@@ -63,7 +64,8 @@ public class UserEntityMapper {
     }
     if (source.getStatistics() != null) {
       var s = target.getStatistics();
-      if (s == null) s = new com.moviemux.user.adapter.repository.postgres.entity.StatisticsEntity();
+      if (s == null)
+        s = new com.moviemux.user.adapter.repository.postgres.entity.StatisticsEntity();
       s.setId(source.getStatistics().getId());
       s.setConsecutiveFailedLoginAttempts(
           source.getStatistics().getConsecutiveFailedLoginAttempts());

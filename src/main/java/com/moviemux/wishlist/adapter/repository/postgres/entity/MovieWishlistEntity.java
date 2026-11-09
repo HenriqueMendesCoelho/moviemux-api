@@ -1,6 +1,5 @@
 package com.moviemux.wishlist.adapter.repository.postgres.entity;
 
-
 import com.moviemux.kronusintegrationtool.domain.model.MovieSummary;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

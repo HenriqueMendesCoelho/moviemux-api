@@ -45,7 +45,9 @@ public class UserPostgresRepository implements UserRepository {
     var target =
         value.getId() == null
             ? new com.moviemux.user.adapter.repository.postgres.entity.UserEntity()
-            : legacy.findById(value.getId()).orElseGet(com.moviemux.user.adapter.repository.postgres.entity.UserEntity::new);
+            : legacy
+                .findById(value.getId())
+                .orElseGet(com.moviemux.user.adapter.repository.postgres.entity.UserEntity::new);
     return mapper.toDomain(legacy.saveAndFlush(mapper.updateEntity(value, target)));
   }
 }

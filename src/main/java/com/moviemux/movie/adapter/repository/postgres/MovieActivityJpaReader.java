@@ -16,10 +16,10 @@ public interface MovieActivityJpaReader extends Repository<MovieNoteEntity, Movi
   }
 
   @Query(
-      "select n.note as note, n.movie.runtime as runtime from MovieNote n where n.user.id ="
+      "select n.note as note, n.movie.runtime as runtime from MovieNote n where n.id.userId ="
           + " :userId")
   List<ReviewRow> reviews(@Param("userId") UUID userId);
 
-  @Query("select m.id from Movie m where m.user.id = :userId")
+  @Query("select m.id from Movie m where m.userId = :userId")
   List<UUID> ownedMovies(@Param("userId") UUID userId);
 }

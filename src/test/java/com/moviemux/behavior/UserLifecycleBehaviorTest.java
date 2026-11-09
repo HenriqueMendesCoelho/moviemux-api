@@ -3,13 +3,10 @@ package com.moviemux.behavior;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.moviemux.movie.adapter.repository.MovieRepository;
-import com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity;
 import com.moviemux.user.adapter.repository.UserRepository;
 import com.moviemux.user.adapter.repository.postgres.entity.UserEntity;
 import com.moviemux.user.domain.usecase.impl.CreateInviteUseCaseImpl;
 import com.moviemux.user.domain.usecase.impl.DeleteInviteUseCaseImpl;
-import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,7 +16,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class UserLifecycleBehaviorTest {
   @Mock UserRepository repository;
-  @Mock MovieRepository movieRepository;
+  @Mock com.moviemux.movie.domain.repository.MovieOwnershipRemoval movieRemoval;
+  @Mock com.moviemux.wishlist.domain.repository.WishlistOwnershipRemoval wishlistRemoval;
   @Mock com.moviemux.user.domain.repository.InviteRepository invites;
 
   @Spy
@@ -34,8 +32,8 @@ class UserLifecycleBehaviorTest {
         new com.moviemux.application.spring.bridge.AccountRemovalBridge(
             new com.moviemux.user.adapter.repository.postgres.UserRemovalPreparationAdapter(
                 repository),
-            new com.moviemux.movie.adapter.repository.postgres.MovieOwnershipRemovalAdapter(
-                movieRepository));
+            movieRemoval,
+            wishlistRemoval);
   }
 
   @InjectMocks CreateInviteUseCaseImpl createInvite;
@@ -45,21 +43,12 @@ class UserLifecycleBehaviorTest {
   void deletingAccountDetachesOwnedMoviesBeforeDeletingUser() {
     UUID id = UUID.fromString("00000000-0000-0000-0000-000000000001");
     UserEntity user = UserEntity.builder().id(id).build();
-    MovieEntity movie =
-        MovieEntity.builder()
-            .id(UUID.fromString("00000000-0000-0000-0000-000000000002"))
-            .user(user)
-            .build();
-    user.setMovies(List.of(movie));
-    when(movieRepository.getReferenceById(movie.getId())).thenReturn(movie);
     when(repository.getReferenceById(id)).thenReturn(user);
     deleteUser.remove(id);
-    assertThat(movie.getUser()).isNull();
-    assertThat(user.getMovies()).isNull();
-    InOrder order = inOrder(repository, movieRepository);
+    InOrder order = inOrder(repository, movieRemoval, wishlistRemoval);
     order.verify(repository).getReferenceById(id);
-    order.verify(movieRepository).saveAllAndFlush(List.of(movie));
-    order.verify(repository).save(user);
+    order.verify(movieRemoval).detach(id);
+    order.verify(wishlistRemoval).removeOwnedBy(id);
     order.verify(repository).delete(user);
   }
 
@@ -67,12 +56,10 @@ class UserLifecycleBehaviorTest {
   void movieDetachmentFailureStopsAccountDeletion() {
     UUID id = UUID.fromString("00000000-0000-0000-0000-000000000001");
     UserEntity user = UserEntity.builder().id(id).build();
-    user.setMovies(List.of());
     when(repository.getReferenceById(id)).thenReturn(user);
-    when(movieRepository.saveAllAndFlush(any()))
-        .thenThrow(new IllegalStateException("stub write failed"));
+    doThrow(new IllegalStateException("stub write failed")).when(movieRemoval).detach(id);
     assertThatThrownBy(() -> deleteUser.remove(id)).isInstanceOf(IllegalStateException.class);
-    verify(repository, never()).save(any());
+    verifyNoInteractions(wishlistRemoval);
     verify(repository, never()).delete(any(UserEntity.class));
   }
 

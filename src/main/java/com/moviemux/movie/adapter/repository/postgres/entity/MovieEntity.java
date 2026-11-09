@@ -1,6 +1,5 @@
 package com.moviemux.movie.adapter.repository.postgres.entity;
 
-import com.moviemux.user.adapter.repository.postgres.entity.UserEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -10,7 +9,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrimaryKeyJoinColumn;
@@ -86,9 +84,8 @@ public class MovieEntity {
       inverseJoinColumns = @JoinColumn(name = "genre_id"))
   private List<MovieGenreEntity> genres;
 
-  @ManyToOne(optional = true)
-  @JoinColumn(name = "user_id", referencedColumnName = "id", nullable = true)
-  private UserEntity user;
+  @Column(name = "user_id")
+  private UUID userId;
 
   @CreationTimestamp
   @Column(nullable = false, columnDefinition = "timestamp with time zone")

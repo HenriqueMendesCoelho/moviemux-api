@@ -1,6 +1,5 @@
 package com.moviemux.wishlist.adapter.repository.postgres.entity;
 
-
 import jakarta.persistence.*;
 import lombok.*;
 

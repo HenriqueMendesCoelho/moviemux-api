@@ -1,6 +1,5 @@
 package com.moviemux.wishlist.adapter.repository.postgres.entity;
 
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import java.util.UUID;

@@ -12,36 +12,44 @@ import org.springframework.transaction.annotation.Transactional;
 public class MovieNotePostgresRepository implements MovieNoteRepository {
   private final com.moviemux.movie.adapter.repository.MovieNoteRepository repository;
   private final EntityManager entities;
+  private final com.moviemux.user.domain.repository.UserIdentityLookup identities;
 
   public MovieNotePostgresRepository(
       com.moviemux.movie.adapter.repository.MovieNoteRepository repository,
-      EntityManager entities) {
+      EntityManager entities,
+      com.moviemux.user.domain.repository.UserIdentityLookup identities) {
     this.repository = repository;
     this.entities = entities;
+    this.identities = identities;
   }
 
-  private static com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteKeyEntity key(MovieNoteKey key) {
-    return new com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteKeyEntity(key.getUserId(), key.getMovieId());
+  private static com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteKeyEntity key(
+      MovieNoteKey key) {
+    return new com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteKeyEntity(
+        key.getUserId(), key.getMovieId());
   }
 
   @Transactional(readOnly = true)
   public Optional<MovieNote> findById(MovieNoteKey key) {
-    return repository.findById(key(key)).map(MovieEntityMapper::note);
+    return repository.findById(key(key)).map(entity -> MovieEntityMapper.note(entity, identities));
   }
 
   @Transactional
   public MovieNote save(MovieNote model) {
     var entity =
-        repository.findById(key(model.getId())).orElseGet(com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteEntity::new);
+        repository
+            .findById(key(model.getId()))
+            .orElseGet(com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteEntity::new);
     entity.setId(key(model.getId()));
     entity.setNote(model.getNote());
     entity.setCreatedAt(model.getCreatedAt());
     entity.setUpdatedAt(model.getUpdatedAt());
-    entity.setUser(
-        entities.getReference(com.moviemux.user.adapter.repository.postgres.entity.UserEntity.class, model.getUser().id()));
+    entity.setUserId(model.getUser().id());
     entity.setMovie(
-        entities.getReference(com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity.class, model.getMovie().getId()));
-    return MovieEntityMapper.note(repository.saveAndFlush(entity));
+        entities.getReference(
+            com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity.class,
+            model.getMovie().getId()));
+    return MovieEntityMapper.note(repository.saveAndFlush(entity), identities);
   }
 
   @Transactional

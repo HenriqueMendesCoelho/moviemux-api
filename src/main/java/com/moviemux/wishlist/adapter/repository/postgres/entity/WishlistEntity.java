@@ -1,14 +1,11 @@
 package com.moviemux.wishlist.adapter.repository.postgres.entity;
 
-import com.moviemux.user.adapter.repository.postgres.entity.UserEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
@@ -43,9 +40,8 @@ public class WishlistEntity implements Serializable {
   @Column(length = 30)
   private String name;
 
-  @ManyToOne
-  @JoinColumn(name = "user_id")
-  private UserEntity user;
+  @Column(name = "user_id")
+  private UUID userId;
 
   @OneToMany(mappedBy = "wishlist", cascade = CascadeType.ALL)
   @OrderBy("wishlistOrder asc")

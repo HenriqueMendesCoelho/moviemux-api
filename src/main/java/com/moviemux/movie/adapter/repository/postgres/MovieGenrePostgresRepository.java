@@ -28,7 +28,8 @@ public class MovieGenrePostgresRepository implements MovieGenreRepository {
             ? new com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity()
             : repository
                 .findById(genre.getId())
-                .orElseGet(com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity::new);
+                .orElseGet(
+                    com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity::new);
     entity.setId(genre.getId());
     entity.setName(genre.getName());
     entity.setTmdbId(genre.getTmdbId());

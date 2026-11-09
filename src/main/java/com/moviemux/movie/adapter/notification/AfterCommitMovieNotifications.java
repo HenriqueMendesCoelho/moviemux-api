@@ -1,6 +1,6 @@
 package com.moviemux.movie.adapter.notification;
 
-import com.moviemux.application.spring.effects.AfterCommitEffects;
+import com.moviemux.adapter.core.effects.AfterCommitEffects;
 import com.moviemux.movie.domain.model.NotificationNote;
 import com.moviemux.movie.domain.repository.MovieNotificationRepository;
 import java.util.UUID;

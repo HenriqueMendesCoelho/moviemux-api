@@ -121,6 +121,40 @@ class ArchitectureBoundaryTest {
   }
 
   @Test
+  void completeModuleGraphIncludingAdaptersMustBeAcyclic() {
+    java.util.Map<String, Set<String>> graph = new java.util.TreeMap<>();
+    for (JavaClass source : CLASSES) {
+      if (!source.getName().startsWith("com.moviemux.")) continue;
+      String module = source.getName().split("\\.")[2];
+      source
+          .getDirectDependenciesFromSelf()
+          .forEach(
+              dependency -> {
+                String target = dependency.getTargetClass().getName();
+                if (!target.startsWith("com.moviemux.")) return;
+                String targetModule = target.split("\\.")[2];
+                if (module.equals(targetModule)) return;
+                graph.computeIfAbsent(module, ignored -> new TreeSet<>()).add(targetModule);
+                if (Set.of(
+                        "user",
+                        "movie",
+                        "wishlist",
+                        "statistic",
+                        "discord",
+                        "kronusintegrationtool")
+                    .contains(targetModule)) {
+                  assertThat(target)
+                      .as("Other business modules expose only public domain contracts")
+                      .matches(
+                          "com\\.moviemux\\.[^.]+\\.domain\\.(model|repository|exception|usecase)\\..+")
+                      .doesNotContain(".usecase.impl.");
+                }
+              });
+    }
+    assertThat(hasCycle(graph)).as("Complete module graph: %s", graph).isFalse();
+  }
+
+  @Test
   void cycleDetectorRejectsCyclesAndAcceptsAcyclicGraphs() {
     assertThat(hasCycle(java.util.Map.of("user", Set.of("movie"), "movie", Set.of("user"))))
         .isTrue();

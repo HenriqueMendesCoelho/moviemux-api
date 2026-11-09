@@ -3,7 +3,7 @@ package com.moviemux.transactioneffects;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import com.moviemux.application.spring.effects.AfterCommitEffects;
+import com.moviemux.adapter.core.effects.AfterCommitEffects;
 import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
 import com.moviemux.kronusintegrationtool.domain.repository.EmailGateway;
 import com.moviemux.movie.adapter.repository.rest.impl.MovieSocketRestRespositoryImpl;

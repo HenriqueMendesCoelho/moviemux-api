@@ -1,10 +1,9 @@
 package com.moviemux.movie.adapter.repository.postgres.entity;
 
-import com.moviemux.user.adapter.repository.postgres.entity.UserEntity;
 import jakarta.persistence.*;
 import java.io.Serializable;
 import java.time.OffsetDateTime;
-import java.util.Comparator;
+import java.util.UUID;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -30,10 +29,8 @@ public class MovieNoteEntity implements Serializable, Cloneable {
   @Column(columnDefinition = "timestamp with time zone")
   private OffsetDateTime updatedAt;
 
-  @ManyToOne
-  @MapsId("userId")
-  @JoinColumn(name = "user_id")
-  private UserEntity user;
+  @Column(name = "user_id", insertable = false, updatable = false)
+  private UUID userId;
 
   @ManyToOne
   @MapsId("movieId")
@@ -45,24 +42,14 @@ public class MovieNoteEntity implements Serializable, Cloneable {
       Integer note,
       OffsetDateTime createdAt,
       OffsetDateTime updatedAt,
-      UserEntity user,
+      UUID userId,
       MovieEntity movie) {
-    this.id = new MovieNoteKeyEntity(user.getId(), movie.getId());
+    this.id = new MovieNoteKeyEntity(userId, movie.getId());
     this.note = note;
     this.createdAt = createdAt;
     this.updatedAt = updatedAt;
-    this.user = user;
+    this.userId = userId;
     this.movie = movie;
-  }
-
-  public static Comparator<MovieNoteEntity> comparator() {
-    return Comparator.comparingInt((MovieNoteEntity m) -> m.getNote() != null ? m.getNote() : 0)
-        .reversed()
-        .thenComparing((m) -> m.getUser().getName());
-  }
-
-  public static Comparator<MovieNoteEntity> comparatorAlphabetical() {
-    return Comparator.comparing((m) -> m.getUser().getName());
   }
 
   @Override
