@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.moviemux.movie.adapter.repository.MovieRepository;
-import com.moviemux.movie.domain.Movie;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity;
 import com.moviemux.user.adapter.repository.UserRepository;
-import com.moviemux.user.domain.User;
+import com.moviemux.user.adapter.repository.postgres.entity.UserEntity;
 import com.moviemux.user.domain.usecase.impl.CreateInviteUseCaseImpl;
 import com.moviemux.user.domain.usecase.impl.DeleteInviteUseCaseImpl;
 import java.util.List;
@@ -44,9 +44,9 @@ class UserLifecycleBehaviorTest {
   @Test
   void deletingAccountDetachesOwnedMoviesBeforeDeletingUser() {
     UUID id = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    User user = User.builder().id(id).build();
-    Movie movie =
-        Movie.builder()
+    UserEntity user = UserEntity.builder().id(id).build();
+    MovieEntity movie =
+        MovieEntity.builder()
             .id(UUID.fromString("00000000-0000-0000-0000-000000000002"))
             .user(user)
             .build();
@@ -66,14 +66,14 @@ class UserLifecycleBehaviorTest {
   @Test
   void movieDetachmentFailureStopsAccountDeletion() {
     UUID id = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    User user = User.builder().id(id).build();
+    UserEntity user = UserEntity.builder().id(id).build();
     user.setMovies(List.of());
     when(repository.getReferenceById(id)).thenReturn(user);
     when(movieRepository.saveAllAndFlush(any()))
         .thenThrow(new IllegalStateException("stub write failed"));
     assertThatThrownBy(() -> deleteUser.remove(id)).isInstanceOf(IllegalStateException.class);
     verify(repository, never()).save(any());
-    verify(repository, never()).delete(any(User.class));
+    verify(repository, never()).delete(any(UserEntity.class));
   }
 
   @Test

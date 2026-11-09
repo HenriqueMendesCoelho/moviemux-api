@@ -2,7 +2,7 @@ package com.moviemux.kronusintegrationtool.adapter.repository.rest.dto;
 
 import java.util.List;
 
-import com.moviemux.kronusintegrationtool.domain.Credit;
+import com.moviemux.kronusintegrationtool.domain.model.Credit;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

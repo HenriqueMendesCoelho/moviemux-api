@@ -1,6 +1,6 @@
 package com.moviemux.movie.adapter.repository.jpa;
 
-import com.moviemux.movie.domain.Movie;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -11,11 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
 
 @Primary
-public interface MovieJpaRepository extends JpaRepository<Movie, UUID>, JpaSpecificationExecutor<Movie> {
+public interface MovieJpaRepository extends JpaRepository<MovieEntity, UUID>, JpaSpecificationExecutor<MovieEntity> {
 
 	@Transactional(readOnly = true)
-	Movie findByTmdbId(Long tmdbId);
+	MovieEntity findByTmdbId(Long tmdbId);
 
-	Page<Movie> findAll(Pageable pageable);
+	Page<MovieEntity> findAll(Pageable pageable);
 
 }

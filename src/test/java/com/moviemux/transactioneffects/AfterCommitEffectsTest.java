@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 import com.moviemux.application.spring.effects.AfterCommitEffects;
-import com.moviemux.kronusintegrationtool.domain.SendMailTemplate;
+import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
 import com.moviemux.kronusintegrationtool.domain.repository.EmailGateway;
 import com.moviemux.user.adapter.notification.AfterCommitUserMailSender;
 import java.util.concurrent.atomic.AtomicInteger;

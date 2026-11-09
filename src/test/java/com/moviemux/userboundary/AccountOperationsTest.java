@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.moviemux.user.adapter.security.BCryptPasswordHasher;
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.command.BlockUserCommand;
 import com.moviemux.user.domain.command.DemoteUserCommand;
 import com.moviemux.user.domain.command.PromoteUserCommand;

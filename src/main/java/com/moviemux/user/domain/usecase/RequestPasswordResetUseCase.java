@@ -1,6 +1,6 @@
 package com.moviemux.user.domain.usecase;
 
-import com.moviemux.kronusintegrationtool.domain.SendMailTemplate;
+import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
 import com.moviemux.user.domain.repository.UserMailSender;
 import com.moviemux.user.domain.model.User;
 import com.moviemux.user.domain.repository.CodeGenerator;

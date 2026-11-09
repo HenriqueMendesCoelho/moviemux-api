@@ -1,6 +1,6 @@
 package com.moviemux.user.domain.model;
 
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import java.time.OffsetDateTime;
 import java.util.HashSet;
 import java.util.Set;

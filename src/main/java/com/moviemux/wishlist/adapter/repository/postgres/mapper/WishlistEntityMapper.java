@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 /** All lazy associations are read by the adapter inside its persistence boundary. */
 @Component
 public class WishlistEntityMapper {
-  public Wishlist toDomain(com.moviemux.wishlist.domain.Wishlist entity) {
+  public Wishlist toDomain(com.moviemux.wishlist.adapter.repository.postgres.entity.WishlistEntity entity) {
     if (entity == null) return null;
     return Wishlist.builder()
         .id(entity.getId())
@@ -29,7 +29,7 @@ public class WishlistEntityMapper {
         .build();
   }
 
-  public MovieWishlist toDomain(com.moviemux.wishlist.domain.MovieWishlist entity) {
+  public MovieWishlist toDomain(com.moviemux.wishlist.adapter.repository.postgres.entity.MovieWishlistEntity entity) {
     if (entity == null) return null;
     return MovieWishlist.builder()
         .tmdbId(entity.getTmdbId())
@@ -41,7 +41,7 @@ public class WishlistEntityMapper {
         .build();
   }
 
-  public MoviesWishlists toDomain(com.moviemux.wishlist.domain.MoviesWishlists entity) {
+  public MoviesWishlists toDomain(com.moviemux.wishlist.adapter.repository.postgres.entity.MoviesWishlistsEntity entity) {
     if (entity == null) return null;
     return MoviesWishlists.builder()
         .id(
@@ -58,9 +58,9 @@ public class WishlistEntityMapper {
         .build();
   }
 
-  public com.moviemux.wishlist.domain.Wishlist toEntity(Wishlist model) {
+  public com.moviemux.wishlist.adapter.repository.postgres.entity.WishlistEntity toEntity(Wishlist model) {
     var entity =
-        com.moviemux.wishlist.domain.Wishlist.builder()
+        com.moviemux.wishlist.adapter.repository.postgres.entity.WishlistEntity.builder()
             .id(model.getId())
             .name(model.getName())
             .shareable(model.isShareable())
@@ -69,7 +69,7 @@ public class WishlistEntityMapper {
             .user(
                 model.getUser() == null
                     ? null
-                    : com.moviemux.user.domain.User.builder()
+                    : com.moviemux.user.adapter.repository.postgres.entity.UserEntity.builder()
                         .id(model.getUser().id())
                         .name(model.getUser().name())
                         .build())
@@ -88,8 +88,8 @@ public class WishlistEntityMapper {
     return entity;
   }
 
-  public com.moviemux.wishlist.domain.MovieWishlist toEntity(MovieWishlist model) {
-    return com.moviemux.wishlist.domain.MovieWishlist.builder()
+  public com.moviemux.wishlist.adapter.repository.postgres.entity.MovieWishlistEntity toEntity(MovieWishlist model) {
+    return com.moviemux.wishlist.adapter.repository.postgres.entity.MovieWishlistEntity.builder()
         .tmdbId(model.getTmdbId())
         .title(model.getTitle())
         .titleEnglish(model.getTitleEnglish())
@@ -98,17 +98,17 @@ public class WishlistEntityMapper {
         .build();
   }
 
-  public com.moviemux.wishlist.domain.MoviesWishlists toEntity(MoviesWishlists model) {
-    return com.moviemux.wishlist.domain.MoviesWishlists.builder()
+  public com.moviemux.wishlist.adapter.repository.postgres.entity.MoviesWishlistsEntity toEntity(MoviesWishlists model) {
+    return com.moviemux.wishlist.adapter.repository.postgres.entity.MoviesWishlistsEntity.builder()
         .id(
             model.getId() == null
                 ? null
-                : new com.moviemux.wishlist.domain.MoviesWishlistsKey(
+                : new com.moviemux.wishlist.adapter.repository.postgres.entity.MoviesWishlistsKeyEntity(
                     model.getId().getWishlistId(), model.getId().getMovieId()))
         .wishlist(
             model.getWishlist() == null
                 ? null
-                : com.moviemux.wishlist.domain.Wishlist.builder()
+                : com.moviemux.wishlist.adapter.repository.postgres.entity.WishlistEntity.builder()
                     .id(model.getWishlist().getId())
                     .build())
         .movieWishlist(model.getMovieWishlist() == null ? null : toEntity(model.getMovieWishlist()))

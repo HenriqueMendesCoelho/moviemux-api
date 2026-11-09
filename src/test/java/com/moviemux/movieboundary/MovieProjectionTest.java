@@ -4,7 +4,7 @@ import com.moviemux.movie.domain.model.*;
 import com.moviemux.movie.domain.repository.MovieRepository;
 import com.moviemux.movie.domain.usecase.impl.GetMovieUseCaseImpl;
 import com.moviemux.movie.domain.usecase.impl.SearchMovieNoteUseCaseImpl;
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;

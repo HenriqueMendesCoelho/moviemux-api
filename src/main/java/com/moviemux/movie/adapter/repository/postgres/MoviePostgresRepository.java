@@ -34,18 +34,18 @@ public class MoviePostgresRepository implements MovieRepository {
   public Movie save(Movie model) {
     var entity =
         model.getId() == null
-            ? new com.moviemux.movie.domain.Movie()
-            : repository.findById(model.getId()).orElseGet(com.moviemux.movie.domain.Movie::new);
+            ? new com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity()
+            : repository.findById(model.getId()).orElseGet(com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity::new);
     MovieEntityMapper.copyScalars(model, entity);
     entity.setUser(
         model.getUser() == null
             ? null
-            : entities.getReference(com.moviemux.user.domain.User.class, model.getUser().id()));
+            : entities.getReference(com.moviemux.user.adapter.repository.postgres.entity.UserEntity.class, model.getUser().id()));
     if (model.getGenres() != null)
       entity.setGenres(
           model.getGenres().stream()
               .map(
-                  g -> entities.getReference(com.moviemux.movie.domain.MovieGenre.class, g.getId()))
+                  g -> entities.getReference(com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity.class, g.getId()))
               .collect(java.util.stream.Collectors.toCollection(ArrayList::new)));
     return MovieEntityMapper.movie(repository.saveAndFlush(entity));
   }

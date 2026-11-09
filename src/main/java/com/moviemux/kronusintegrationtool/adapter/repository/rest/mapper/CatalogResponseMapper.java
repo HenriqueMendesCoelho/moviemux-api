@@ -1,7 +1,7 @@
 package com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper;
 
 import com.moviemux.kronusintegrationtool.adapter.repository.rest.dto.*;
-import com.moviemux.kronusintegrationtool.domain.*;
+import com.moviemux.kronusintegrationtool.domain.model.*;
 import com.moviemux.kronusintegrationtool.domain.model.CatalogGenre;
 
 /** Remote DTO conversion is adapter behavior, not a domain responsibility. */

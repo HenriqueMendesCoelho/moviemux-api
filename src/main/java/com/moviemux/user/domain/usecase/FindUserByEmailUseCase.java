@@ -1,7 +1,7 @@
 package com.moviemux.user.domain.usecase;
 
 
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.exception.UserNotAuthorizedException;
 import com.moviemux.user.domain.exception.UserNotFoundException;
 import com.moviemux.user.domain.model.User;

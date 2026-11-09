@@ -3,7 +3,7 @@ package com.moviemux.userboundary;
 import static org.assertj.core.api.Assertions.*;
 
 import com.moviemux.user.adapter.repository.postgres.mapper.UserEntityMapper;
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.model.Preferences;
 import com.moviemux.user.domain.model.Statistics;
 import com.moviemux.user.domain.model.User;
@@ -40,7 +40,7 @@ class UserEntityMapperTest {
   @Test
   void reconstitutionPreservesExactRolesCredentialsIdentifiersAndDates() {
     User original = account();
-    var entity = mapper.updateEntity(original, new com.moviemux.user.domain.User());
+    var entity = mapper.updateEntity(original, new com.moviemux.user.adapter.repository.postgres.entity.UserEntity());
     User restored = mapper.toDomain(entity);
     assertThat(restored).usingRecursiveComparison().isEqualTo(original);
     assertThat(restored.getRoles()).containsExactly(Role.ADM);
@@ -64,10 +64,10 @@ class UserEntityMapperTest {
 
   @Test
   void mapperDoesNotReadLegacyActivityGraphsDuringAuthentication() {
-    var entity = new com.moviemux.user.domain.User();
+    var entity = new com.moviemux.user.adapter.repository.postgres.entity.UserEntity();
     entity.setId(UUID.randomUUID());
     var statistics =
-        new com.moviemux.user.domain.Statistics() {
+        new com.moviemux.user.adapter.repository.postgres.entity.StatisticsEntity() {
           @Override
           public Integer getRatingsGiven() {
             throw new AssertionError("activity must be read only through profile projection");
@@ -87,8 +87,8 @@ class UserEntityMapperTest {
   @Test
   void updatesDoNotReplaceOwnedLegacyMovieCollections() {
     User user = account();
-    var entity = new com.moviemux.user.domain.User();
-    var movies = new ArrayList<com.moviemux.movie.domain.Movie>();
+    var entity = new com.moviemux.user.adapter.repository.postgres.entity.UserEntity();
+    var movies = new ArrayList<com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity>();
     entity.setMovies(movies);
     mapper.updateEntity(user, entity);
     assertThat(entity.getMovies()).isSameAs(movies);
@@ -96,7 +96,7 @@ class UserEntityMapperTest {
 
   @Test
   void absentOptionalStateRemainsAbsentOnRead() {
-    var entity = new com.moviemux.user.domain.User();
+    var entity = new com.moviemux.user.adapter.repository.postgres.entity.UserEntity();
     var user = mapper.toDomain(entity);
     assertThat(user.getId()).isNull();
     assertThat(user.getPreferences()).isNull();

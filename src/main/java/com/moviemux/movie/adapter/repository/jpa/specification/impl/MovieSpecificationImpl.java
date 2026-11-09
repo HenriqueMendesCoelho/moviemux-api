@@ -2,9 +2,9 @@ package com.moviemux.movie.adapter.repository.jpa.specification.impl;
 
 import com.moviemux.movie.adapter.repository.jpa.MovieJpaRepository;
 import com.moviemux.movie.adapter.repository.jpa.specification.MovieSpecification;
-import com.moviemux.movie.domain.Movie;
-import com.moviemux.movie.domain.MovieGenre;
-import com.moviemux.movie.domain.MovieNote;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteEntity;
 import jakarta.persistence.criteria.*;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -28,7 +28,7 @@ public class MovieSpecificationImpl implements MovieSpecification {
 	private MovieJpaRepository repository;
 
 	@Override
-	public Page<Movie> findMovieFilteredCustom(List<String> titles, List<Long> genres, String sortJoin,
+	public Page<MovieEntity> findMovieFilteredCustom(List<String> titles, List<Long> genres, String sortJoin,
 			Pageable pageable) {
 		Pageable _pageable = pageable;
 		if (StringUtils.isNotEmpty(sortJoin) && ("notes,asc".equalsIgnoreCase(sortJoin)
@@ -39,9 +39,9 @@ public class MovieSpecificationImpl implements MovieSpecification {
 		return repository.findAll(filterMovies(titles, genres, sortJoin, pageable), _pageable);
 	}
 
-	private Specification<Movie> filterMovies(List<String> titles, List<Long> genres, String sortJoin,
+	private Specification<MovieEntity> filterMovies(List<String> titles, List<Long> genres, String sortJoin,
 			Pageable pageable) {
-		return (Root<Movie> root, CriteriaQuery<?> query, CriteriaBuilder criteriaBuilder) -> {
+		return (Root<MovieEntity> root, CriteriaQuery<?> query, CriteriaBuilder criteriaBuilder) -> {
 			Predicate predicate = criteriaBuilder.conjunction();
 			Sort defaultSort = pageable.getSort();
 			List<org.springframework.data.domain.Sort.Order> defaultOrders =
@@ -71,8 +71,8 @@ public class MovieSpecificationImpl implements MovieSpecification {
 
 			if (CollectionUtils.isNotEmpty(genres)) {
 				Subquery<UUID> subquery = query.subquery(UUID.class);
-				Root<Movie> subMovieRoot = subquery.from(Movie.class);
-				Join<Movie, MovieGenre> genreJoin = subMovieRoot.join("genres");
+				Root<MovieEntity> subMovieRoot = subquery.from(MovieEntity.class);
+				Join<MovieEntity, MovieGenreEntity> genreJoin = subMovieRoot.join("genres");
 				subquery.select(subMovieRoot.get("id"));
 
 				Predicate genrePredicate = genreJoin.get("id").in(genres);
@@ -85,7 +85,7 @@ public class MovieSpecificationImpl implements MovieSpecification {
 			}
 
 			if (StringUtils.isNotEmpty(sortJoin)) {
-				Join<Movie, MovieNote> movieNoteJoin = root.join("notes", JoinType.LEFT);
+				Join<MovieEntity, MovieNoteEntity> movieNoteJoin = root.join("notes", JoinType.LEFT);
 				List<Order> orders = new ArrayList<>();
 
 				if ("notes,asc".equalsIgnoreCase(sortJoin)) {

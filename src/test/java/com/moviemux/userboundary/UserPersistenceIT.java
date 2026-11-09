@@ -2,7 +2,7 @@ package com.moviemux.userboundary;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.model.Preferences;
 import com.moviemux.user.domain.model.Statistics;
 import com.moviemux.user.domain.model.User;

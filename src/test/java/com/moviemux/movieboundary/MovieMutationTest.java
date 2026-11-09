@@ -5,7 +5,7 @@ import com.moviemux.movie.domain.exception.*;
 import com.moviemux.movie.domain.model.*;
 import com.moviemux.movie.domain.repository.*;
 import com.moviemux.movie.domain.usecase.impl.*;
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.exception.UserNotAuthorizedException;
 import com.moviemux.kronusintegrationtool.domain.repository.KronusCatalogRepository;
 import com.moviemux.kronusintegrationtool.domain.model.CatalogGenre;

@@ -42,7 +42,7 @@ public class MoviesWishlistsPostgresRepository implements MoviesWishlistsReposit
         memberships.stream()
             .map(
                 item ->
-                    new com.moviemux.wishlist.domain.MoviesWishlistsKey(
+                    new com.moviemux.wishlist.adapter.repository.postgres.entity.MoviesWishlistsKeyEntity(
                         item.getId().getWishlistId(), item.getId().getMovieId()))
             .toList());
   }

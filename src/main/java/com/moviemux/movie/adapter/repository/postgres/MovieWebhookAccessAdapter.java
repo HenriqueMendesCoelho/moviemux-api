@@ -1,7 +1,7 @@
 package com.moviemux.movie.adapter.repository.postgres;
 
 import com.moviemux.movie.adapter.repository.MovieRepository;
-import com.moviemux.movie.domain.MovieDiscord;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieDiscordEntity;
 import com.moviemux.movie.domain.model.MovieWebhookSnapshot;
 import com.moviemux.movie.domain.repository.MovieWebhookAccess;
 import java.util.Optional;
@@ -54,7 +54,7 @@ public class MovieWebhookAccessAdapter implements MovieWebhookAccess {
 
                   @Override
                   public void saveMessageReference(String messageId) {
-                    movie.setMovieDiscord(new MovieDiscord(null, messageId, movie));
+                    movie.setMovieDiscord(new MovieDiscordEntity(null, messageId, movie));
                     repository.saveAndFlush(movie);
                   }
                 });

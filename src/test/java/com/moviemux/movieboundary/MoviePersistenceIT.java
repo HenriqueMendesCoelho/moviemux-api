@@ -6,7 +6,7 @@ import com.moviemux.movie.domain.repository.MovieNoteRepository;
 import com.moviemux.movie.domain.repository.MovieGenreRepository;
 import com.moviemux.movie.domain.usecase.impl.GetMovieUseCaseImpl;
 import com.moviemux.movie.adapter.repository.postgres.MoviePostgresRepository;
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -114,7 +114,7 @@ class MoviePersistenceIT {
         var expected = legacyMovies.findMovieFilteredCustom(List.of(token),List.of(genre.getId()),query.sortJoin(),MoviePostgresRepository.pageable(query));
         var actual = movies.findFiltered(List.of(token),List.of(genre.getId()),query);
         assertThat(actual.totalElements()).isEqualTo(expected.getTotalElements());
-        assertThat(actual.content()).extracting(Movie::getId).containsExactlyElementsOf(expected.getContent().stream().map(com.moviemux.movie.domain.Movie::getId).toList());
+        assertThat(actual.content()).extracting(Movie::getId).containsExactlyElementsOf(expected.getContent().stream().map(com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity::getId).toList());
         assertThat(actual.content().getFirst().getGenres()).extracting(MovieGenre::getId).containsExactly(genre.getId());
     }
 

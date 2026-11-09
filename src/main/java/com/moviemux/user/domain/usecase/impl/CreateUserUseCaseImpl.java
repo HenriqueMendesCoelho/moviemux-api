@@ -1,8 +1,8 @@
 package com.moviemux.user.domain.usecase.impl;
 
-import com.moviemux.kronusintegrationtool.domain.SendMailTemplate;
+import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
 import com.moviemux.user.domain.repository.UserMailSender;
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.exception.DuplicatedUserException;
 import com.moviemux.user.domain.exception.InviteNotValidException;
 import com.moviemux.user.domain.model.Invite;

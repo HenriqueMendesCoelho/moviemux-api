@@ -6,8 +6,8 @@ import com.moviemux.discord.adapter.controller.DiscordController;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 
-import com.moviemux.discord.usecase.SendMessageWebhookUseCase;
-import com.moviemux.discord.usecase.UpdateMessageWebhookUseCase;
+import com.moviemux.discord.domain.usecase.SendMessageWebhookUseCase;
+import com.moviemux.discord.domain.usecase.UpdateMessageWebhookUseCase;
 
 @Controller
 public class DiscordControllerImpl implements DiscordController {
@@ -20,12 +20,12 @@ public class DiscordControllerImpl implements DiscordController {
 
 	@Override
 	public void execute(UUID movieId) {
-		sendMessageWebhook.sendMovieMessage(movieId);
+		sendMessageWebhook.execute(movieId);
 	}
 
 	@Override
 	public void update(UUID movieId) {
-		updateMessageWebhook.updateMovieMessage(movieId);
+		updateMessageWebhook.execute(movieId);
 	}
 
 }

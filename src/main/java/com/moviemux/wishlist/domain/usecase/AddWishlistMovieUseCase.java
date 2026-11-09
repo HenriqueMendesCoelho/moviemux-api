@@ -1,6 +1,6 @@
 package com.moviemux.wishlist.domain.usecase;
 
-import com.moviemux.kronusintegrationtool.domain.MovieSummary;
+import com.moviemux.kronusintegrationtool.domain.model.MovieSummary;
 import com.moviemux.kronusintegrationtool.domain.repository.KronusCatalogRepository;
 import com.moviemux.wishlist.domain.command.AddWishlistMovieCommand;
 import com.moviemux.wishlist.domain.exception.WishlistMovieAlreadyExistsException;

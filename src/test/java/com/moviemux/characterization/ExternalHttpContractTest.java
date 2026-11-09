@@ -146,13 +146,13 @@ class ExternalHttpContractTest {
 
   @Test
   void disabledMailDoesNotSendEvenWithMissingPayload() {
-    kit().sendMailTemplate(null);
+    kit().sendEmail(null);
     assertThat(requests).isEmpty();
   }
 
   @Test
   void socketAllMoviesDefaultsBlankEventToUpdate() throws Exception {
-    socket().emitAllMoviesEvent(" ");
+    socket().notifyAllMovies(" ");
     var request = received();
     assertThat(request.method()).isEqualTo("POST");
     assertThat(request.uri()).isEqualTo("/api/v1/movie/all/emit/update");
@@ -163,7 +163,7 @@ class ExternalHttpContractTest {
   @Test
   void socketKeepsExistingEmmitedByUserIdSpellingAndOmitsAbsentContent() throws Exception {
     UUID id = UUID.fromString("00000000-0000-0000-0000-000000000042");
-    socket().emitEventMovie(id, "delete", null, "actor");
+    socket().notifyMovie(id, "delete", null, "actor");
     var request = received();
     assertThat(request.uri()).isEqualTo("/api/v1/movie/" + id + "/note/emit/delete");
     JsonNode body = mapper.readTree(request.body());
@@ -176,15 +176,15 @@ class ExternalHttpContractTest {
 
   @Test
   void socketSkipsInvalidEventOrMovieId() {
-    socket().emitEventMovie(null, "update", null, null);
-    socket().emitEventMovie(UUID.randomUUID(), " ", null, null);
+    socket().notifyMovie(null, "update", null, null);
+    socket().notifyMovie(UUID.randomUUID(), " ", null, null);
     assertThat(requests).isEmpty();
   }
 
   @Test
   void socketRemoteFailureIsObservable() {
     responseStatus = 500;
-    assertThatThrownBy(() -> socket().emitAllMoviesEvent("update"))
+    assertThatThrownBy(() -> socket().notifyAllMovies("update"))
         .isInstanceOf(NotificationFailure.class);
   }
 
@@ -254,8 +254,8 @@ class ExternalHttpContractTest {
   void enabledEmailUsesSnakeCaseTemplateIdAndDoesNotExposeInternalFlags() throws Exception {
     var repository = kit();
     ReflectionTestUtils.setField(repository, "sendMail", true);
-    repository.sendMailTemplate(
-        com.moviemux.kronusintegrationtool.domain.SendMailTemplate.builder()
+    repository.sendEmail(
+        com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate.builder()
             .from("sender@example.test")
             .to("recipient@example.test")
             .templateId("synthetic-template")

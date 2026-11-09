@@ -15,16 +15,16 @@ class MovieMapperTest {
     @Test
     void entityProjectionPreservesScalarsChildrenCompositeKeysAndDetachedState() {
         UUID userId = UUID.randomUUID(), movieId = UUID.randomUUID();
-        var user = com.moviemux.user.domain.User.builder().id(userId).name("Ada").email("ada@example.test").build();
+        var user = com.moviemux.user.adapter.repository.postgres.entity.UserEntity.builder().id(userId).name("Ada").email("ada@example.test").build();
         var created = OffsetDateTime.parse("2020-01-02T03:04:05Z");
-        var entity = com.moviemux.movie.domain.Movie.builder().id(movieId).portugueseTitle("PT").englishTitle("EN")
+        var entity = com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity.builder().id(movieId).portugueseTitle("PT").englishTitle("EN")
                 .originalTitle("Original").director("Director").urlImage("image").description("Description")
                 .portugueseUrlTrailer("pt-trailer").englishUrlTrailer("en-trailer").releaseDate(LocalDate.of(2020,1,1))
                 .runtime(120).tmdbId(42L).imdbId("tt42").showNotes(true).createdAt(created).updatedAt(created.plusDays(1)).user(user)
-                .genres(List.of(com.moviemux.movie.domain.MovieGenre.builder().id(7L).name("Drama").tmdbId(18L).build())).build();
-        var note = com.moviemux.movie.domain.MovieNote.builder().movie(entity).user(user).note(9).createdAt(created).updatedAt(created.plusHours(1)).build();
+                .genres(List.of(com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity.builder().id(7L).name("Drama").tmdbId(18L).build())).build();
+        var note = com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteEntity.builder().movie(entity).user(user).note(9).createdAt(created).updatedAt(created.plusHours(1)).build();
         entity.setNotes(new ArrayList<>(List.of(note)));
-        entity.setMovieDiscord(new com.moviemux.movie.domain.MovieDiscord(movieId,"synthetic-message",entity));
+        entity.setMovieDiscord(new com.moviemux.movie.adapter.repository.postgres.entity.MovieDiscordEntity(movieId,"synthetic-message",entity));
         Movie model = MovieEntityMapper.movie(entity);
         assertThat(model.getId()).isEqualTo(movieId);
         assertThat(model.getEnglishTitle()).isEqualTo("EN");
@@ -36,7 +36,7 @@ class MovieMapperTest {
         assertThat(model.getNotes().getFirst().getUser().getName()).isEqualTo("Ada");
         model.getNotes().getFirst().setNote(null);
         assertThat(note.getNote()).isEqualTo(9);
-        var rebuilt = new com.moviemux.movie.domain.Movie();
+        var rebuilt = new com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity();
         MovieEntityMapper.copyScalars(model,rebuilt);
         assertThat(rebuilt).usingRecursiveComparison().ignoringFields("notes","genres","user","movieDiscord").isEqualTo(entity);
     }

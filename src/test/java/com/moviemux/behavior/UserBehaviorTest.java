@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.moviemux.user.domain.repository.UserMailSender;
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.exception.DuplicatedUserException;
 import com.moviemux.user.domain.exception.InviteNotValidException;
 import com.moviemux.user.domain.exception.UserNotAuthorizedException;

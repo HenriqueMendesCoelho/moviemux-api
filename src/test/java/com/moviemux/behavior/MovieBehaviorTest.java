@@ -8,7 +8,7 @@ import com.moviemux.movie.domain.model.*;
 import com.moviemux.movie.domain.exception.*;
 import com.moviemux.movie.domain.usecase.impl.*;
 
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.exception.UserNotAuthorizedException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

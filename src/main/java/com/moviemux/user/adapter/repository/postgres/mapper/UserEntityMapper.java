@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 /** Translates the legacy ORM representation. No persistent collection leaves this mapper. */
 @Component
 public class UserEntityMapper {
-  public User toDomain(com.moviemux.user.domain.User entity) {
+  public User toDomain(com.moviemux.user.adapter.repository.postgres.entity.UserEntity entity) {
     if (entity == null) return null;
     User result =
         User.builder()
@@ -39,15 +39,15 @@ public class UserEntityMapper {
     return result;
   }
 
-  public com.moviemux.user.domain.User updateEntity(
-      User source, com.moviemux.user.domain.User target) {
+  public com.moviemux.user.adapter.repository.postgres.entity.UserEntity updateEntity(
+      User source, com.moviemux.user.adapter.repository.postgres.entity.UserEntity target) {
     target.setId(source.getId());
     target.setName(source.getName());
     target.setEmail(source.getEmail());
     target.setPassword(source.getPassword());
     target.setRoles(
         source.getRoles().stream()
-            .map(com.moviemux.user.domain.Role::getCode)
+            .map(com.moviemux.user.domain.model.Role::getCode)
             .collect(java.util.stream.Collectors.toSet()));
     target.setCreatedAt(source.getCreatedAt());
     target.setUpdatedAt(source.getUpdatedAt());
@@ -55,7 +55,7 @@ public class UserEntityMapper {
     target.setRedefinePasswordKeyCreatedAt(source.getRedefinePasswordKeyCreatedAt());
     if (source.getPreferences() != null) {
       var p = target.getPreferences();
-      if (p == null) p = new com.moviemux.user.domain.Preferences();
+      if (p == null) p = new com.moviemux.user.adapter.repository.postgres.entity.PreferencesEntity();
       p.setId(source.getPreferences().getId());
       p.setNotify(source.getPreferences().isNotify());
       p.setUser(target);
@@ -63,7 +63,7 @@ public class UserEntityMapper {
     }
     if (source.getStatistics() != null) {
       var s = target.getStatistics();
-      if (s == null) s = new com.moviemux.user.domain.Statistics();
+      if (s == null) s = new com.moviemux.user.adapter.repository.postgres.entity.StatisticsEntity();
       s.setId(source.getStatistics().getId());
       s.setConsecutiveFailedLoginAttempts(
           source.getStatistics().getConsecutiveFailedLoginAttempts());

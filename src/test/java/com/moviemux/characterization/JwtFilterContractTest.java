@@ -5,7 +5,7 @@ import com.moviemux.application.spring.security.JWTAuthenticationFilter;
 import com.moviemux.application.spring.security.JWTAuthorizationFilter;
 import com.moviemux.application.spring.security.UserSS;
 import com.moviemux.application.spring.security.util.JWTUtil;
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.*;
 import org.springframework.mock.web.MockHttpServletRequest;

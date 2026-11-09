@@ -4,12 +4,12 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.moviemux.application.spring.bridge.DiscordMovieBridge;
-import com.moviemux.discord.domain.DiscordWebhookInfo;
+import com.moviemux.discord.domain.model.DiscordWebhookInfo;
 import com.moviemux.discord.domain.model.WebhookDelivery;
 import com.moviemux.discord.domain.repository.WebhookRepository;
-import com.moviemux.discord.usecase.impl.SendMessageWebhookUseCaseImpl;
+import com.moviemux.discord.domain.usecase.impl.SendMessageWebhookUseCaseImpl;
 import com.moviemux.movie.adapter.repository.MovieRepository;
-import com.moviemux.movie.domain.Movie;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -19,8 +19,8 @@ class DiscordMovieBridgeTest {
   private final WebhookRepository webhook = mock(WebhookRepository.class);
   private final UUID id = UUID.fromString("00000000-0000-0000-0000-000000000042");
 
-  private Movie movie(String title) {
-    return Movie.builder().id(id).portugueseTitle(title).build();
+  private MovieEntity movie(String title) {
+    return MovieEntity.builder().id(id).portugueseTitle(title).build();
   }
 
   @Test
@@ -59,7 +59,7 @@ class DiscordMovieBridgeTest {
             new DiscordMovieBridge(
                 new com.moviemux.movie.adapter.repository.postgres.MovieWebhookAccessAdapter(
                     movies)))
-        .sendMovieMessage(id);
+        .execute(id);
     verify(movies, times(1)).findById(id);
     verify(movies).saveAndFlush(same(original));
     verify(movies, never()).saveAndFlush(same(replacement));
@@ -87,7 +87,7 @@ class DiscordMovieBridgeTest {
                         new DiscordMovieBridge(
                             new com.moviemux.movie.adapter.repository.postgres
                                 .MovieWebhookAccessAdapter(movies)))
-                    .sendMovieMessage(id))
+                    .execute(id))
         .isInstanceOf(IllegalStateException.class)
         .hasMessage("synthetic save failure");
     verify(movies, times(1)).findById(id);

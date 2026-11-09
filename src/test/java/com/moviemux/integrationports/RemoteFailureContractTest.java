@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.moviemux.kronusintegrationtool.adapter.repository.rest.impl.KronusIntegrationToolRepositoryImpl;
 import com.moviemux.kronusintegrationtool.domain.exception.IntegrationFailure;
 import com.moviemux.kronusintegrationtool.domain.repository.EmailGateway;
-import com.moviemux.kronusintegrationtool.domain.SendMailTemplate;
+import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
 import com.moviemux.discord.adapter.repository.rest.impl.DiscordRepositoryImpl;
 import com.moviemux.discord.domain.model.*;
 import com.moviemux.movie.adapter.repository.rest.impl.MovieSocketRestRespositoryImpl;

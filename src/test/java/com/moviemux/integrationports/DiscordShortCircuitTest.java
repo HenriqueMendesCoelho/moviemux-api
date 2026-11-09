@@ -7,11 +7,11 @@ import com.moviemux.application.spring.bridge.DiscordMovieBridge;
 import com.moviemux.discord.adapter.repository.rest.impl.DiscordRepositoryImpl;
 import com.moviemux.discord.domain.model.WebhookDelivery;
 import com.moviemux.discord.domain.repository.WebhookMovieSource;
-import com.moviemux.discord.usecase.impl.SendMessageWebhookUseCaseImpl;
-import com.moviemux.discord.usecase.impl.UpdateMessageWebhookUseCaseImpl;
+import com.moviemux.discord.domain.usecase.impl.SendMessageWebhookUseCaseImpl;
+import com.moviemux.discord.domain.usecase.impl.UpdateMessageWebhookUseCaseImpl;
 import com.moviemux.movie.adapter.repository.MovieRepository;
-import com.moviemux.movie.domain.Movie;
-import com.moviemux.movie.domain.MovieDiscord;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieDiscordEntity;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -22,18 +22,18 @@ class DiscordShortCircuitTest {
   private final MovieRepository movies = mock(MovieRepository.class);
   private final DiscordRepositoryImpl webhook = new DiscordRepositoryImpl();
 
-  private Movie unreadableRelationships() {
-    var movie = mock(Movie.class);
+  private MovieEntity unreadableRelationships() {
+    var movie = mock(MovieEntity.class);
     when(movie.getNotes()).thenThrow(new IllegalStateException("ratings must stay unloaded"));
     when(movie.getUser()).thenThrow(new IllegalStateException("owner must stay unloaded"));
     when(movies.findById(id)).thenReturn(Optional.of(movie));
     return movie;
   }
 
-  private void assertRelationshipsUnread(Movie movie) {
+  private void assertRelationshipsUnread(MovieEntity movie) {
     verify(movie, never()).getNotes();
     verify(movie, never()).getUser();
-    verify(movies, never()).saveAndFlush(any(Movie.class));
+    verify(movies, never()).saveAndFlush(any(MovieEntity.class));
     verify(movies, times(1)).findById(id);
   }
 
@@ -45,7 +45,7 @@ class DiscordShortCircuitTest {
             new DiscordMovieBridge(
                 new com.moviemux.movie.adapter.repository.postgres.MovieWebhookAccessAdapter(
                     movies)))
-        .sendMovieMessage(id);
+        .execute(id);
     assertRelationshipsUnread(movie);
     verify(movie, never()).isShowNotes();
     verify(movie, never()).getMovieDiscord();
@@ -62,7 +62,7 @@ class DiscordShortCircuitTest {
             new DiscordMovieBridge(
                 new com.moviemux.movie.adapter.repository.postgres.MovieWebhookAccessAdapter(
                     movies)))
-        .updateMovieMessage(id);
+        .execute(id);
     assertRelationshipsUnread(movie);
     verify(movie, never()).getMovieDiscord();
   }
@@ -76,7 +76,7 @@ class DiscordShortCircuitTest {
             new DiscordMovieBridge(
                 new com.moviemux.movie.adapter.repository.postgres.MovieWebhookAccessAdapter(
                     movies)))
-        .updateMovieMessage(id);
+        .execute(id);
     assertRelationshipsUnread(movie);
     verify(movie, never()).getMovieDiscord();
   }
@@ -92,7 +92,7 @@ class DiscordShortCircuitTest {
             new DiscordMovieBridge(
                 new com.moviemux.movie.adapter.repository.postgres.MovieWebhookAccessAdapter(
                     movies)))
-        .updateMovieMessage(id);
+        .execute(id);
     assertRelationshipsUnread(movie);
     verify(movie, never()).getPortugueseTitle();
   }
@@ -101,21 +101,21 @@ class DiscordShortCircuitTest {
   void blankMessageReferenceSkipsSnapshotAndItsUnloadedRelationships() {
     var movie = unreadableRelationships();
     when(movie.isShowNotes()).thenReturn(true);
-    when(movie.getMovieDiscord()).thenReturn(new MovieDiscord(null, " ", movie));
+    when(movie.getMovieDiscord()).thenReturn(new MovieDiscordEntity(null, " ", movie));
     ReflectionTestUtils.setField(webhook, "update", true);
     new UpdateMessageWebhookUseCaseImpl(
             webhook,
             new DiscordMovieBridge(
                 new com.moviemux.movie.adapter.repository.postgres.MovieWebhookAccessAdapter(
                     movies)))
-        .updateMovieMessage(id);
+        .execute(id);
     assertRelationshipsUnread(movie);
     verify(movie, never()).getPortugueseTitle();
   }
 
   @Test
   void enabledSendDoesNotDereferenceExistingMessageReference() {
-    var movie = spy(Movie.builder().id(id).portugueseTitle("Movie").build());
+    var movie = spy(MovieEntity.builder().id(id).portugueseTitle("Movie").build());
     doThrow(new IllegalStateException("reference must remain unloaded on create"))
         .when(movie)
         .getMovieDiscord();
@@ -142,7 +142,7 @@ class DiscordShortCircuitTest {
             new DiscordMovieBridge(
                 new com.moviemux.movie.adapter.repository.postgres.MovieWebhookAccessAdapter(
                     movies)))
-        .sendMovieMessage(id);
+        .execute(id);
     verify(movie, never()).getMovieDiscord();
     verify(movies).saveAndFlush(same(movie));
   }

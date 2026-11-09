@@ -4,8 +4,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import com.moviemux.kronusintegrationtool.domain.WatchProviders;
-import com.moviemux.kronusintegrationtool.domain.WatchProviders.Country.CountryBuilder;
+import com.moviemux.kronusintegrationtool.domain.model.WatchProviders;
+import com.moviemux.kronusintegrationtool.domain.model.WatchProviders.Country.CountryBuilder;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

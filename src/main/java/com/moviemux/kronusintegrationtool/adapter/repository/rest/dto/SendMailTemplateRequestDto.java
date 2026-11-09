@@ -4,7 +4,7 @@ import java.util.LinkedHashMap;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import com.moviemux.kronusintegrationtool.domain.SendMailTemplate;
+import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

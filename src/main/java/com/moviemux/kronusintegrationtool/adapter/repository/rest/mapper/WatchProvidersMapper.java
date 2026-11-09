@@ -1,7 +1,7 @@
 package com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper;
 
 import com.moviemux.kronusintegrationtool.adapter.repository.rest.dto.WatchProvidersResponseDto;
-import com.moviemux.kronusintegrationtool.domain.WatchProviders;
+import com.moviemux.kronusintegrationtool.domain.model.WatchProviders;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;

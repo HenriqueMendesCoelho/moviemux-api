@@ -1,6 +1,6 @@
 package com.moviemux.discord.adapter.repository.rest.dto;
 
-import com.moviemux.discord.domain.DiscordWebhookInfo;
+import com.moviemux.discord.domain.model.DiscordWebhookInfo;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

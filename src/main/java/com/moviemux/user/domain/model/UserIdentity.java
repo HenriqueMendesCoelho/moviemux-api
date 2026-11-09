@@ -1,6 +1,6 @@
 package com.moviemux.user.domain.model;
 
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 import java.util.Set;
 import java.util.UUID;
 

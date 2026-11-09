@@ -2,10 +2,10 @@ package com.moviemux.movie.adapter.repository.jpa.specification;
 
 import java.util.List;
 
-import com.moviemux.movie.domain.MovieGenre;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity;
 
 public interface MovieGenreSpecification {
 
-	List<MovieGenre> findAllGenresHaveMovieAssociated();
+	List<MovieGenreEntity> findAllGenresHaveMovieAssociated();
 
 }

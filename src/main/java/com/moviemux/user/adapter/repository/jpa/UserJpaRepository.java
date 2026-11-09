@@ -1,18 +1,18 @@
 package com.moviemux.user.adapter.repository.jpa;
 
-import com.moviemux.user.domain.User;
+import com.moviemux.user.adapter.repository.postgres.entity.UserEntity;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.transaction.annotation.Transactional;
 
-public interface UserJpaRepository extends JpaRepository<User, UUID> {
+public interface UserJpaRepository extends JpaRepository<UserEntity, UUID> {
 
   @Transactional(readOnly = true)
   @EntityGraph(attributePaths = {"roles", "statistics"})
-  User findByEmail(String email);
+  UserEntity findByEmail(String email);
 
   @Transactional(readOnly = true)
   @EntityGraph(attributePaths = {"roles", "statistics"})
-  User findByRedefinePasswordKey(String redefinePasswordKey);
+  UserEntity findByRedefinePasswordKey(String redefinePasswordKey);
 }

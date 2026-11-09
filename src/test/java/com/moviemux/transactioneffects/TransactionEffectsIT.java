@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.moviemux.application.spring.effects.AfterCommitEffects;
-import com.moviemux.kronusintegrationtool.domain.SendMailTemplate;
+import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
 import com.moviemux.kronusintegrationtool.domain.repository.EmailGateway;
 import com.moviemux.movie.adapter.repository.rest.impl.MovieSocketRestRespositoryImpl;
 import com.moviemux.movie.domain.command.CreateMovieCommand;

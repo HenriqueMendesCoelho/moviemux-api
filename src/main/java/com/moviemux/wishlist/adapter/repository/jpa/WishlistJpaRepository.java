@@ -1,13 +1,13 @@
 package com.moviemux.wishlist.adapter.repository.jpa;
 
-import com.moviemux.wishlist.domain.Wishlist;
+import com.moviemux.wishlist.adapter.repository.postgres.entity.WishlistEntity;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.transaction.annotation.Transactional;
 
-public interface WishlistJpaRepository extends JpaRepository<Wishlist, UUID> {
+public interface WishlistJpaRepository extends JpaRepository<WishlistEntity, UUID> {
 
   @Transactional(readOnly = true)
-  List<Wishlist> findByUserIdOrderByCreatedAtDesc(UUID userId);
+  List<WishlistEntity> findByUserIdOrderByCreatedAtDesc(UUID userId);
 }

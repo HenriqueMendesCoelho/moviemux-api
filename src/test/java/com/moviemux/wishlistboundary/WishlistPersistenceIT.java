@@ -48,7 +48,7 @@ class WishlistPersistenceIT {
   @BeforeEach
   void createSyntheticOwner() {
     var user =
-        com.moviemux.user.domain.User.builder()
+        com.moviemux.user.adapter.repository.postgres.entity.UserEntity.builder()
             .name("Synthetic owner")
             .email("wishlist-" + UUID.randomUUID() + "@example.invalid")
             .password("synthetic-hash")

@@ -102,9 +102,9 @@ class WishlistBoundaryTest {
 
   @Test
   void mapperRetainsNullMembershipCollectionsAndNullAssociations() {
-    assertThat(mapper.toDomain((com.moviemux.wishlist.domain.Wishlist) null)).isNull();
-    assertThat(mapper.toDomain((com.moviemux.wishlist.domain.MovieWishlist) null)).isNull();
-    assertThat(mapper.toDomain((com.moviemux.wishlist.domain.MoviesWishlists) null)).isNull();
+    assertThat(mapper.toDomain((com.moviemux.wishlist.adapter.repository.postgres.entity.WishlistEntity) null)).isNull();
+    assertThat(mapper.toDomain((com.moviemux.wishlist.adapter.repository.postgres.entity.MovieWishlistEntity) null)).isNull();
+    assertThat(mapper.toDomain((com.moviemux.wishlist.adapter.repository.postgres.entity.MoviesWishlistsEntity) null)).isNull();
     assertThat(
             mapper
                 .toDomain(mapper.toEntity(Wishlist.builder().id(id).build()))

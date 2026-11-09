@@ -5,7 +5,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import com.moviemux.kronusintegrationtool.domain.MovieSummary;
+import com.moviemux.kronusintegrationtool.domain.model.MovieSummary;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

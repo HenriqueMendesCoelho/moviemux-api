@@ -1,9 +1,10 @@
 package com.moviemux.kronusintegrationtool.adapter.repository.rest.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository;
+import com.moviemux.kronusintegrationtool.domain.repository.KronusCatalogRepository;
+import com.moviemux.kronusintegrationtool.domain.repository.EmailGateway;
 import com.moviemux.kronusintegrationtool.adapter.repository.rest.dto.*;
-import com.moviemux.kronusintegrationtool.domain.*;
+import com.moviemux.kronusintegrationtool.domain.model.*;
 import com.moviemux.kronusintegrationtool.domain.model.CatalogGenre;
 import com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.IntegrationFailureMapper;
 import com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.WatchProvidersMapper;
@@ -22,7 +23,7 @@ import java.util.stream.Collectors;
 
 @Repository
 @Log4j2
-public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToolRepository {
+public class KronusIntegrationToolRepositoryImpl implements KronusCatalogRepository, EmailGateway {
 
 	@Value("${send.mail}")
 	private boolean sendMail;
@@ -70,11 +71,6 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 			throw IntegrationFailureMapper.map(e);
 		}
 	}
-
-	@Override
-	public void sendMailTemplate(SendMailTemplate mail) {
-        sendEmail(mail);
-    }
 
     @Override
     public Delivery sendEmail(SendMailTemplate mail) {

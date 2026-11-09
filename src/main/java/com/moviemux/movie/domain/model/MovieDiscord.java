@@ -1,14 +1,10 @@
 package com.moviemux.movie.domain.model;
 
 import java.util.UUID;
-
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-
 
 @Builder
 @Data
@@ -16,17 +12,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class MovieDiscord {
 
+  private UUID id;
 
+  private String messageId;
 
-	private UUID id;
-
-
-	private String messageId;
-
-
-
-
-
-	private Movie movie;
-
+  private Movie movie;
 }

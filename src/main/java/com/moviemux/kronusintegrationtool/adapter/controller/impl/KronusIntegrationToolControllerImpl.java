@@ -2,14 +2,21 @@ package com.moviemux.kronusintegrationtool.adapter.controller.impl;
 
 import com.moviemux.kronusintegrationtool.adapter.controller.KronusIntegrationToolController;
 import com.moviemux.kronusintegrationtool.adapter.controller.dto.*;
-import com.moviemux.kronusintegrationtool.domain.Credit;
-import com.moviemux.kronusintegrationtool.domain.MovieSearch;
-import com.moviemux.kronusintegrationtool.domain.MovieSummary;
-import com.moviemux.kronusintegrationtool.domain.WatchProviders;
-import com.moviemux.kronusintegrationtool.usecase.MovieSumaryUseCase;
-import com.moviemux.kronusintegrationtool.usecase.SearchCreditUseCase;
-import com.moviemux.kronusintegrationtool.usecase.SearchMovieTmdbUseCase;
-import com.moviemux.kronusintegrationtool.usecase.SearchWatchProviedersUseCase;
+import com.moviemux.kronusintegrationtool.domain.model.Credit;
+import com.moviemux.kronusintegrationtool.domain.model.MovieSearch;
+import com.moviemux.kronusintegrationtool.domain.model.MovieSummary;
+import com.moviemux.kronusintegrationtool.domain.model.WatchProviders;
+import com.moviemux.kronusintegrationtool.domain.usecase.MovieSumaryUseCase;
+import com.moviemux.kronusintegrationtool.domain.usecase.SearchCreditUseCase;
+import com.moviemux.kronusintegrationtool.domain.usecase.SearchCatalogMoviesUseCase;
+import com.moviemux.kronusintegrationtool.domain.usecase.PopularMoviesUseCase;
+import com.moviemux.kronusintegrationtool.domain.usecase.NowPlayingMoviesUseCase;
+import com.moviemux.kronusintegrationtool.domain.usecase.UpcomingMoviesUseCase;
+import com.moviemux.kronusintegrationtool.domain.usecase.TopRatedMoviesUseCase;
+import com.moviemux.kronusintegrationtool.domain.usecase.RecommendedMoviesUseCase;
+import com.moviemux.kronusintegrationtool.domain.usecase.SimilarMoviesUseCase;
+import com.moviemux.kronusintegrationtool.domain.usecase.DiscoverMoviesUseCase;
+import com.moviemux.kronusintegrationtool.domain.usecase.SearchWatchProviedersUseCase;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 
@@ -20,7 +27,21 @@ public class KronusIntegrationToolControllerImpl implements KronusIntegrationToo
 	private MovieSumaryUseCase movieSumaryUseCase;
 
 	@Autowired
-	private SearchMovieTmdbUseCase searchMovieTmdbUseCase;
+	private SearchCatalogMoviesUseCase searchByNameUseCase;
+	@Autowired
+	private PopularMoviesUseCase moviesPopularUseCase;
+	@Autowired
+	private NowPlayingMoviesUseCase moviesNowPlayingUseCase;
+	@Autowired
+	private UpcomingMoviesUseCase moviesUpcomingUseCase;
+	@Autowired
+	private TopRatedMoviesUseCase moviesTopRatedUseCase;
+	@Autowired
+	private RecommendedMoviesUseCase moviesRecommendationsUseCase;
+	@Autowired
+	private SimilarMoviesUseCase moviesSimilarUseCase;
+	@Autowired
+	private DiscoverMoviesUseCase discoverMoviesUseCase;
 
 	@Autowired
 	private SearchWatchProviedersUseCase searchWatchProviedersUseCase;
@@ -42,63 +63,63 @@ public class KronusIntegrationToolControllerImpl implements KronusIntegrationToo
 
 	@Override
 	public MovieSearchResponseDto movieSearchByName(String name, Integer page, String language) {
-		MovieSearch response = searchMovieTmdbUseCase.searchByName(name, page, language);
+		MovieSearch response = searchByNameUseCase.execute(name, page, language);
 		return new MovieSearchResponseDto(response);
 	}
 
 	@Override
 	public MovieSearchResponseDto moviesPopular(Integer page) {
-		MovieSearch response = searchMovieTmdbUseCase.moviesPopular(page);
+		MovieSearch response = moviesPopularUseCase.execute(page);
 		return new MovieSearchResponseDto(response);
 	}
 
 	@Override
 	public MovieSearchResponseDto moviesNowPlaying(Integer page) {
-		MovieSearch response = searchMovieTmdbUseCase.moviesNowPlaying(page);
+		MovieSearch response = moviesNowPlayingUseCase.execute(page);
 		return new MovieSearchResponseDto(response);
 	}
 
 	@Override
 	public MovieSearchResponseDto moviesUpcoming(Integer page) {
-		MovieSearch response = searchMovieTmdbUseCase.moviesUpcoming(page);
+		MovieSearch response = moviesUpcomingUseCase.execute(page);
 		return new MovieSearchResponseDto(response);
 	}
 
 	@Override
 	public MovieSearchResponseDto moviesTopRated(Integer page) {
-		MovieSearch response = searchMovieTmdbUseCase.moviesTopRated(page);
+		MovieSearch response = moviesTopRatedUseCase.execute(page);
 		return new MovieSearchResponseDto(response);
 	}
 
 	@Override
 	public MovieSearchResponseDto moviesRecommendations(Long movieTmdbId, Integer page) {
-		MovieSearch response = searchMovieTmdbUseCase.moviesRecommendations(movieTmdbId, page);
+		MovieSearch response = moviesRecommendationsUseCase.execute(movieTmdbId, page);
 		return new MovieSearchResponseDto(response);
 	}
 
 	@Override
 	public MovieSearchResponseDto moviesSimilar(Long movieTmdbId, Integer page) {
-		MovieSearch response = searchMovieTmdbUseCase.moviesSimilar(movieTmdbId, page);
+		MovieSearch response = moviesSimilarUseCase.execute(movieTmdbId, page);
 		return new MovieSearchResponseDto(response);
 	}
 
 	@Override
 	public MovieSearchResponseDto discoverMovies(String sortByParam, Integer page, Integer primaryReleaseYear,
 			String withGenres, String withoutGenres) {
-		MovieSearch response = searchMovieTmdbUseCase.discoverMovies(sortByParam, page, primaryReleaseYear, withGenres,
+		MovieSearch response = discoverMoviesUseCase.execute(sortByParam, page, primaryReleaseYear, withGenres,
 				withoutGenres);
 		return new MovieSearchResponseDto(response);
 	}
 
 	@Override
 	public WatchProvidersResponseDto searchWatchProvidersByMovieId(Long movieId) {
-		WatchProviders response = searchWatchProviedersUseCase.searchByMovieId(movieId);
+		WatchProviders response = searchWatchProviedersUseCase.execute(movieId);
 		return new WatchProvidersResponseDto(response);
 	}
 
 	@Override
 	public CreditResponseDto searchMovieCredits(Long movieId) {
-		Credit response = searchCreditUseCase.getMovieCredits(movieId);
+		Credit response = searchCreditUseCase.execute(movieId);
 		return new CreditResponseDto(response);
 	}
 

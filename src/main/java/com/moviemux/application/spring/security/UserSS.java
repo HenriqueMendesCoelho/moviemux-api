@@ -9,7 +9,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import com.moviemux.user.domain.Role;
+import com.moviemux.user.domain.model.Role;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;

@@ -1,14 +1,14 @@
 package com.moviemux.movie.adapter.repository.postgres;
 
-import com.moviemux.movie.domain.MovieNote;
-import com.moviemux.movie.domain.MovieNoteKey;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteEntity;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteKeyEntity;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
 
-public interface MovieActivityJpaReader extends Repository<MovieNote, MovieNoteKey> {
+public interface MovieActivityJpaReader extends Repository<MovieNoteEntity, MovieNoteKeyEntity> {
   interface ReviewRow {
     Integer getNote();
 

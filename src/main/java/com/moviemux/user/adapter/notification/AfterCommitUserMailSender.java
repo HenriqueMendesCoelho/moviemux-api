@@ -1,7 +1,7 @@
 package com.moviemux.user.adapter.notification;
 
 import com.moviemux.application.spring.effects.AfterCommitEffects;
-import com.moviemux.kronusintegrationtool.domain.SendMailTemplate;
+import com.moviemux.kronusintegrationtool.domain.model.SendMailTemplate;
 import com.moviemux.kronusintegrationtool.domain.repository.EmailGateway;
 import com.moviemux.user.domain.repository.UserMailSender;
 import java.util.LinkedHashMap;
