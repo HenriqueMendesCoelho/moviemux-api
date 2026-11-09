@@ -43,7 +43,11 @@ public class WishlistPostgresRepository implements WishlistRepository {
     try {
       return mapper.toDomain(repository.saveAndFlush(mapper.toEntity(wishlist)));
     } catch (DataIntegrityViolationException failure) {
-      throw new WishlistPersistenceConflict(failure);
+      if (WishlistConstraintViolations.isUniqueViolation(
+          failure, "user_wishlist_user_id_name_key")) {
+        throw new WishlistPersistenceConflict(failure);
+      }
+      throw failure;
     }
   }
 

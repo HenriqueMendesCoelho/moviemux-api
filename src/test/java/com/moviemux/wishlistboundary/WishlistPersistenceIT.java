@@ -136,6 +136,46 @@ class WishlistPersistenceIT {
   }
 
   @Test
+  void missingOwnerForeignKeyIsNotReportedAsDuplicateWishlistName() {
+    Wishlist original = create("Existing list");
+    Wishlist invalid =
+        Wishlist.builder()
+            .name("Invalid owner")
+            .user(new WishlistOwner(UUID.randomUUID(), "Missing synthetic owner"))
+            .shareable(false)
+            .moviesWishlists(List.of())
+            .build();
+    assertThatThrownBy(() -> wishlists.save(invalid))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+        .isNotInstanceOf(WishlistPersistenceConflict.class);
+    assertThat(wishlists.findByUserIdOrderByCreatedAtDesc(owner))
+        .extracting(Wishlist::getId)
+        .containsExactly(original.getId());
+  }
+
+  @Test
+  void membershipWithMissingMovieFailsBeforeConstraintTranslation() {
+    Wishlist wishlist = create("Foreign key membership");
+    long missingId = Math.abs(UUID.randomUUID().getMostSignificantBits() / 100);
+    MoviesWishlists invalid =
+        membership(wishlist, MovieWishlist.builder().tmdbId(missingId).build(), 1);
+    assertThatThrownBy(() -> memberships.saveAll(List.of(invalid)))
+        .isInstanceOf(org.springframework.orm.jpa.JpaObjectRetrievalFailureException.class)
+        .isNotInstanceOf(WishlistPersistenceConflict.class);
+    assertThat(wishlists.findById(wishlist.getId()).orElseThrow().getMoviesWishlists()).isEmpty();
+  }
+
+  @Test
+  void movieMissingRequiredImageIsTechnicalFailureNotDuplicate() {
+    long id = Math.abs(UUID.randomUUID().getMostSignificantBits() / 100);
+    assertThatThrownBy(
+            () -> movies.save(MovieWishlist.builder().tmdbId(id).title("Missing image").build()))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+        .isNotInstanceOf(WishlistPersistenceConflict.class);
+    assertThat(movies.findById(id)).isEmpty();
+  }
+
+  @Test
   void membershipRemovalRetainsCatalogMovieAndUpdatesReferenceProjection() {
     Wishlist wishlist = create("Membership");
     long tmdbId = Math.abs(UUID.randomUUID().getMostSignificantBits() / 100);

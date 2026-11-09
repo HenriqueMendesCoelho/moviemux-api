@@ -40,7 +40,10 @@ public class MovieWishlistPostgresRepository implements MovieWishlistRepository 
     try {
       return mapper.toDomain(repository.saveAndFlush(mapper.toEntity(movie)));
     } catch (DataIntegrityViolationException failure) {
-      throw new WishlistPersistenceConflict(failure);
+      if (WishlistConstraintViolations.isUniqueViolation(failure, "movie_wishlist_pkey")) {
+        throw new WishlistPersistenceConflict(failure);
+      }
+      throw failure;
     }
   }
 

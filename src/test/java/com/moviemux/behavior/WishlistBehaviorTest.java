@@ -95,11 +95,11 @@ class WishlistBehaviorTest {
   }
 
   @Test
-  void legacyCreateMapsAnyIntegrityFailureToDuplicateName() {
+  void createMapsRecognizedPersistenceConflictToDuplicateName() {
     when(repository.save(any()))
         .thenThrow(
             new WishlistPersistenceConflict(
-                new IllegalStateException("synthetic unrelated constraint")));
+                new IllegalStateException("synthetic recognized uniqueness conflict")));
     assertThatThrownBy(() -> create.execute(new CreateWishlistCommand("New", owner)))
         .isInstanceOf(WishlistDuplicatedException.class);
   }

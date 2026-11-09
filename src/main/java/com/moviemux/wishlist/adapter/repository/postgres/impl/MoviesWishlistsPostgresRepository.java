@@ -31,7 +31,11 @@ public class MoviesWishlistsPostgresRepository implements MoviesWishlistsReposit
           .map(mapper::toDomain)
           .toList();
     } catch (DataIntegrityViolationException failure) {
-      throw new WishlistPersistenceConflict(failure);
+      if (WishlistConstraintViolations.isUniqueViolation(
+          failure, "movie_wishlist_user_wishlist_pkey")) {
+        throw new WishlistPersistenceConflict(failure);
+      }
+      throw failure;
     }
   }
 
