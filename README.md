@@ -107,3 +107,18 @@ interleavings with bounded synchronization rather than timing assumptions. Keep
 unit, integration, coverage and selective mutation results distinct when reviewing
 changes; a green packaging build or a global percentage cannot replace a missing
 security or rollback scenario.
+
+### Wishlist mutation safety
+
+Wishlist writes require the owner's UUID value; making a list shareable does not
+allow other users to edit it. An update must address the same list in its URL and
+body, and nested membership identities are derived from that authorized list.
+Updates still replace the requested collection and preserve its submitted order.
+
+Creation serializes the ten-list quota per owner with a transaction-scoped
+PostgreSQL advisory lock. Add/update operations lock the wishlist row before
+reading and validating the resulting maximum of 100 items. These locks require
+an existing transaction and remain held until commit or rollback. They protect
+concurrent operations through this application, not direct SQL writes or older
+application versions that do not follow the same locking protocol. No schema
+migration or change to historical V1 is required for this correction.
