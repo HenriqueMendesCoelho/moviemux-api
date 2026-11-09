@@ -22,13 +22,7 @@ public class WatchProvidersResponseDto {
 	private Map<String, CountryResponseDto> results;
 
 	public WatchProviders toDomain() {
-
-		return WatchProviders.builder()
-				.id(id)
-				.results(results.entrySet()
-						.stream()
-						.collect(Collectors.toMap(Map.Entry::getKey, r -> r.getValue().toDomain())))
-				.build();
+        return com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.WatchProvidersMapper.toDomain(this);
 	}
 
 	@Data
@@ -42,24 +36,7 @@ public class WatchProvidersResponseDto {
 		private List<ProviderResponseDto> buy;
 
 		public WatchProviders.Country toDomain() {
-			CountryBuilder result = WatchProviders.Country.builder().link(link);
-			if (flatrate != null) {
-				result.flatrate(flatrate.stream()
-						.map(WatchProvidersResponseDto.ProviderResponseDto::toDomain)
-						.collect(Collectors.toList()));
-			}
-			if (rent != null) {
-				result.rent(rent.stream()
-						.map(WatchProvidersResponseDto.ProviderResponseDto::toDomain)
-						.collect(Collectors.toList()));
-			}
-			if (buy != null) {
-				result.buy(buy.stream()
-						.map(WatchProvidersResponseDto.ProviderResponseDto::toDomain)
-						.collect(Collectors.toList()));
-			}
-			return result.build();
-
+            return com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.WatchProvidersMapper.country(this);
 		}
 	}
 
@@ -74,12 +51,7 @@ public class WatchProvidersResponseDto {
 		private int displayPriority;
 
 		public WatchProviders.Provider toDomain() {
-			return WatchProviders.Provider.builder()
-					.logoPath(logoPath)
-					.providerId(providerId)
-					.providerName(providerName)
-					.displayPriority(displayPriority)
-					.build();
+            return com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.WatchProvidersMapper.provider(this);
 		}
 	}
 

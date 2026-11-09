@@ -4,13 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository;
 import com.moviemux.kronusintegrationtool.adapter.repository.rest.dto.*;
 import com.moviemux.kronusintegrationtool.domain.*;
-import com.moviemux.movie.domain.MovieGenre;
+import com.moviemux.kronusintegrationtool.domain.model.CatalogGenre;
+import com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.IntegrationFailureMapper;
+import com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.WatchProvidersMapper;
+import com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.CatalogResponseMapper;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
-import org.springframework.security.web.firewall.RequestRejectedException;
 import org.springframework.stereotype.Repository;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -41,11 +43,11 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.bodyToMono(MovieSummaryResponseDto.class)
 					.block();
 
-			assert response != null;
-			return response.toDomain();
+			java.util.Objects.requireNonNull(response, "Missing integration response");
+			return CatalogResponseMapper.summary(response);
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 
 	}
@@ -60,32 +62,38 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.retrieve()
 					.bodyToMono(MovieSearchResponseDto.class)
 					.block();
-			assert response != null;
+			java.util.Objects.requireNonNull(response, "Missing integration response");
 
-			return response.toDomain();
+			return CatalogResponseMapper.search(response);
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 	}
 
 	@Override
 	public void sendMailTemplate(SendMailTemplate mail) {
+        sendEmail(mail);
+    }
+
+    @Override
+    public Delivery sendEmail(SendMailTemplate mail) {
 		try {
 			if (!sendMail) {
-				return;
+				return Delivery.DISABLED;
 			}
 
-			SendMailTemplateRequestDto request = new SendMailTemplateRequestDto(mail);
+			SendMailTemplateRequestDto request = CatalogResponseMapper.mail(mail);
 			webClientKit.post()
 					.uri("/api/v1/sendgrid/template")
 					.bodyValue(mapper.writeValueAsString(request))
 					.retrieve()
 					.bodyToMono(Void.class)
 					.block();
+            return Delivery.SENT;
 		} catch (Exception e) {
 			log.error("Error to send mail:", e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 
 	}
@@ -99,12 +107,12 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.retrieve()
 					.bodyToMono(MovieSearchResponseDto.class)
 					.block();
-			assert response != null;
+			java.util.Objects.requireNonNull(response, "Missing integration response");
 
-			return response.toDomain();
+			return CatalogResponseMapper.search(response);
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 	}
 
@@ -118,12 +126,12 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.retrieve()
 					.bodyToMono(MovieSearchResponseDto.class)
 					.block();
-			assert response != null;
+			java.util.Objects.requireNonNull(response, "Missing integration response");
 
-			return response.toDomain();
+			return CatalogResponseMapper.search(response);
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 	}
 
@@ -136,12 +144,12 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.retrieve()
 					.bodyToMono(MovieSearchResponseDto.class)
 					.block();
-			assert response != null;
+			java.util.Objects.requireNonNull(response, "Missing integration response");
 
-			return response.toDomain();
+			return CatalogResponseMapper.search(response);
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 	}
 
@@ -154,12 +162,12 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.retrieve()
 					.bodyToMono(MovieSearchResponseDto.class)
 					.block();
-			assert response != null;
+			java.util.Objects.requireNonNull(response, "Missing integration response");
 
-			return response.toDomain();
+			return CatalogResponseMapper.search(response);
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 	}
 
@@ -173,12 +181,12 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.retrieve()
 					.bodyToMono(MovieSearchResponseDto.class)
 					.block();
-			assert response != null;
+			java.util.Objects.requireNonNull(response, "Missing integration response");
 
-			return response.toDomain();
+			return CatalogResponseMapper.search(response);
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 	}
 
@@ -191,12 +199,12 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.retrieve()
 					.bodyToMono(MovieSearchResponseDto.class)
 					.block();
-			assert response != null;
+			java.util.Objects.requireNonNull(response, "Missing integration response");
 
-			return response.toDomain();
+			return CatalogResponseMapper.search(response);
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 	}
 
@@ -229,17 +237,17 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.retrieve()
 					.bodyToMono(MovieSearchResponseDto.class)
 					.block();
-			assert response != null;
+			java.util.Objects.requireNonNull(response, "Missing integration response");
 
-			return response.toDomain();
+			return CatalogResponseMapper.search(response);
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 	}
 
 	@Override
-	public List<MovieGenre> listGenres() {
+	public List<CatalogGenre> listGenres() {
 		final String uri = "/api/v1/tmdb/genre/movie/list?language=%s".formatted("pt-Br");
 		try {
 			List<MovieGenreResponseDto> response = webClientKit.get()
@@ -250,12 +258,12 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.flatMapMany(r -> Flux.fromIterable(r.getGenres()))
 					.collectList()
 					.block();
-			assert response != null;
+			java.util.Objects.requireNonNull(response, "Missing integration response");
 
-			return response.stream().map(MovieGenreResponseDto::toDomain).collect(Collectors.toList());
+			return response.stream().map(CatalogResponseMapper::genre).collect(Collectors.toList());
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 	}
 
@@ -268,12 +276,12 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.retrieve()
 					.bodyToMono(WatchProvidersResponseDto.class)
 					.block();
-			assert response != null;
+			java.util.Objects.requireNonNull(response, "Missing integration response");
 
-			return response.toDomain();
+			return WatchProvidersMapper.toDomain(response);
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 	}
 
@@ -286,12 +294,12 @@ public class KronusIntegrationToolRepositoryImpl implements KronusIntegrationToo
 					.retrieve()
 					.bodyToMono(CreditResponseDto.class)
 					.block();
-			assert response != null;
+			java.util.Objects.requireNonNull(response, "Missing integration response");
 
-			return response.toDomain();
+			return CatalogResponseMapper.credits(response);
 		} catch (Exception e) {
 			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw new RequestRejectedException(e.getMessage());
+			throw IntegrationFailureMapper.map(e);
 		}
 	}
 

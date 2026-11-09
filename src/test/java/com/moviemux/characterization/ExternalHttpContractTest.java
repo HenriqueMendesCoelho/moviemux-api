@@ -10,7 +10,8 @@ import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
-import org.springframework.security.web.firewall.RequestRejectedException;
+import com.moviemux.kronusintegrationtool.domain.exception.IntegrationFailure;
+import com.moviemux.movie.domain.exception.NotificationFailure;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -87,11 +88,11 @@ class ExternalHttpContractTest {
     @ParameterizedTest @ValueSource(ints = {404, 500, 503})
     void kitHttpErrorsAreNotSuccessfulEmptyResults(int status) {
         responseStatus = status;
-        assertThatThrownBy(() -> kit().getWatchProviders(42L)).isInstanceOf(RequestRejectedException.class);
+        assertThatThrownBy(() -> kit().getWatchProviders(42L)).isInstanceOf(IntegrationFailure.class);
     }
     @Test void malformedProviderBodyFailsRatherThanReturningEmptyCatalog() {
         responseBody = "not-json";
-        assertThatThrownBy(() -> kit().getWatchProviders(42L)).isInstanceOf(RequestRejectedException.class);
+        assertThatThrownBy(() -> kit().getWatchProviders(42L)).isInstanceOf(IntegrationFailure.class);
     }
     @Test void searchPreservesQueryAndPagingParameters() throws Exception {
         responseBody = "{\"page\":2,\"results\":[],\"totalPages\":3,\"totalResults\":5}";
@@ -136,7 +137,7 @@ class ExternalHttpContractTest {
     }
     @Test void socketRemoteFailureIsObservable() {
         responseStatus = 500;
-        assertThatThrownBy(() -> socket().emitAllMoviesEvent("update")).isInstanceOf(RequestRejectedException.class);
+        assertThatThrownBy(() -> socket().emitAllMoviesEvent("update")).isInstanceOf(NotificationFailure.class);
     }
     @Test void disabledDiscordDoesNotConstructOrSendPayload() {
         var repository = new DiscordRepositoryImpl();

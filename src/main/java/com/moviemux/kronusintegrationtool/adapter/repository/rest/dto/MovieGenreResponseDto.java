@@ -1,6 +1,6 @@
 package com.moviemux.kronusintegrationtool.adapter.repository.rest.dto;
 
-import com.moviemux.movie.domain.MovieGenre;
+import com.moviemux.kronusintegrationtool.domain.model.CatalogGenre;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -16,7 +16,7 @@ public class MovieGenreResponseDto {
 	private Long id;
 	private String name;
 
-	public MovieGenre toDomain() {
-		return MovieGenre.builder().id(id).name(name).tmdbId(id).build();
+	public CatalogGenre toDomain() {
+        return com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.CatalogResponseMapper.genre(this);
 	}
 }

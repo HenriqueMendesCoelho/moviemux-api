@@ -27,12 +27,7 @@ public class MovieSearchResponseDto {
 	private Integer totalResults;
 
 	public MovieSearch toDomain() {
-		return MovieSearch.builder()
-				.page(page)
-				.results(this.results.stream().map(ResultSearchResponseDto::toDomain).collect(Collectors.toList()))
-				.totalPages(totalPages)
-				.totalResults(totalResults)
-				.build();
+        return com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.CatalogResponseMapper.search(this);
 	}
 
 }

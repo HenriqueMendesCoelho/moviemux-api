@@ -33,24 +33,13 @@ public class CreditResponseDto {
 		private String job;
 
 		public Credit.Cast toDomain() {
-			return Credit.Cast.builder()
-					.knownForDepartment(knownForDepartment)
-					.name(name)
-					.originalName(originalName)
-					.profilePath(profilePath)
-					.character(character)
-					.department(department)
-					.job(job)
-					.build();
+            return com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.CatalogResponseMapper.cast(this);
 		}
 
 	}
 
 	public Credit toDomain() {
-		return Credit.builder()
-				.cast(cast.stream().map(CastResponseDto::toDomain).toList())
-				.crew(crew.stream().map(CastResponseDto::toDomain).toList())
-				.build();
+        return com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.CatalogResponseMapper.credits(this);
 	}
 
 }

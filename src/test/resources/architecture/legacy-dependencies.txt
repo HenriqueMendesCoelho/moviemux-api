@@ -1,20 +1,6 @@
 # Temporary coupling inherited from the original implementation.
 # Each source capability owns removal as its domain and persistence boundaries separate.
 # This list may only shrink; new dependencies fail the architecture test.
-com.moviemux.discord.usecase.impl.SendMessageWebhookUseCaseImpl -> com.moviemux.discord.adapter.repository.rest.DiscordRepository
-com.moviemux.discord.usecase.impl.SendMessageWebhookUseCaseImpl -> com.moviemux.movie.adapter.repository.MovieRepository
-com.moviemux.discord.usecase.impl.SendMessageWebhookUseCaseImpl -> org.springframework.beans.factory.annotation.Autowired
-com.moviemux.discord.usecase.impl.UpdateMessageWebhookUseCaseImpl -> com.moviemux.discord.adapter.repository.rest.DiscordRepository
-com.moviemux.discord.usecase.impl.UpdateMessageWebhookUseCaseImpl -> com.moviemux.movie.adapter.repository.MovieRepository
-com.moviemux.discord.usecase.impl.UpdateMessageWebhookUseCaseImpl -> org.springframework.beans.factory.annotation.Autowired
-com.moviemux.kronusintegrationtool.usecase.impl.MovieSumarryUseCaseImpl -> com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository
-com.moviemux.kronusintegrationtool.usecase.impl.MovieSumarryUseCaseImpl -> org.springframework.beans.factory.annotation.Autowired
-com.moviemux.kronusintegrationtool.usecase.impl.SearchCreditUseCaseImpl -> com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository
-com.moviemux.kronusintegrationtool.usecase.impl.SearchCreditUseCaseImpl -> org.springframework.beans.factory.annotation.Autowired
-com.moviemux.kronusintegrationtool.usecase.impl.SearchMovieTmdbUseCaseImpl -> com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository
-com.moviemux.kronusintegrationtool.usecase.impl.SearchMovieTmdbUseCaseImpl -> org.springframework.beans.factory.annotation.Autowired
-com.moviemux.kronusintegrationtool.usecase.impl.SearchWatchProviedersUseCaseImpl -> com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository
-com.moviemux.kronusintegrationtool.usecase.impl.SearchWatchProviedersUseCaseImpl -> org.springframework.beans.factory.annotation.Autowired
 com.moviemux.movie.domain.Movie -> jakarta.persistence.CascadeType
 com.moviemux.movie.domain.Movie -> jakarta.persistence.Column
 com.moviemux.movie.domain.Movie -> jakarta.persistence.ConstraintMode

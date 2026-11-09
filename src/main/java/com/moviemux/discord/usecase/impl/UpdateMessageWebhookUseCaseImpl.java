@@ -1,33 +1,23 @@
 package com.moviemux.discord.usecase.impl;
 
-import java.util.UUID;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
-import com.moviemux.discord.adapter.repository.rest.DiscordRepository;
+import com.moviemux.discord.domain.repository.WebhookRepository;
+import com.moviemux.discord.domain.repository.DiscordMovieRepository;
 import com.moviemux.discord.usecase.UpdateMessageWebhookUseCase;
-import com.moviemux.movie.adapter.repository.MovieRepository;
-import com.moviemux.movie.domain.Movie;
+import org.springframework.stereotype.Component;
+import java.util.UUID;
 
 @Component
 public class UpdateMessageWebhookUseCaseImpl implements UpdateMessageWebhookUseCase {
-
-	@Autowired
-	private DiscordRepository repository;
-
-	@Autowired
-	private MovieRepository movieRepository;
-
-	@Override
-	public void updateMovieMessage(UUID movieId) {
-		Movie movie = movieRepository.findById(movieId).orElse(null);
-
-		if (movie == null || !movie.isShowNotes()) {
-			return;
-		}
-
-		repository.update(movie);
-	}
-
+    private final WebhookRepository repository;
+    private final DiscordMovieRepository movieRepository;
+    public UpdateMessageWebhookUseCaseImpl(WebhookRepository repository, DiscordMovieRepository movieRepository) {
+        this.repository = repository;
+        this.movieRepository = movieRepository;
+    }
+    @Override public void updateMovieMessage(UUID movieId) {
+        var target = movieRepository.find(movieId).orElse(null);
+        if (target == null) return;
+        if (!target.showNotes()) return;
+        repository.edit(target);
+    }
 }

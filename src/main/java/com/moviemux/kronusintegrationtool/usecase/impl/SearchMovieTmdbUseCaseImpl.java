@@ -1,16 +1,18 @@
 package com.moviemux.kronusintegrationtool.usecase.impl;
 
-import com.moviemux.kronusintegrationtool.adapter.repository.rest.KronusIntegrationToolRepository;
+import com.moviemux.kronusintegrationtool.domain.repository.KronusCatalogRepository;
 import com.moviemux.kronusintegrationtool.domain.MovieSearch;
 import com.moviemux.kronusintegrationtool.usecase.SearchMovieTmdbUseCase;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 public class SearchMovieTmdbUseCaseImpl implements SearchMovieTmdbUseCase {
 
-	@Autowired
-	private KronusIntegrationToolRepository repository;
+	private final KronusCatalogRepository repository;
+
+    public SearchMovieTmdbUseCaseImpl(KronusCatalogRepository repository) {
+        this.repository = repository;
+    }
 
 	@Override
 	public MovieSearch searchByName(String name, Integer page, String language) {

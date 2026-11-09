@@ -26,7 +26,9 @@ public class CreateMovieGenreUseCaseImpl implements CreateMovieGenreUseCase {
 	@Scheduled(initialDelay = 5000, fixedDelayString = "P15D")
 	@Override
 	public void scheduled() {
-		List<MovieGenre> genres = kronusIntegrationToolRepository.listGenres();
+		List<MovieGenre> genres = kronusIntegrationToolRepository.listGenres().stream()
+                .map(genre -> MovieGenre.builder().id(genre.id()).tmdbId(genre.id()).name(genre.name()).build())
+                .toList();
 
 		log.info("Started integration with TMDB of movie genres");
 
