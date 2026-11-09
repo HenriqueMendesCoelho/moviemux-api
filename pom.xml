@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.2</version>
+        <version>3.5.7</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.moviemux</groupId>
@@ -15,7 +15,7 @@
     <name>Movie Mux</name>
     <description>Movie Mux - MoviesAPI</description>
     <properties>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
         <skipTests>false</skipTests>
     </properties>
     <dependencies>
@@ -56,11 +56,6 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-tomcat</artifactId>
-            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -125,13 +120,26 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <jvmArguments>-Xms128M -Xmx1G -XX:+UseZGC</jvmArguments>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>${java.version}</release>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
             <plugin>
@@ -184,7 +192,7 @@
         <profile>
             <id>mutation</id>
             <build><plugins><plugin>
-                <groupId>org.pitest</groupId><artifactId>pitest-maven</artifactId><version>1.19.1</version>
+                <groupId>org.pitest</groupId><artifactId>pitest-maven</artifactId><version>1.20.0</version>
                 <dependencies><dependency>
                     <groupId>org.pitest</groupId><artifactId>pitest-junit5-plugin</artifactId><version>1.2.2</version>
                 </dependency></dependencies>
