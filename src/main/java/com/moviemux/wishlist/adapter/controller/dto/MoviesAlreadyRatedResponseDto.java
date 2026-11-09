@@ -1,9 +1,7 @@
 package com.moviemux.wishlist.adapter.controller.dto;
 
+import com.moviemux.movie.domain.model.MovieCatalogEntry;
 import java.util.List;
-
-import com.moviemux.movie.domain.Movie;
-
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -13,9 +11,9 @@ import lombok.Setter;
 @NoArgsConstructor
 public class MoviesAlreadyRatedResponseDto {
 
-	private List<Long> movieTmdbIds;
+  private List<Long> movieTmdbIds;
 
-	public MoviesAlreadyRatedResponseDto(List<Movie> movies) {
-		movieTmdbIds = movies.stream().map(m -> m.getTmdbId()).toList();
-	}
+  public MoviesAlreadyRatedResponseDto(List<MovieCatalogEntry> movies) {
+    movieTmdbIds = movies.stream().map(m -> m.tmdbId()).toList();
+  }
 }

@@ -189,7 +189,7 @@
                     <groupId>org.pitest</groupId><artifactId>pitest-junit5-plugin</artifactId><version>1.2.2</version>
                 </dependency></dependencies>
                 <configuration>
-                    <targetClasses><param>com.moviemux.wishlist.usecase.impl.CreateUserWishlistUseCaseImpl</param></targetClasses>
+                    <targetClasses><param>com.moviemux.wishlist.domain.usecase.impl.CreateUserWishlistUseCaseImpl</param></targetClasses>
                     <targetTests><param>com.moviemux.behavior.WishlistBehaviorTest</param></targetTests>
                     <outputFormats><param>HTML</param><param>XML</param></outputFormats>
                     <threads>2</threads>
