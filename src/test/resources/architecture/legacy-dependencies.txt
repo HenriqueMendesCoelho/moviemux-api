@@ -103,11 +103,6 @@ com.moviemux.movie.usecase.impl.UpdateMovieUseCaseImpl -> com.moviemux.movie.ada
 com.moviemux.movie.usecase.impl.UpdateMovieUseCaseImpl -> com.moviemux.user.adapter.repository.UserRepository
 com.moviemux.movie.usecase.impl.UpdateMovieUseCaseImpl -> org.springframework.beans.factory.annotation.Autowired
 com.moviemux.movie.usecase.impl.UpdateMovieUseCaseImpl -> org.springframework.cache.annotation.CacheEvict
-com.moviemux.statistic.usecase.impl.MovieStatisticsUseCaseImpl -> com.moviemux.movie.adapter.repository.MovieGenreRepository
-com.moviemux.statistic.usecase.impl.MovieStatisticsUseCaseImpl -> com.moviemux.movie.adapter.repository.MovieNoteRepository
-com.moviemux.statistic.usecase.impl.MovieStatisticsUseCaseImpl -> com.moviemux.movie.adapter.repository.MovieRepository
-com.moviemux.statistic.usecase.impl.MovieStatisticsUseCaseImpl -> org.springframework.beans.factory.annotation.Autowired
-com.moviemux.statistic.usecase.impl.MovieStatisticsUseCaseImpl -> org.springframework.cache.annotation.Cacheable
 com.moviemux.user.domain.Invite -> jakarta.persistence.Column
 com.moviemux.user.domain.Invite -> jakarta.persistence.Entity
 com.moviemux.user.domain.Invite -> jakarta.persistence.GeneratedValue

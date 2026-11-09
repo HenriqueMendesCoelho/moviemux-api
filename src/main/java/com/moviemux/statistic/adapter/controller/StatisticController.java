@@ -4,6 +4,5 @@ import com.moviemux.statistic.adapter.controller.dto.MovieStatisticResponseDto;
 
 public interface StatisticController {
 
-	MovieStatisticResponseDto charts();
-
+  MovieStatisticResponseDto charts();
 }
