@@ -13,6 +13,9 @@ public class DiscordWebhookResponseDto {
 	private String id;
 
 	public DiscordWebhookInfo toDomain() {
+		if (id == null || id.isBlank()) {
+			throw new IllegalArgumentException("Missing webhook message id");
+		}
 		return DiscordWebhookInfo.builder().messageId(id).build();
 	}
 }
