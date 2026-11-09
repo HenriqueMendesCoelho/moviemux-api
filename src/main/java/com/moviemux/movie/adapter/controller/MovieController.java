@@ -3,10 +3,10 @@ package com.moviemux.movie.adapter.controller;
 import java.util.List;
 import java.util.UUID;
 
-import com.moviemux.movie.usecase.exception.DuplicatedMovieException;
-import com.moviemux.movie.usecase.exception.DuplicatedMovieNoteException;
-import com.moviemux.movie.usecase.exception.MovieNotFoundException;
-import com.moviemux.movie.usecase.exception.MovieNoteNotFoundException;
+import com.moviemux.movie.domain.exception.DuplicatedMovieException;
+import com.moviemux.movie.domain.exception.DuplicatedMovieNoteException;
+import com.moviemux.movie.domain.exception.MovieNotFoundException;
+import com.moviemux.movie.domain.exception.MovieNoteNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -16,7 +16,7 @@ import com.moviemux.movie.adapter.controller.dto.MovieNoteRequestDto;
 import com.moviemux.movie.adapter.controller.dto.MovieNoteResponseDto;
 import com.moviemux.movie.adapter.controller.dto.MovieRequestDto;
 import com.moviemux.movie.adapter.controller.dto.MovieResponseDto;
-import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
+import com.moviemux.user.domain.exception.UserNotAuthorizedException;
 
 public interface MovieController {
 

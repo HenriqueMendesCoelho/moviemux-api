@@ -1,6 +1,5 @@
 package com.moviemux.movie.adapter.controller.dto;
 
-import com.moviemux.movie.domain.MovieGenre;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -17,10 +16,6 @@ public class MovieGenreResponseDto {
 	private String name;
 	private Long tmdbId;
 
-	public MovieGenreResponseDto(MovieGenre genre) {
-		id = genre.getId();
-		name = genre.getName();
-		tmdbId = genre.getTmdbId();
-	}
+
 
 }

@@ -4,8 +4,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import com.moviemux.movie.domain.Movie;
-import com.moviemux.movie.domain.MovieGenre;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -55,22 +53,5 @@ public class MovieRequestDto {
 
 	private boolean showNotes;
 
-	public Movie toDomain() {
-		return Movie.builder()
-				.portugueseTitle(portugueseTitle)
-				.englishTitle(englishTitle)
-				.originalTitle(originalTitle)
-				.director(director)
-				.urlImage(urlImage)
-				.portugueseUrlTrailer(portugueseUrlTrailer)
-				.englishUrlTrailer(englishUrlTrailer)
-				.description(description)
-				.releaseDate(releaseDate)
-				.tmdbId(tmdbId)
-				.imdbId(imdbId)
-				.runtime(runtime)
-				.showNotes(showNotes)
-				.genres(genres.stream().map(g -> MovieGenre.builder().id(g).build()).collect(Collectors.toList()))
-				.build();
-	}
+
 }

@@ -4,11 +4,15 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import com.moviemux.movie.usecase.exception.DuplicatedMovieException;
-import com.moviemux.movie.usecase.exception.DuplicatedMovieNoteException;
-import com.moviemux.movie.usecase.exception.MovieNotFoundException;
-import com.moviemux.movie.usecase.exception.MovieNoteNotFoundException;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.moviemux.movie.domain.exception.DuplicatedMovieException;
+import com.moviemux.movie.domain.exception.DuplicatedMovieNoteException;
+import com.moviemux.movie.domain.exception.MovieNotFoundException;
+import com.moviemux.movie.domain.exception.MovieNoteNotFoundException;
+import lombok.RequiredArgsConstructor;
+import com.moviemux.movie.adapter.controller.mapper.MovieHttpMapper;
+import com.moviemux.movie.domain.command.*;
+import com.moviemux.movie.domain.usecase.GetMovieUseCase;
+import com.moviemux.movie.domain.usecase.SearchMovieGenresWithMoviesUseCase;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Controller;
@@ -20,118 +24,112 @@ import com.moviemux.movie.adapter.controller.dto.MovieNoteRequestDto;
 import com.moviemux.movie.adapter.controller.dto.MovieNoteResponseDto;
 import com.moviemux.movie.adapter.controller.dto.MovieRequestDto;
 import com.moviemux.movie.adapter.controller.dto.MovieResponseDto;
-import com.moviemux.movie.domain.Movie;
-import com.moviemux.movie.domain.MovieGenre;
-import com.moviemux.movie.domain.MovieNote;
-import com.moviemux.movie.usecase.CreateMovieNoteUseCase;
-import com.moviemux.movie.usecase.CreateMovieUseCase;
-import com.moviemux.movie.usecase.DeleteMovieNoteUseCase;
-import com.moviemux.movie.usecase.DeleteMovieUseCase;
-import com.moviemux.movie.usecase.SearchMovieGenreUseCase;
-import com.moviemux.movie.usecase.SearchMovieNoteUseCase;
-import com.moviemux.movie.usecase.SearchMovieUseCase;
-import com.moviemux.movie.usecase.UpdateMovieNoteUseCase;
-import com.moviemux.movie.usecase.UpdateMovieUseCase;
-import com.moviemux.user.usecase.exception.UserNotAuthorizedException;
+import com.moviemux.movie.domain.model.Movie;
+import com.moviemux.movie.domain.model.MovieGenre;
+import com.moviemux.movie.domain.model.MovieNote;
+import com.moviemux.movie.domain.usecase.CreateMovieNoteUseCase;
+import com.moviemux.movie.domain.usecase.CreateMovieUseCase;
+import com.moviemux.movie.domain.usecase.DeleteMovieNoteUseCase;
+import com.moviemux.movie.domain.usecase.DeleteMovieUseCase;
+import com.moviemux.movie.domain.usecase.SearchMovieGenreUseCase;
+import com.moviemux.movie.domain.usecase.SearchMovieNoteUseCase;
+import com.moviemux.movie.domain.usecase.SearchMovieUseCase;
+import com.moviemux.movie.domain.usecase.UpdateMovieNoteUseCase;
+import com.moviemux.movie.domain.usecase.UpdateMovieUseCase;
+import com.moviemux.user.domain.exception.UserNotAuthorizedException;
 
 @Controller
+@RequiredArgsConstructor
 public class MovieControllerImpl implements MovieController {
 
-	@Autowired
-	private CreateMovieUseCase createMovieUseCase;
+	private final CreateMovieUseCase createMovieUseCase;
 
-	@Autowired
-	private SearchMovieUseCase searchMovieUseCase;
+	private final SearchMovieUseCase searchMovieUseCase;
+    private final GetMovieUseCase getMovieUseCase;
+    private final SearchMovieGenresWithMoviesUseCase genresWithMovies;
 
-	@Autowired
-	private UpdateMovieUseCase updateMovieUseCase;
+	private final UpdateMovieUseCase updateMovieUseCase;
 
-	@Autowired
-	private DeleteMovieUseCase deleteMovieUseCase;
+	private final DeleteMovieUseCase deleteMovieUseCase;
 
-	@Autowired
-	private CreateMovieNoteUseCase createMovieNoteUseCase;
+	private final CreateMovieNoteUseCase createMovieNoteUseCase;
 
-	@Autowired
-	private SearchMovieNoteUseCase searchMovieNoteUseCase;
+	private final SearchMovieNoteUseCase searchMovieNoteUseCase;
 
-	@Autowired
-	private UpdateMovieNoteUseCase updateMovieNoteUseCase;
+	private final UpdateMovieNoteUseCase updateMovieNoteUseCase;
 
-	@Autowired
-	private DeleteMovieNoteUseCase deleteMovieNoteUseCase;
+	private final DeleteMovieNoteUseCase deleteMovieNoteUseCase;
 
-	@Autowired
-	private SearchMovieGenreUseCase searchMovieGenreUseCase;
+	private final SearchMovieGenreUseCase searchMovieGenreUseCase;
 
 	@Override
 	public Page<MovieResponseDto> listAllMovies(String title, String genre, String sortJoin, Pageable pageable,
 			UserTokenDto user) {
-		Page<Movie> response = searchMovieUseCase.listAllMovies(title, genre, sortJoin, pageable, user.getId());
-		return response.map(MovieResponseDto::new);
+		var response = searchMovieUseCase.execute(MovieHttpMapper.query(title, genre, sortJoin, pageable), user.getId());
+		return MovieHttpMapper.page(response,pageable);
 	}
 
 	@Override
 	public MovieResponseDto getById(UUID id, UserTokenDto user) throws MovieNoteNotFoundException {
-		Movie response = searchMovieUseCase.getById(id, user.getId());
-		return new MovieResponseDto(response);
+		Movie response = getMovieUseCase.execute(id, user.getId());
+		return MovieHttpMapper.movie(response);
 	}
 
 	@Override
 	public MovieResponseDto save(MovieRequestDto movie, UserTokenDto user) throws DuplicatedMovieException {
-		Movie response = createMovieUseCase.save(movie.toDomain(), user.getId());
-		return new MovieResponseDto(response);
+		Movie response = createMovieUseCase.execute(MovieHttpMapper.create(movie, user.getId()));
+		return MovieHttpMapper.movie(response);
 	}
 
 	@Override
 	public MovieResponseDto update(MovieRequestDto movie, UUID movieId, UserTokenDto user)
 			throws MovieNotFoundException, UserNotAuthorizedException {
-		Movie response = updateMovieUseCase.update(movie.toDomain(), movieId, user.getLogin());
-		return new MovieResponseDto(response);
+		Movie response = updateMovieUseCase.execute(MovieHttpMapper.update(movie, movieId, user.getLogin()));
+		return MovieHttpMapper.movie(response);
 	}
 
 	@Override
 	public void delete(UUID id, UserTokenDto user) throws UserNotAuthorizedException {
-		deleteMovieUseCase.delete(id, user.getId());
+		deleteMovieUseCase.execute(new DeleteMovieCommand(id, user.getId()));
 	}
 
 	@Override
 	public List<MovieNoteResponseDto> listMovieNotes(UUID movieId, UserTokenDto user) throws MovieNotFoundException {
-		return searchMovieNoteUseCase.list(movieId, user.getId())
+		return searchMovieNoteUseCase.execute(movieId, user.getId())
 				.stream()
-				.map(MovieNoteResponseDto::new)
+				.map(MovieHttpMapper::note)
 				.collect(Collectors.toList());
 	}
 
 	@Override
 	public MovieNoteResponseDto createMovieNote(MovieNoteRequestDto request, UserTokenDto user)
 			throws MovieNotFoundException, DuplicatedMovieNoteException {
-		MovieNote response = createMovieNoteUseCase.create(request.getMovieId(), request.getNote(), user.getLogin());
-		return new MovieNoteResponseDto(response);
+		MovieNote response = createMovieNoteUseCase.execute(new CreateMovieNoteCommand(request.getMovieId(), request.getNote(), user.getLogin()));
+		return MovieHttpMapper.note(response);
 	}
 
 	@Override
 	public MovieNoteResponseDto updateMovieNote(UUID movieId, MovieNoteRequestDto request, UserTokenDto user)
 			throws MovieNoteNotFoundException {
-		MovieNote response = updateMovieNoteUseCase.update(user.getId(), movieId, request.getNote());
-		return new MovieNoteResponseDto(response);
+		MovieNote response = updateMovieNoteUseCase.execute(new UpdateMovieNoteCommand(user.getId(), movieId, request.getNote()));
+		return MovieHttpMapper.note(response);
 	}
 
 	@Override
 	public void deleteMovieNote(UUID movieId, UserTokenDto user) {
-		deleteMovieNoteUseCase.delete(user.getId(), movieId);
+		deleteMovieNoteUseCase.execute(new DeleteMovieNoteCommand(user.getId(), movieId));
 	}
 
 	@Override
 	public List<MovieGenreResponseDto> listGenres() {
-		List<MovieGenre> genres = searchMovieGenreUseCase.list();
-		return genres.stream().map(MovieGenreResponseDto::new).collect(Collectors.toList());
+		List<MovieGenre> genres = searchMovieGenreUseCase.execute();
+		return genres.stream().map(MovieHttpMapper::genre).collect(Collectors.toList());
 	}
 
 	@Override
 	public List<MovieGenreResponseDto> listAllGenresWithMovies() {
-		List<MovieGenre> genres = searchMovieGenreUseCase.listAllGenresWithMovies();
-		return genres.stream().map(MovieGenreResponseDto::new).collect(Collectors.toList());
+		List<MovieGenre> genres = genresWithMovies.execute();
+		return genres.stream().map(MovieHttpMapper::genre).collect(Collectors.toList());
 	}
 
 }
