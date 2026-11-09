@@ -11,6 +11,5 @@ import lombok.Setter;
 @NoArgsConstructor
 public class UserEmailRequestDto {
 
-	private String email;
-
+  private String email;
 }

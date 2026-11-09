@@ -1,40 +1,40 @@
 package com.moviemux.application.spring.listener;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import com.moviemux.user.domain.model.User;
+import com.moviemux.user.domain.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationListener;
 import org.springframework.security.authentication.event.AuthenticationFailureBadCredentialsEvent;
 import org.springframework.stereotype.Component;
 
-import com.moviemux.user.adapter.repository.UserRepository;
-import com.moviemux.user.domain.User;
-
 @Component
-public class AuthenticationFailureListener implements ApplicationListener<AuthenticationFailureBadCredentialsEvent> {
+@RequiredArgsConstructor
+public class AuthenticationFailureListener
+    implements ApplicationListener<AuthenticationFailureBadCredentialsEvent> {
 
-	@Autowired
-	private UserRepository repository;
+  private final UserRepository repository;
 
-	@Override
-	public void onApplicationEvent(AuthenticationFailureBadCredentialsEvent event) {
-		String email = (String) event.getAuthentication().getPrincipal();
+  @Override
+  public void onApplicationEvent(AuthenticationFailureBadCredentialsEvent event) {
+    String email = (String) event.getAuthentication().getPrincipal();
 
-		if (email.isBlank()) {
-			return;
-		}
+    if (email.isBlank()) {
+      return;
+    }
 
-		failedLoginAttempts(email);
-	}
+    failedLoginAttempts(email);
+  }
 
-	private void failedLoginAttempts(String email) {
-		User user = repository.findByEmail(email);
+  private void failedLoginAttempts(String email) {
+    User user = repository.findByEmail(email);
 
-		if (user == null) {
-			return;
-		}
+    if (user == null) {
+      return;
+    }
 
-		int ConsecutiveFailedLoginAttempts = user.getStatistics().getConsecutiveFailedLoginAttempts();
-		user.getStatistics().setConsecutiveFailedLoginAttempts(ConsecutiveFailedLoginAttempts + 1);
+    int ConsecutiveFailedLoginAttempts = user.getStatistics().getConsecutiveFailedLoginAttempts();
+    user.getStatistics().setConsecutiveFailedLoginAttempts(ConsecutiveFailedLoginAttempts + 1);
 
-		repository.saveAndFlush(user);
-	}
+    repository.save(user);
+  }
 }

@@ -6,7 +6,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface InviteJpaRepository extends JpaRepository<Invite, Long> {
 
-	@Transactional(readOnly = true)
-	Invite findByCode(String code);
-
+  @Transactional(readOnly = true)
+  Invite findByCode(String code);
 }
