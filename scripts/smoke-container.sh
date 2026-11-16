@@ -7,7 +7,7 @@ prefix="moviemux-smoke-${GITHUB_RUN_ID:-$$}-${GITHUB_RUN_ATTEMPT:-1}"
 network="${prefix}-network"
 database="${prefix}-postgres"
 api="${prefix}-api"
-port="${SMOKE_PORT:-18080}"
+probe="${prefix}-probe"
 cleanup() {
   status=$?
   trap - EXIT
@@ -15,12 +15,13 @@ cleanup() {
     docker logs "$api" 2>&1 || true
     docker logs "$database" 2>&1 || true
   fi
-  docker rm -f "$api" "$database" >/dev/null 2>&1 || true
+  docker rm -f "$probe" "$api" "$database" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   exit "$status"
 }
 trap cleanup EXIT
 
+docker pull python:3.13-alpine >/dev/null
 docker network create --internal "$network" >/dev/null
 test "$(docker network inspect -f '{{.Internal}}' "$network")" = true
 docker run -d --name "$database" --network "$network" --network-alias db \
@@ -32,7 +33,7 @@ for attempt in $(seq 1 60); do
 done
 docker exec "$database" pg_isready -U moviemux_smoke -d moviemux_smoke
 
-docker run -d --name "$api" --network "$network" -p "127.0.0.1:${port}:8080" \
+docker run -d --name "$api" --network "$network" --network-alias api \
   -e DB_URL=jdbc:postgresql://db:5432/moviemux_smoke \
   -e DB_USER=moviemux_smoke -e DB_PASS=synthetic-smoke-password -e DB_SCHEMA=public \
   -e JWT_SECRET=synthetic-container-smoke-secret-at-least-32-bytes \
@@ -43,9 +44,10 @@ docker run -d --name "$api" --network "$network" -p "127.0.0.1:${port}:8080" \
   -e SOCKET_IO_API_URL=http://127.0.0.1:1 -e SOCKET_IO_API_KEY=synthetic \
   "$image" --scheduling.enabled=false >/dev/null
 
-python3 - "$port" "$api" <<'PY'
-import json, subprocess, sys, time, urllib.error, urllib.request
-base = f"http://127.0.0.1:{sys.argv[1]}/api/monolith"
+probe_api() {
+  docker run --rm -i --name "$probe" --network "$network" python:3.13-alpine python - "$1" <<'PY'
+import json, sys, time, urllib.error, urllib.request
+base = "http://api:8080/api/monolith"
 http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 def request(method, path, data=None, token=None):
     headers = {"Content-Type": "application/json"}
@@ -72,19 +74,22 @@ def wait_ready(token=None):
     raise AssertionError("Container did not become ready within 90 seconds")
 
 wait_ready()
-status, _ = request("POST", "/public/user", {
-    "name": "Synthetic Container Admin", "email": "container-smoke@example.invalid",
-    "password": "SyntheticPassword123!", "notify": False, "invite_code": ""})
-assert status == 200, "Synthetic signup failed"
+if sys.argv[1] == "initial":
+    status, _ = request("POST", "/public/user", {
+        "name": "Synthetic Container Admin", "email": "container-smoke@example.invalid",
+        "password": "SyntheticPassword123!", "notify": False, "invite_code": ""})
+    assert status == 200, "Synthetic signup failed"
 status, login = request("POST", "/login", {
     "email": "container-smoke@example.invalid", "password": "SyntheticPassword123!"})
 assert status == 200 and login.get("access_token"), "Synthetic login failed"
 token = login["access_token"]
 wait_ready(token)
-subprocess.run(["docker", "restart", sys.argv[2]], check=True, stdout=subprocess.DEVNULL)
-wait_ready(token)
-print("PASS: container signup, login, authenticated database health and restart")
+print("PASS: container login and authenticated database health (" + sys.argv[1] + ")")
 PY
+}
+probe_api initial
+docker restart "$api" >/dev/null
+probe_api restarted
 history="$(docker exec "$database" psql -U moviemux_smoke -d moviemux_smoke -Atc \
   "select count(*) from public.flyway_schema_history where version='1' and type='SQL' and success")"
 test "$history" = 1
