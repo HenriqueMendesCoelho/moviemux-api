@@ -57,6 +57,21 @@ class WishlistConstraintTranslationTest {
         .hasCause(failure);
   }
 
+  @Test
+  void verifiedLegacyMembershipUniqueConstraintPreservesCauseInBusinessConflict() {
+    DataIntegrityViolationException failure = failure("23505", "ukmdk01guha2tx3rf192hcny1gm");
+    assertThatThrownBy(operation(Target.MEMBERSHIP, failure)::run)
+        .isInstanceOf(WishlistPersistenceConflict.class)
+        .hasCause(failure);
+  }
+
+  @ParameterizedTest
+  @EnumSource(value = Target.class, names = {"WISHLIST", "CATALOG_MOVIE"})
+  void legacyMembershipNameIsNotAcceptedForOtherAdapters(Target target) {
+    DataIntegrityViolationException failure = failure("23505", "ukmdk01guha2tx3rf192hcny1gm");
+    assertThatThrownBy(operation(target, failure)::run).isSameAs(failure);
+  }
+
   @ParameterizedTest
   @MethodSource("unrelatedFailures")
   void unrelatedIntegrityFailuresRemainTechnical(
@@ -88,6 +103,9 @@ class WishlistConstraintTranslationTest {
                     Arguments.of(target, "23503", "ukt52x8vytfwq3vic32in8tb8y8"),
                     Arguments.of(target, "23502", "ukt52x8vytfwq3vic32in8tb8y8"),
                     Arguments.of(target, null, "ukt52x8vytfwq3vic32in8tb8y8"),
+                    Arguments.of(target, "23503", "ukmdk01guha2tx3rf192hcny1gm"),
+                    Arguments.of(target, "23502", "ukmdk01guha2tx3rf192hcny1gm"),
+                    Arguments.of(target, null, "ukmdk01guha2tx3rf192hcny1gm"),
                     Arguments.of(target, null, target.constraint)));
   }
 

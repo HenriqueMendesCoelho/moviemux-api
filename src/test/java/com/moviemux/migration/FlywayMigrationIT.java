@@ -185,6 +185,33 @@ class FlywayMigrationIT {
     }
 
     @Test
+    void legacyMembershipUniqueCanBeReportedBeforePrimaryKey() throws Exception {
+        flyway().migrate();
+        String owner = UUID.randomUUID().toString();
+        String wishlist = UUID.randomUUID().toString();
+        try (Connection connection = connection(); var statement = connection.createStatement()) {
+            statement.execute("set search_path to " + schema);
+            // Equivalent final constraints, with the legacy UNIQUE created first. PostgreSQL
+            // may report either equivalent index; error translation must not rely on their order.
+            statement.execute("alter table movie_wishlist_user_wishlist drop constraint movie_wishlist_user_wishlist_pkey");
+            statement.execute("alter table movie_wishlist_user_wishlist add constraint ukmdk01guha2tx3rf192hcny1gm unique (wishlist_id, movie_id)");
+            statement.execute("alter table movie_wishlist_user_wishlist add constraint movie_wishlist_user_wishlist_pkey primary key (movie_id, wishlist_id)");
+            statement.execute("insert into \"user\"(id,created_at,email,name,password) values ('" + owner
+                    + "',now(),'synthetic-membership@example.invalid','Synthetic','synthetic-hash')");
+            statement.execute("insert into user_wishlist(id,created_at,name,shareable,user_id) values ('" + wishlist
+                    + "',now(),'Synthetic',false,'" + owner + "')");
+            statement.execute("insert into movie_wishlist(tmdb_id,url_image) values (900001,'synthetic')");
+            String insert = "insert into movie_wishlist_user_wishlist(movie_id,wishlist_id) values (900001,'" + wishlist + "')";
+            statement.execute(insert);
+            Throwable duplicate = catchThrowable(() -> statement.execute(insert));
+            assertThat(duplicate).isInstanceOf(org.postgresql.util.PSQLException.class);
+            var violation = (org.postgresql.util.PSQLException) duplicate;
+            assertThat(violation.getSQLState()).isEqualTo("23505");
+            assertThat(violation.getServerErrorMessage().getConstraint()).isEqualTo("ukmdk01guha2tx3rf192hcny1gm");
+        }
+    }
+
+    @Test
     void changedAppliedMigrationChecksumFailsWithoutRepair() throws Exception {
         flyway().migrate();
         String migration = new String(new ClassPathResource("db/migration/V1__initial_schema.sql").getInputStream().readAllBytes());

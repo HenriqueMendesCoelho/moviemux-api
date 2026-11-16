@@ -20,6 +20,8 @@ final class WishlistConstraintViolations {
   private static boolean matchesConstraint(String expected, String actual) {
     return expected.equals(actual)
         || ("user_wishlist_user_id_name_key".equals(expected)
-            && "ukt52x8vytfwq3vic32in8tb8y8".equals(actual));
+            && "ukt52x8vytfwq3vic32in8tb8y8".equals(actual))
+        || ("movie_wishlist_user_wishlist_pkey".equals(expected)
+            && "ukmdk01guha2tx3rf192hcny1gm".equals(actual));
   }
 }
