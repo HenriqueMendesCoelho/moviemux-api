@@ -53,3 +53,14 @@ jobs:
             target/site/jacoco*
             target/pit-reports
           retention-days: 14
+
+  container-smoke:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build application image without publishing
+        run: docker build --tag moviemux-api:${{ github.sha }} .
+      - name: Smoke image with isolated PostgreSQL 18.1
+        run: bash scripts/smoke-container.sh moviemux-api:${{ github.sha }}
