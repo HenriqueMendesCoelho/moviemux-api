@@ -3,7 +3,7 @@ package com.moviemux.kronusintegrationtool.adapter.controller.dto;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import com.moviemux.kronusintegrationtool.domain.MovieSearch;
+import com.moviemux.kronusintegrationtool.domain.model.MovieSearch;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

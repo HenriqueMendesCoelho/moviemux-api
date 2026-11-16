@@ -5,7 +5,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import com.moviemux.kronusintegrationtool.domain.MovieSummary;
+import com.moviemux.kronusintegrationtool.domain.model.MovieSummary;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -37,20 +37,6 @@ public class MovieSummaryResponseDto {
 	private Integer runtime;
 
 	public MovieSummary toDomain() {
-		return MovieSummary.builder()
-				.tmdbId(tmdbId)
-				.imdbId(imdbId)
-				.portugueseTitle(portugueseTitle)
-				.englishTitle(englishTitle)
-				.originalTitle(originalTitle)
-				.director(director)
-				.urlImageEnglish(urlImagePortuguese)
-				.portugueseUrlTrailer(portugueseUrlTrailer)
-				.englishUrlTrailer(englishUrlTrailer)
-				.genres(genres)
-				.description(description)
-				.releaseDate(releaseDate)
-				.runtime(runtime)
-				.build();
+        return com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.CatalogResponseMapper.summary(this);
 	}
 }

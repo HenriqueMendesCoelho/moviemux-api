@@ -4,12 +4,11 @@ import java.util.List;
 
 import com.moviemux.movie.adapter.repository.jpa.MovieGenreJpaRepository;
 import com.moviemux.movie.adapter.repository.jpa.specification.MovieGenreSpecification;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Repository;
 
-import com.moviemux.movie.domain.Movie;
-import com.moviemux.movie.domain.MovieGenre;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
@@ -18,19 +17,22 @@ import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Root;
 
 @Repository
-@RequiredArgsConstructor
 public class MovieGenreSpecificationImpl implements MovieGenreSpecification {
 
 	private final MovieGenreJpaRepository repository;
 
+	public MovieGenreSpecificationImpl(MovieGenreJpaRepository repository) {
+		this.repository = repository;
+	}
+
 	@Override
-	public List<MovieGenre> findAllGenresHaveMovieAssociated() {
+	public List<MovieGenreEntity> findAllGenresHaveMovieAssociated() {
 		return repository.findAll(filterMovieGenreWithMovie());
 	}
 
-	private Specification<MovieGenre> filterMovieGenreWithMovie() {
-		return (Root<MovieGenre> root, CriteriaQuery<?> query, CriteriaBuilder criteriaBuilder) -> {
-			Join<MovieGenre, Movie> movieJoin = root.join("movies", JoinType.LEFT);
+	private Specification<MovieGenreEntity> filterMovieGenreWithMovie() {
+		return (Root<MovieGenreEntity> root, CriteriaQuery<?> query, CriteriaBuilder criteriaBuilder) -> {
+			Join<MovieGenreEntity, MovieEntity> movieJoin = root.join("movies", JoinType.LEFT);
 			query.orderBy(criteriaBuilder.asc(root.get("name")));
 
 			return criteriaBuilder.and(criteriaBuilder.isNotNull(movieJoin));

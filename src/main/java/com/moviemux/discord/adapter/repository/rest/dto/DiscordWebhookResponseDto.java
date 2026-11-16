@@ -1,6 +1,6 @@
 package com.moviemux.discord.adapter.repository.rest.dto;
 
-import com.moviemux.discord.domain.DiscordWebhookInfo;
+import com.moviemux.discord.domain.model.DiscordWebhookInfo;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -13,6 +13,9 @@ public class DiscordWebhookResponseDto {
 	private String id;
 
 	public DiscordWebhookInfo toDomain() {
+		if (id == null || id.isBlank()) {
+			throw new IllegalArgumentException("Missing webhook message id");
+		}
 		return DiscordWebhookInfo.builder().messageId(id).build();
 	}
 }

@@ -13,12 +13,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class StatisticSpringController {
 
-	private final StatisticController controller;
+  private final StatisticController controller;
 
-	@GetMapping("/movies")
-	public ResponseEntity<MovieStatisticResponseDto> sendMovieMessageDiscord() {
-		MovieStatisticResponseDto response = controller.charts();
+  @GetMapping("/movies")
+  public ResponseEntity<MovieStatisticResponseDto> sendMovieMessageDiscord() {
+    MovieStatisticResponseDto response = controller.charts();
 
-		return ResponseEntity.ok(response);
-	}
+    return ResponseEntity.ok(response);
+  }
 }

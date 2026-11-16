@@ -1,13 +1,8 @@
 package com.moviemux.wishlist.adapter.controller.dto;
 
+import com.moviemux.wishlist.domain.model.MoviesWishlists;
 import java.time.LocalDate;
 import java.util.UUID;
-
-import com.moviemux.wishlist.domain.MovieWishlist;
-import com.moviemux.wishlist.domain.MoviesWishlists;
-import com.moviemux.wishlist.domain.MoviesWishlistsKey;
-import com.moviemux.wishlist.domain.Wishlist;
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,23 +14,14 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class MovieWishlistRequestDto {
 
-	private Long tmdbId;
-	private String title;
-	private String titleEnglish;
-	private String urlImage;
-	private LocalDate releaseDate;
+  private Long tmdbId;
+  private String title;
+  private String titleEnglish;
+  private String urlImage;
+  private LocalDate releaseDate;
 
-	public MoviesWishlists toDomain(UUID wishlistId) {
-		return MoviesWishlists.builder()
-				.id(new MoviesWishlistsKey(wishlistId, tmdbId))
-				.wishlist(Wishlist.builder().id(wishlistId).build())
-				.movieWishlist(MovieWishlist.builder()
-						.tmdbId(tmdbId)
-						.title(title)
-						.titleEnglish(titleEnglish)
-						.releaseDate(releaseDate)
-						.build())
-				.build();
-	}
-
+  public MoviesWishlists toDomain(UUID wishlistId) {
+    return com.moviemux.wishlist.adapter.controller.mapper.WishlistHttpMapper.toDomain(
+        this, wishlistId);
+  }
 }

@@ -1,27 +1,12 @@
 package com.moviemux.mail.adapter.repository.rest.dto;
 
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import com.moviemux.mail.domain.SendMailTemplate;
-import lombok.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.moviemux.mail.domain.model.SendMailTemplate;
+import java.util.Map;
 
-import java.util.LinkedHashMap;
-
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@ToString
-@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public class SendMailTemplateRequestDto {
-
-	private String to;
-	private String templateId;
-	private LinkedHashMap<String, String> metadata;
-
-	public SendMailTemplateRequestDto(SendMailTemplate sendMailTemplate) {
-		to = sendMailTemplate.getTo();
-		templateId = sendMailTemplate.getTemplateId();
-		metadata = sendMailTemplate.getParams();
-	}
+public record SendMailTemplateRequestDto(
+    String to, @JsonProperty("template_id") String templateId, Map<String, String> metadata) {
+  public static SendMailTemplateRequestDto from(SendMailTemplate message) {
+    return new SendMailTemplateRequestDto(message.to(), message.templateId(), message.metadata());
+  }
 }

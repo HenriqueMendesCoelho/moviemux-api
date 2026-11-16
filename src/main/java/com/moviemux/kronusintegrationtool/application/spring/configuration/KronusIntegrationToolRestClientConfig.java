@@ -11,24 +11,17 @@ import org.springframework.web.client.RestClient;
 
 @Configuration
 public class KronusIntegrationToolRestClientConfig {
-
-	@Value("${kit.url}")
-	private String kitUrl;
-
-	@Value("${kit.key}")
-	private String apiKeyKit;
-
-	@Bean
-	RestClient restClientKit(ObjectMapper objectMapper) {
-		return RestClient.builder()
-				.baseUrl(kitUrl)
-				.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-				.defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer %s".formatted(apiKeyKit))
-				.messageConverters(converters -> {
-					converters.removeIf(c -> c instanceof MappingJackson2HttpMessageConverter);
-					converters.add(new MappingJackson2HttpMessageConverter(objectMapper));
-				})
-				.build();
-	}
-
+  @Bean
+  public RestClient restClientKit(ObjectMapper mapper, @Value("${kit.url}") String url,
+      @Value("${kit.key}") String apiKey) {
+    return RestClient.builder()
+        .baseUrl(url)
+        .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+        .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+        .messageConverters(converters -> {
+          converters.removeIf(converter -> converter instanceof MappingJackson2HttpMessageConverter);
+          converters.add(new MappingJackson2HttpMessageConverter(mapper));
+        })
+        .build();
+  }
 }

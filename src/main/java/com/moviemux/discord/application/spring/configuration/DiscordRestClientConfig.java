@@ -11,20 +11,15 @@ import org.springframework.web.client.RestClient;
 
 @Configuration
 public class DiscordRestClientConfig {
-
-	@Value("${discord.webhook.url}")
-	private String webhookUrl;
-
-	@Bean
-	RestClient restClientDiscord(ObjectMapper objectMapper) {
-		return RestClient.builder()
-				.baseUrl(webhookUrl)
-				.defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-				.messageConverters(converters -> {
-					converters.removeIf(c -> c instanceof MappingJackson2HttpMessageConverter);
-					converters.add(new MappingJackson2HttpMessageConverter(objectMapper));
-				})
-				.build();
-	}
-
+  @Bean
+  public RestClient restClientDiscord(ObjectMapper mapper, @Value("${discord.webhook.url}") String url) {
+    return RestClient.builder()
+        .baseUrl(url)
+        .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+        .messageConverters(converters -> {
+          converters.removeIf(converter -> converter instanceof MappingJackson2HttpMessageConverter);
+          converters.add(new MappingJackson2HttpMessageConverter(mapper));
+        })
+        .build();
+  }
 }

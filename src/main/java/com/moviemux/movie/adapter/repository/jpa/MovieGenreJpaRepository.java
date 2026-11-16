@@ -7,14 +7,14 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.moviemux.movie.domain.MovieGenre;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieGenreEntity;
 
 @Primary
-public interface MovieGenreJpaRepository extends JpaRepository<MovieGenre, Long>, JpaSpecificationExecutor<MovieGenre> {
+public interface MovieGenreJpaRepository extends JpaRepository<MovieGenreEntity, Long>, JpaSpecificationExecutor<MovieGenreEntity> {
 
 	@Transactional(readOnly = true)
-	MovieGenre findByName(String name);
+	MovieGenreEntity findByName(String name);
 
 	@Transactional(readOnly = true)
-	List<MovieGenre> findAllByOrderByNameAsc();
+	List<MovieGenreEntity> findAllByOrderByNameAsc();
 }

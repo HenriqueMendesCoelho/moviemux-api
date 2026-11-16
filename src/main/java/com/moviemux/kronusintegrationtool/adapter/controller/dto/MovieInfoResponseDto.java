@@ -1,6 +1,6 @@
 package com.moviemux.kronusintegrationtool.adapter.controller.dto;
 
-import com.moviemux.kronusintegrationtool.domain.MovieSummary;
+import com.moviemux.kronusintegrationtool.domain.model.MovieSummary;
 import org.apache.commons.lang3.StringUtils;
 
 import lombok.AllArgsConstructor;

@@ -1,13 +1,13 @@
 package com.moviemux.movie.adapter.repository.rest.impl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.moviemux.movie.adapter.repository.rest.MovieSocketRespository;
-import com.moviemux.movie.adapter.repository.rest.dto.MovieNoteRestRequestDto;
-import com.moviemux.movie.domain.MovieNote;
-import lombok.RequiredArgsConstructor;
+import com.moviemux.movie.adapter.repository.rest.mapper.NotificationMapper;
+import com.moviemux.movie.domain.model.NotificationNote;
+import com.moviemux.movie.domain.repository.MovieNotificationRepository;
+
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.security.web.firewall.RequestRejectedException;
+import org.springframework.beans.factory.annotation.Qualifier;
+import com.moviemux.movie.domain.exception.NotificationFailure;
 import org.springframework.stereotype.Repository;
 import org.springframework.web.client.RestClient;
 
@@ -17,14 +17,16 @@ import java.util.UUID;
 
 @Repository
 @Slf4j
-@RequiredArgsConstructor
-public class MovieSocketRestRespositoryImpl implements MovieSocketRespository {
+public class MovieSocketRestRespositoryImpl implements MovieNotificationRepository {
 
 	private final RestClient restClientSocketApi;
-	private final ObjectMapper mapper;
 
-	@Override
-	public void emitAllMoviesEvent(String event) {
+	public MovieSocketRestRespositoryImpl(@Qualifier("restClientSocketApi") RestClient restClientSocketApi) {
+		this.restClientSocketApi = restClientSocketApi;
+	}
+
+    @Override
+    public void notifyAllMovies(String event) {
 		try {
 			if (StringUtils.isBlank(event)) {
 				event = "update";
@@ -37,22 +39,22 @@ public class MovieSocketRestRespositoryImpl implements MovieSocketRespository {
 					.toBodilessEntity();
 		} catch (Exception e) {
 			log.error("Error on Socket Api emit event all movies:", e);
-			throw new RequestRejectedException(e.getMessage());
+			throw new NotificationFailure(e);
 		}
 	}
 
-	@Override
-	public void emitEventMovie(UUID movieId, String event, MovieNote note, String emmitedByUserId) {
+    @Override
+    public Delivery notifyMovie(UUID movieId, String event, NotificationNote note, String emmitedByUserId) {
 		try {
 			if (StringUtils.isBlank(event) || movieId == null) {
-				return;
+				return Delivery.SKIPPED;
 			}
 
 			Map<String, Object> map = new HashMap<>();
 			map.put("event", event);
 			map.put("movie", movieId);
 			if (note != null) {
-				map.put("content", new MovieNoteRestRequestDto(note));
+				map.put("content", NotificationMapper.toRequest(note));
 			}
 			if (emmitedByUserId != null) {
 				map.put("emmitedByUserId", emmitedByUserId);
@@ -63,9 +65,10 @@ public class MovieSocketRestRespositoryImpl implements MovieSocketRespository {
 					.body(map)
 					.retrieve()
 					.toBodilessEntity();
+            return Delivery.SENT;
 		} catch (Exception e) {
 			log.error("Error on Socket Api emit event movie:", e);
-			throw new RequestRejectedException(e.getMessage());
+			throw new NotificationFailure(e);
 		}
 	}
 

@@ -5,16 +5,18 @@ import com.moviemux.kronusintegrationtool.adapter.controller.dto.CreditResponseD
 import com.moviemux.kronusintegrationtool.adapter.controller.dto.MovieSearchResponseDto;
 import com.moviemux.kronusintegrationtool.adapter.controller.dto.MovieSummaryResponseDto;
 import com.moviemux.kronusintegrationtool.adapter.controller.dto.WatchProvidersResponseDto;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/movie/tmdb")
-@RequiredArgsConstructor
 public class KronusIntegrationToolSpringController {
 
 	private final KronusIntegrationToolController controller;
+
+	public KronusIntegrationToolSpringController(KronusIntegrationToolController controller) {
+		this.controller = controller;
+	}
 
 	@GetMapping("/{movieId}/summary")
 	public ResponseEntity<?> summaryMovieTmdb(@PathVariable Long movieId) {

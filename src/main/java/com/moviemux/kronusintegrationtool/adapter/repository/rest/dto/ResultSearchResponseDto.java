@@ -5,7 +5,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import com.moviemux.kronusintegrationtool.domain.ResultSearch;
+import com.moviemux.kronusintegrationtool.domain.model.ResultSearch;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -37,22 +37,7 @@ public class ResultSearchResponseDto {
 	private Integer voteCount;
 
 	public ResultSearch toDomain() {
-		return ResultSearch.builder()
-				.adult(adult)
-				.backdropPath(backdropPath)
-				.genreIds(genreIds)
-				.id(id)
-				.originalLanguage(originalLanguage)
-				.originalTitle(originalTitle)
-				.overview(overview)
-				.popularity(popularity)
-				.posterPath(posterPath)
-				.releaseDate(releaseDate)
-				.title(title)
-				.video(video)
-				.voteAverage(voteAverage)
-				.voteCount(voteCount)
-				.build();
+        return com.moviemux.kronusintegrationtool.adapter.repository.rest.mapper.CatalogResponseMapper.result(this);
 	}
 
 }

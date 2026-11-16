@@ -2,9 +2,9 @@ package com.moviemux.movie.adapter.repository.jpa;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import com.moviemux.movie.domain.MovieNote;
-import com.moviemux.movie.domain.MovieNoteKey;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteEntity;
+import com.moviemux.movie.adapter.repository.postgres.entity.MovieNoteKeyEntity;
 
-public interface MovieNoteJpaRepository extends JpaRepository<MovieNote, MovieNoteKey> {
+public interface MovieNoteJpaRepository extends JpaRepository<MovieNoteEntity, MovieNoteKeyEntity> {
 
 }

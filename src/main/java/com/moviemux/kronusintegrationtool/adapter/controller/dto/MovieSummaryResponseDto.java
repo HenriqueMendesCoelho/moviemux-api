@@ -3,7 +3,7 @@ package com.moviemux.kronusintegrationtool.adapter.controller.dto;
 import java.time.LocalDate;
 import java.util.List;
 
-import com.moviemux.kronusintegrationtool.domain.MovieSummary;
+import com.moviemux.kronusintegrationtool.domain.model.MovieSummary;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

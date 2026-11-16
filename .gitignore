@@ -32,14 +32,15 @@ build/
 ### VS Code ###
 .vscode/
 
-### AI ###
-.claude
+### Private local instructions and specifications ###
+.claude/
+.agents/
+.codex/
 CLAUDE.md
 AGENTS.md
+/openspec/
 
-### dotenv environment variable files ###
+### Local environment configuration ###
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.*
+!.env.example
