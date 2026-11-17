@@ -159,4 +159,15 @@ V2 adds ranking authorization tables without copying or modifying the historical
 movie collection. Owner membership is checked at transaction commit, and scoped
 grants require the corresponding membership. Existing-user references are
 restrictive, not cascading history deletions. This slice exposes no ranking
-creation, membership mutation, ownership transfer or archive API.
+creation, grant-management, ownership transfer or archive API.
+
+
+`DELETE /rankings/{rankingId}/membership/self` deactivates only the caller's
+existing non-owner membership. It does not require READ and returns idempotent
+`204` for an already inactive membership. Missing ranking/membership returns
+generic `404 ranking.not_found`; the current owner receives
+`409 ranking.owner_exit_requires_destination` without any change.
+The transaction locks ranking then membership and preserves grants and historical
+ratings. Departure starts no recovery TTL and publishes no external event.
+Current access endpoints observe committed departure with the same token.
+This does not implement account deletion, owner exit or realtime session cutover.
