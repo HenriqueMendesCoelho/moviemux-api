@@ -8,7 +8,8 @@ import java.util.Objects;
 import java.util.UUID;
 
 /** Exact sum/count for already authorized, eligible, fully revealed votes only.
- * No rounded average or public DTO is produced before disclosure policy is approved.
+ * Use DisclosedMovieRatings to exclude hidden rounds before aggregation.
+ * Display rounding remains a separate presentation policy.
  */
 public record RevealedRatingAggregate(BigDecimal total, BigInteger votes) {
   public RevealedRatingAggregate {
