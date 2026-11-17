@@ -9,6 +9,7 @@ import com.moviemux.ranking.domain.model.RankingVisibility;
 import com.moviemux.ranking.domain.port.CurrentRankingAccess;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.Set;
 
 /** Scope eligibility only: rating windows and response disclosure require their own policies. */
 public final class RankingAuthorization {
@@ -24,7 +25,14 @@ public final class RankingAuthorization {
 
   /** Return the exact authorized snapshot rather than racing a second membership read. */
   public RankingAccessSnapshot authorize(RankingActor actor, UUID rankingId, RankingCapability capability) {
-    if (actor == null || !actor.accountEnabled() || rankingId == null || capability == null) {
+    if (capability == null) throw new RankingAccessDeniedException();
+    return authorizeAny(actor, rankingId, Set.of(capability));
+  }
+
+  /** Evaluate alternative local capabilities against one current snapshot, never multiple reads. */
+  public RankingAccessSnapshot authorizeAny(RankingActor actor, UUID rankingId, Set<RankingCapability> alternatives) {
+    if (actor == null || !actor.accountEnabled() || rankingId == null || alternatives == null
+        || alternatives.isEmpty() || alternatives.stream().anyMatch(Objects::isNull)) {
       throw new RankingAccessDeniedException();
     }
     var snapshot = access.find(rankingId, actor.userId())
@@ -35,11 +43,13 @@ public final class RankingAuthorization {
       throw new RankingAccessDeniedException();
     }
     if (!actor.userId().equals(snapshot.ranking().ownerUserId())
-        && !member.capabilities().contains(capability)) {
+        && alternatives.stream().noneMatch(member.capabilities()::contains)) {
       throw new RankingAccessDeniedException();
     }
-    if (snapshot.ranking().archived() && capability != RankingCapability.READ)
+    if (snapshot.ranking().archived() && !alternatives.contains(RankingCapability.READ))
       throw new RankingAccessDeniedException();
+    if (snapshot.ranking().archived() && !actor.userId().equals(snapshot.ranking().ownerUserId())
+        && !member.capabilities().contains(RankingCapability.READ)) throw new RankingAccessDeniedException();
     return snapshot;
   }
 
