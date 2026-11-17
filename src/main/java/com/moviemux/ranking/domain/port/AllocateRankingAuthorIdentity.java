@@ -1,10 +1,7 @@
 package com.moviemux.ranking.domain.port;
 
-import com.moviemux.ranking.domain.model.RankingAuthorIdentity;
-import java.util.UUID;
+import com.moviemux.ranking.domain.repository.RankingAuthorIdentities;
 
-/** Internal allocation only; callers must supply an existing contextual membership and transaction. */
+/** Internal port retaining the public allocation contract without exposing persistence details. */
 @FunctionalInterface
-public interface AllocateRankingAuthorIdentity {
-  RankingAuthorIdentity getOrCreate(UUID rankingId, UUID accountId);
-}
+public interface AllocateRankingAuthorIdentity extends RankingAuthorIdentities {}
