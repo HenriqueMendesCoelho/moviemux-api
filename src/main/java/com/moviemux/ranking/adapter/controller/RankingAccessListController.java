@@ -3,7 +3,8 @@ package com.moviemux.ranking.adapter.controller;
 import com.moviemux.ranking.domain.exception.*;
 import com.moviemux.ranking.domain.model.RankingActor;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.moviemux.ranking.domain.model.RankingAccessView;
+import com.moviemux.ranking.domain.model.RankingCapability;
+import java.util.Set;
 import java.util.List;
 import com.moviemux.ranking.domain.usecase.ListRankingAccessUseCase;
 import java.util.Map;
@@ -32,10 +33,13 @@ public class RankingAccessListController {
         && principal.isAccountNonExpired() && principal.isCredentialsNonExpired());
     var page = useCase.execute(actor, after, limit);
     return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-        .body(new PageResponse(page.items(), page.nextCursor()));
+        .body(new PageResponse(page.items().stream()
+            .map(item -> new AccessResponse(item.rankingId(), item.capabilities())).toList(), page.nextCursor()));
   }
 
-  public record PageResponse(List<RankingAccessView> items,
+  public record AccessResponse(UUID rankingId, Set<RankingCapability> capabilities) {}
+
+  public record PageResponse(List<AccessResponse> items,
       @JsonInclude(JsonInclude.Include.ALWAYS) UUID nextCursor) {}
 
   @ExceptionHandler(RankingAccessDeniedException.class)

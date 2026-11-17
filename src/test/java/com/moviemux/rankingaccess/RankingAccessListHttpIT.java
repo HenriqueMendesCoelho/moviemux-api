@@ -157,6 +157,44 @@ class RankingAccessListHttpIT {
     assertThat(authorizationRows()).isEqualTo(before);
   }
 
+  @Test void revokedCursorAndInaccessibleCursorRemainOnlyExclusivePositionBounds() throws Exception {
+    var owner = user(false);
+    var member = user(false);
+    var ranks = new ArrayList<UUID>();
+    for (int i = 0; i < 5; i++) ranks.add(ranking(owner, "PRIVATE"));
+    ranks.sort(java.util.Comparator.comparing(UUID::toString));
+    // The middle rank is never accessible to this actor, including as a cursor.
+    for (int i : new int[]{0, 1, 3, 4}) membership(ranks.get(i), member, "READ", "RATE_OWN");
+    var first = list(member, "?limit=2");
+    assertThat(first.status()).isEqualTo(200);
+    assertThat(itemIds(first)).containsExactly(ranks.get(0).toString(), ranks.get(1).toString());
+    String cursor = first.body().required("next_cursor").asText();
+    assertThat(cursor).isEqualTo(ranks.get(1).toString());
+    jdbc.update("update " + table("ranking_membership") + " set active=false where ranking_id=? and user_id=?",
+        ranks.get(1), member.id());
+    var before = authorizationRows();
+    var next = list(member, "?limit=2&after=" + cursor);
+    assertThat(next.status()).isEqualTo(200);
+    assertThat(itemIds(next)).containsExactly(ranks.get(3).toString(), ranks.get(4).toString());
+    assertThat(next.body().required("next_cursor").isNull()).isTrue();
+    for (int repeat = 0; repeat < 2; repeat++) {
+      var inaccessibleCursor = list(member, "?limit=2&after=" + ranks.get(2));
+      assertThat(inaccessibleCursor.status()).isEqualTo(200);
+      assertThat(inaccessibleCursor.body()).isEqualTo(next.body());
+      for (var item : inaccessibleCursor.body().required("items"))
+        assertThat(fields(item)).containsExactlyInAnyOrder("ranking_id", "capabilities");
+    }
+    assertThat(itemIds(list(member, ""))).containsExactly(
+        ranks.get(0).toString(), ranks.get(3).toString(), ranks.get(4).toString());
+    assertThat(authorizationRows()).isEqualTo(before);
+  }
+
+  private static List<String> itemIds(ApiResponse response) {
+    var ids = new ArrayList<String>();
+    response.body().required("items").forEach(item -> ids.add(item.required("ranking_id").asText()));
+    return ids;
+  }
+
   @Test void sameTokenReflectsRevocationAndOwnersNeedNoExplicitReadGrant() throws Exception {
     var owner = user(false);
     var member = user(false);
