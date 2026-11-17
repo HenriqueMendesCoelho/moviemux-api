@@ -58,5 +58,17 @@
   },
   "mail/application": {
     "LINE": 100
+  },
+  "ranking/domain": {
+    "LINE": 95,
+    "BRANCH": 92
+  },
+  "rankingcontent/domain": {
+    "LINE": 95,
+    "BRANCH": 95
+  },
+  "progression/domain": {
+    "LINE": 100,
+    "BRANCH": 100
   }
 }
