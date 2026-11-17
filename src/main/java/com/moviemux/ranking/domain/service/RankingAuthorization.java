@@ -2,6 +2,7 @@ package com.moviemux.ranking.domain.service;
 
 import com.moviemux.ranking.domain.exception.RankingAccessDeniedException;
 import com.moviemux.ranking.domain.model.RankingActor;
+import com.moviemux.ranking.domain.model.RankingAccessSnapshot;
 import com.moviemux.ranking.domain.model.RankingCapability;
 import com.moviemux.ranking.domain.model.RankingIdentity;
 import com.moviemux.ranking.domain.model.RankingVisibility;
@@ -18,6 +19,11 @@ public final class RankingAuthorization {
   }
 
   public void require(RankingActor actor, UUID rankingId, RankingCapability capability) {
+    authorize(actor, rankingId, capability);
+  }
+
+  /** Return the exact authorized snapshot rather than racing a second membership read. */
+  public RankingAccessSnapshot authorize(RankingActor actor, UUID rankingId, RankingCapability capability) {
     if (actor == null || !actor.accountEnabled() || rankingId == null || capability == null) {
       throw new RankingAccessDeniedException();
     }
@@ -32,6 +38,7 @@ public final class RankingAuthorization {
         && !member.capabilities().contains(capability)) {
       throw new RankingAccessDeniedException();
     }
+    return snapshot;
   }
 
   /** Resource scope must come from authoritative persistence, not another request parameter. */

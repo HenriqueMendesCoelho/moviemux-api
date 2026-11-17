@@ -89,9 +89,10 @@ Inspect and compare its actual schema, including objects not represented by JPA,
 before choosing an explicit baseline and rollout procedure.
 
 V1 preserves the historical Hibernate DDL. Three cross-module foreign keys are
-owned by SQL migrations rather than JPA associations. The migration tests compare
+owned by SQL migrations rather than JPA associations. The V1 migration tests compare
 the complete materialized PostgreSQL catalog against an immutable historical DDL
-fixture, including all 13 tables and 12 foreign keys. Hibernate validation and
+fixture, including all 13 tables and 12 foreign keys. Subsequent migration tests
+separately verify that the historical tables and data are preserved. Hibernate validation and
 Flyway checksums alone do not detect every missing constraint. Keep the historical
 fixture and V1 immutable; make subsequent schema changes in new migrations.
 
@@ -132,3 +133,21 @@ an existing transaction and remain held until commit or rollback. They protect
 concurrent operations through this application, not direct SQL writes or older
 application versions that do not follow the same locking protocol. No schema
 migration or change to historical V1 is required for this correction.
+
+## Ranking access
+
+`GET /rankings/{rankingId}/access` (under the configured API context path) returns
+only `ranking_id` and the authenticated caller's current local `capabilities`.
+Active membership with read access is required, including for public rankings;
+this endpoint is not the anonymous public ranking view. Active owners receive
+all local capabilities. Global administrator roles do not bypass membership.
+Missing and inaccessible rankings both return `404` with
+`{"code":"ranking.not_found"}`. Success and scope-denial responses use `no-store`.
+The server reads membership and grants together for each request, rather than
+trusting token role claims, request headers or previously cached grants.
+
+V2 adds ranking authorization tables without copying or modifying the historical
+movie collection. Owner membership is checked at transaction commit, and scoped
+grants require the corresponding membership. Existing-user references are
+restrictive, not cascading history deletions. This slice exposes no ranking
+creation, membership mutation, ownership transfer or archive API.
