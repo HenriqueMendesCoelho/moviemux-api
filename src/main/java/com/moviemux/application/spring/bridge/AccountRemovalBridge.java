@@ -15,11 +15,17 @@ public class AccountRemovalBridge implements AccountRemoval {
   private final MovieOwnershipRemoval movies;
   private final com.moviemux.wishlist.domain.repository.WishlistOwnershipRemoval wishlists;
 
+  private final com.moviemux.movie.domain.repository.MovieAccountHistory movieHistory;
+  private final com.moviemux.ranking.domain.repository.RankingAccountHistory rankingHistory;
+
   @Override
   @Transactional(rollbackFor = Exception.class)
   public void remove(UUID id) {
     var target = users.prepare(id);
     if (target == null) return;
+    // prepare holds the user row lock; reference inserts must finish before these checks or wait.
+    if (movieHistory.hasProtectedHistory(target.userId()) || rankingHistory.hasProtectedHistory(target.userId()))
+      throw new com.moviemux.user.domain.exception.AccountDeletionRequiresHistoryMigrationException();
     movies.detach(target.userId());
     wishlists.removeOwnedBy(target.userId());
     target.deleteAfterMoviesDetached();

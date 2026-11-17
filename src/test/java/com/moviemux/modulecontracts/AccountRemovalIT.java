@@ -95,7 +95,8 @@ class AccountRemovalIT {
   }
 
   @Test
-  void committedRemovalDetachesMoviesAndDeletesOnlyOwnedAccountData() {
+  void unprotectedAccountStillUsesLegacyRemovalWithoutDeletingOtherUsersNotes() {
+    jdbc.update("delete from movie_note where user_id=?",owner);
     removal.remove(owner);
     assertThat(jdbc.queryForObject("select user_id from movie where id=?", UUID.class, movie))
         .isNull();
@@ -112,17 +113,35 @@ class AccountRemovalIT {
 
   @Test
   void checkedFailureRollsBackAllModuleWrites() {
+    jdbc.update("delete from movie_note where user_id=?",owner);
     assertThatThrownBy(() -> failure.removeThenFail(owner))
         .isInstanceOf(Exception.class)
         .hasMessage("synthetic checked failure");
     assertThat(jdbc.queryForObject("select user_id from movie where id=?", UUID.class, movie))
         .isEqualTo(owner);
-    assertThat(count("movie_note")).isEqualTo(2);
+    assertThat(count("movie_note")).isEqualTo(1);
     assertThat(count("user_wishlist")).isEqualTo(1);
     assertThat(count("movie_wishlist_user_wishlist")).isEqualTo(1);
     for (String table :
         java.util.List.of("\"user\"", "user_preferences", "user_statistics", "user_roles"))
       assertThat(count(table)).isEqualTo(2);
+  }
+
+  @Test void protectedNotesBlockBeforeAnyModuleMutation() {
+    var before=allRows();
+    assertThatThrownBy(()->removal.remove(owner)).isInstanceOf(com.moviemux.user.domain.exception.AccountDeletionRequiresHistoryMigrationException.class);
+    assertThat(allRows()).isEqualTo(before);
+  }
+
+  @Test void missingAccountRemainsNoOp() {
+    var before=allRows();removal.remove(UUID.randomUUID());assertThat(allRows()).isEqualTo(before);
+  }
+
+  private java.util.List<String> allRows() {
+    var rows=new java.util.ArrayList<String>();
+    for(String table:java.util.List.of("\"user\"","movie","movie_note","user_wishlist","movie_wishlist_user_wishlist","user_preferences","user_statistics","user_roles"))
+      rows.addAll(jdbc.queryForList("select row_to_json(t)::text from "+table+" t order by row_to_json(t)::text",String.class));
+    return rows;
   }
 
   @Test

@@ -198,3 +198,11 @@ return only READ to callers who already qualify; grant changes are rejected with
 standalone archive endpoint, account-deletion workflow or reopen operation.
 Voluntary self-departure retains its existing behavior; complete lifecycle
 activation and legacy data cutover are not provided by this increment.
+
+Administrative account deletion (both supported DELETE and POST routes) returns
+`409 account.deletion_requires_history_migration` with no-store when the account
+has legacy ratings or any ranking/membership link, including inactive membership.
+The user row is locked before reference checks; protected accounts, credentials,
+ratings and wishlists remain unchanged. Accounts without these references retain
+the legacy deletion behavior. This guard does not implement recoverable account
+deletion, pseudonymization, or legacy ranking assignment.

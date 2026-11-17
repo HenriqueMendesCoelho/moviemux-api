@@ -16,6 +16,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class UserLifecycleBehaviorTest {
   @Mock UserRepository repository;
+  @Mock com.moviemux.movie.domain.repository.MovieAccountHistory movieHistory;
+  @Mock com.moviemux.ranking.domain.repository.RankingAccountHistory rankingHistory;
   @Mock com.moviemux.movie.domain.repository.MovieOwnershipRemoval movieRemoval;
   @Mock com.moviemux.wishlist.domain.repository.WishlistOwnershipRemoval wishlistRemoval;
   @Mock com.moviemux.user.domain.repository.InviteRepository invites;
@@ -30,10 +32,16 @@ class UserLifecycleBehaviorTest {
   void assembleRemovalWithPublicPorts() {
     deleteUser =
         new com.moviemux.application.spring.bridge.AccountRemovalBridge(
-            new com.moviemux.user.adapter.repository.postgres.UserRemovalPreparationAdapter(
-                repository),
+            id -> {
+              var user=repository.getReferenceById(id);
+              if(user==null)return null;
+              return new com.moviemux.user.domain.repository.UserRemovalTarget() {
+                public UUID userId(){return id;}
+                public void deleteAfterMoviesDetached(){repository.delete(user);}
+              };
+            },
             movieRemoval,
-            wishlistRemoval);
+            wishlistRemoval, movieHistory, rankingHistory);
   }
 
   @InjectMocks CreateInviteUseCaseImpl createInvite;
@@ -61,6 +69,22 @@ class UserLifecycleBehaviorTest {
     assertThatThrownBy(() -> deleteUser.remove(id)).isInstanceOf(IllegalStateException.class);
     verifyNoInteractions(wishlistRemoval);
     verify(repository, never()).delete(any(UserEntity.class));
+  }
+
+  @Test void protectedMovieHistoryStopsEveryDestructivePort() {
+    UUID id=UUID.randomUUID();when(repository.getReferenceById(id)).thenReturn(UserEntity.builder().id(id).build());
+    when(movieHistory.hasProtectedHistory(id)).thenReturn(true);
+    assertThatThrownBy(()->deleteUser.remove(id)).isInstanceOf(com.moviemux.user.domain.exception.AccountDeletionRequiresHistoryMigrationException.class);
+    verifyNoInteractions(movieRemoval,wishlistRemoval,rankingHistory);
+    verify(repository,never()).delete(any(UserEntity.class));
+  }
+
+  @Test void anyRankingHistoryStopsEveryDestructivePort() {
+    UUID id=UUID.randomUUID();when(repository.getReferenceById(id)).thenReturn(UserEntity.builder().id(id).build());
+    when(rankingHistory.hasProtectedHistory(id)).thenReturn(true);
+    assertThatThrownBy(()->deleteUser.remove(id)).isInstanceOf(com.moviemux.user.domain.exception.AccountDeletionRequiresHistoryMigrationException.class);
+    verifyNoInteractions(movieRemoval,wishlistRemoval);
+    verify(repository,never()).delete(any(UserEntity.class));
   }
 
   @Test

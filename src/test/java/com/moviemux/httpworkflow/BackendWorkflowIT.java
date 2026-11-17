@@ -340,25 +340,20 @@ class BackendWorkflowIT {
     assertThat(activity.required("ratings_given").asInt()).isEqualTo(1);
     assertThat(activity.required("average_rating_movies").asDouble()).isEqualTo(6);
 
-    // Removing the owner must leave their movie and other users' ratings intact.
-    json("DELETE", "/restricted/user/" + memberId, null, adminToken, 200);
-    get("/restricted/user/member@example.test", adminToken, 204);
-    assertThat(get("/restricted/user", adminToken, 200).size()).isEqualTo(1);
+    // Account deletion cannot discard legacy ratings before identity/history migration.
+    JsonNode deletionConflict=json("DELETE", "/restricted/user/" + memberId, null, adminToken, 409);
+    assertThat(deletionConflict.required("code").asText()).isEqualTo("account.deletion_requires_history_migration");
+    get("/restricted/user/member@example.test", adminToken, 200);
+    assertThat(get("/restricted/user", adminToken, 200).size()).isEqualTo(2);
     JsonNode retained = get("/movie/" + memberMovieId, adminToken, 200);
     assertThat(retained.required("id").asText()).isEqualTo(memberMovieId);
-    assertThat(retained.has("user_id")).isFalse();
-    assertThat(retained.has("user_name")).isFalse();
-    assertThat(retained.required("notes").size()).isEqualTo(1);
-    assertThat(retained.required("notes").get(0).required("user").required("id").asText())
-        .isEqualTo(adminId);
-    assertThat(retained.required("notes").get(0).required("note").asInt()).isEqualTo(8);
-    get("/user/wishlist/" + memberWishlistId, adminToken, 204);
+    assertThat(retained.required("user_id").asText()).isEqualTo(memberId);
+    assertThat(retained.required("notes").size()).isEqualTo(2);
+    get("/user/wishlist/" + memberWishlistId, adminToken, 200);
     assertThat(get("/user/wishlist", adminToken, 200).size()).isEqualTo(1);
-    // Existing account-removal behavior does not evict the statistics cache. Expose the stale
-    // response explicitly rather than disabling caching or claiming immediate recomputation.
     assertThat(get("/statistic/movies", adminToken, 200)).isEqualTo(statistics);
 
-    // Administrative CRUD also works after detaching the former owner's scalar foreign key.
+    // Explicit administrative movie CRUD remains separate from blocked account deletion.
     json(
         "PUT",
         "/movie/" + memberMovieId + "/update",
@@ -366,8 +361,12 @@ class BackendWorkflowIT {
         adminToken,
         200);
     JsonNode refreshedStatistics = get("/statistic/movies", adminToken, 200);
-    assertThat(refreshedStatistics.required("average_rate").asDouble()).isEqualTo(8);
-    assertThat(refreshedStatistics.required("average_runtime").asInt()).isEqualTo(102);
+    // Account removal was blocked: all three ratings remain, 8 + 8 + 6 = 22 / 3 = 7.33.
+    double retainedAverage = java.math.BigDecimal.valueOf(8 + 8 + 6)
+        .divide(java.math.BigDecimal.valueOf(3), 2, java.math.RoundingMode.HALF_UP).doubleValue();
+    assertThat(refreshedStatistics.required("average_rate").asDouble()).isEqualTo(retainedAverage);
+    // Metadata edit changes runtimes only: integer projection of (95 + 110) / 2 = 102.
+    assertThat(refreshedStatistics.required("average_runtime").asInt()).isEqualTo((95 + 110) / 2);
     json("DELETE", "/user/wishlist/" + adminWishlistId + "/delete", null, adminToken, 200);
     get("/user/wishlist/" + adminWishlistId, adminToken, 204);
     json("DELETE", "/movie/" + adminMovieId + "/delete", null, adminToken, 200);

@@ -24,6 +24,14 @@ public class UserRestrictedSpringController {
 
   private final UserController controller;
 
+  @ExceptionHandler(com.moviemux.user.domain.exception.AccountDeletionRequiresHistoryMigrationException.class)
+  public ResponseEntity<Map<String,String>> deletionRequiresHistoryMigration() {
+    return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT)
+        .cacheControl(org.springframework.http.CacheControl.noStore())
+        .body(Map.of("code", "account.deletion_requires_history_migration"));
+  }
+
+
   @GetMapping
   @PreAuthorize("hasRole('ADM')")
   public ResponseEntity<List<UserResponseAdmDto>> getAllUsers() {
