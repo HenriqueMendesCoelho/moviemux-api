@@ -70,6 +70,50 @@ class RankingAccessPersistenceIT {
     assertThat(jdbc.queryForList("select version from flyway_schema_history where success order by installed_rank", String.class)).containsExactly("1", "2");
   }
 
+  @Test void explicitlyBaselinedLegacySchemaUpgradesOnceWithoutChangingCatalogOrHistory() throws Exception {
+    // Model the production adoption path using only a disposable schema and synthetic data.
+    // Execute the immutable real V1 without Flyway so there is no SQL V1 history entry.
+    try (var connection = DriverManager.getConnection(url, user, password)) {
+      connection.setSchema(schema);
+      org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,
+          new org.springframework.core.io.ClassPathResource("db/migration/V1__initial_schema.sql"));
+    }
+    var oldTables = tables();
+    assertThat(oldTables).hasSize(13);
+    var before = catalog(oldTables);
+    UUID owner = addUser();
+    UUID movie = UUID.randomUUID();
+    jdbc.update("insert into movie(id,created_at,description,director,english_title,portuguese_title,user_id) values (?,now(),'synthetic baseline history','synthetic','synthetic','synthetic',?)", movie, owner);
+    jdbc.update("insert into movie_note(movie_id,user_id,created_at,note) values (?,?,now(),9)", movie, owner);
+
+    var adopted = Flyway.configure().dataSource(url, user, password).schemas(schema).defaultSchema(schema)
+        .createSchemas(false).baselineOnMigrate(false).cleanDisabled(true).baselineVersion("1")
+        .baselineDescription("Synthetic audited V1 schema").locations("classpath:db/migration").load();
+    assertThatThrownBy(adopted::migrate).isInstanceOf(org.flywaydb.core.api.FlywayException.class)
+        .hasMessageContaining("non-empty");
+    assertThat(jdbc.queryForObject("select count(*) from information_schema.tables where table_schema=? and table_name='flyway_schema_history'", Integer.class, schema)).isZero();
+    assertThat(catalog(oldTables)).containsExactlyElementsOf(before);
+
+    adopted.baseline(); // Explicit approval applies only to this inspected synthetic test fixture.
+    assertThat(catalog(oldTables)).containsExactlyElementsOf(before);
+    assertThat(jdbc.queryForList("select version||':'||type from flyway_schema_history where success order by installed_rank", String.class))
+        .containsExactly("1:BASELINE");
+    assertThat(adopted.migrate().migrationsExecuted).isEqualTo(1);
+    assertThat(tables()).containsExactlyInAnyOrderElementsOf(union(oldTables,
+        Set.of("ranking", "ranking_membership", "ranking_membership_grant")));
+    assertThat(catalog(oldTables)).containsExactlyElementsOf(before);
+    assertThat(jdbc.queryForObject("select count(*) from movie_note", Integer.class)).isEqualTo(1);
+    assertThat(jdbc.queryForObject("select note from movie_note where movie_id=? and user_id=?", Integer.class, movie, owner)).isEqualTo(9);
+    assertThat(jdbc.queryForObject("select user_id from movie where id=?", UUID.class, movie)).isEqualTo(owner);
+    assertThat(jdbc.queryForObject("select description from movie where id=?", String.class, movie)).isEqualTo("synthetic baseline history");
+    assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
+        .containsExactly("1:BASELINE:true", "2:SQL:true");
+    assertThat(adopted.migrate().migrationsExecuted).isZero();
+    assertThat(catalog(oldTables)).containsExactlyElementsOf(before);
+    assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
+        .containsExactly("1:BASELINE:true", "2:SQL:true");
+  }
+
   @Test void readerUsesExactRankingAndActorWithFreshMembershipAndGrants() {
     migrate(null);
     UUID ownerA=addUser(), ownerB=addUser(), member=addUser(), outsider=addUser();
