@@ -214,3 +214,32 @@ between rankings. It does not assign legacy ratings or unlink accounts.
 The detached-author projection contains only `kind: DELETED` and an opaque code;
 it rejects a still-linked account. Clients localize the semantic label without
 changing the code. No identity endpoint or account lifecycle is exposed.
+
+### Legacy ranking rehearsal (not a rollout command)
+
+V5 expands the separate `REMOVE_OWN_ENTRY` capability without broadening existing
+`REMOVE_ENTRY` grants. V6 adds empty contextual movie entries, rounds and ratings;
+V7 adds empty migration bookkeeping. Flyway never runs the backfill.
+
+`OfflineLegacyRankingMigration` is an explicitly constructed, non-Spring offline
+operator primitive, not an HTTP endpoint or automatic startup job. Its caller
+must provide a reviewed DataSource/schema, an explicit owner UUID, a new ranking
+UUID and a technical source-row bound (maximum 100,000). Preview returns a
+fingerprinted plan; apply requires maintenance acknowledgement and rechecks the
+plan after bounded database locks. Stop readers as well as writers: committing
+memberships makes the ranking visible to existing access endpoints.
+
+The approved initial cohort is every account present at the snapshot, in one
+private invitation-only ranking. Members receive READ, RATE_OWN, ADD_ENTRY and
+REMOVE_OWN_ENTRY; global ADM does not grant local powers. Only the chosen owner
+has broad removal/invite authority initially. Later registrations are never
+silently enrolled. A successful replay is read-only and requires unchanged
+source and destination; changed data requires a new operational plan, not an
+upsert over history. No communications, XP or application creation effects run.
+
+The rehearsal preserves nullable/out-of-scale legacy ratings, nullable reveal
+state, absent creators and original timestamps. It does not define how future
+APIs interpret these exceptional states. Existing movie, wishlist and Discord
+rows remain untouched. There is no consumer cutover, account deletion/recovery
+flow, production authorization or guarantee of lossless rollback after new
+contextual writes. Tests use only synthetic disposable PostgreSQL schemas.
