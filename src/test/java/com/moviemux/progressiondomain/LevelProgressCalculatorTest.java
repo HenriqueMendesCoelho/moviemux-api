@@ -178,6 +178,17 @@ class LevelProgressCalculatorTest {
   }
 
   @Test
+  void zeroPreviousCostAtAnExpansionBoundaryFailsEvenWhenResultWouldBeEarlier() {
+    var calculator = new LevelProgressCalculator(policy(0, l -> {
+      BigInteger n = BigInteger.valueOf(l == 7 ? 6 : l);
+      return n.multiply(n.add(BigInteger.ONE)).divide(BigInteger.TWO);
+    }));
+    // At upper=8, cost(6->7) is zero. A search that skipped this invariant would return level 4.
+    assertThatThrownBy(() -> calculator.calculate(BigInteger.TEN))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("strictly increase");
+  }
+
+  @Test
   void progressRecordRejectsImpossibleValues() {
     assertThatThrownBy(() -> new LevelProgress("", 0, BigInteger.ZERO, BigInteger.ZERO, BigInteger.ONE)).isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(() -> new LevelProgress("v", -1, BigInteger.ZERO, BigInteger.ZERO, BigInteger.ONE)).isInstanceOf(IllegalArgumentException.class);
