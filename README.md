@@ -190,3 +190,11 @@ and XP are unchanged; no outbound event or newly delegated authority is created.
 Ranking persistence/transaction failures return only `500 ranking.operation_failed`
 with no-store, without exposing SQL or exception details. This error boundary is
 scoped to ranking controllers and does not change unrelated legacy APIs.
+
+V3 adds nullable internal `ranking.archived_at` without rewriting existing data.
+Once set, its timestamp cannot be cleared or changed. Archived access projections
+return only READ to callers who already qualify; grant changes are rejected with
+`409 ranking.archived_read_only`. This is an internal foundation: there is no
+standalone archive endpoint, account-deletion workflow or reopen operation.
+Voluntary self-departure retains its existing behavior; complete lifecycle
+activation and legacy data cutover are not provided by this increment.

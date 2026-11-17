@@ -41,7 +41,7 @@ public class ListRankingAccessUseCaseImpl implements ListRankingAccessUseCase {
         throw new RankingAccessDeniedException();
       }
       previous = ranking.id();
-      if (items.size() < limit) items.add(new RankingAccessView(ranking.id(), owner
+      if (items.size() < limit) items.add(new RankingAccessView(ranking.id(), ranking.archived() ? EnumSet.of(RankingCapability.READ) : owner
           ? EnumSet.allOf(RankingCapability.class) : member.capabilities()));
     }
     UUID cursor = snapshots.size() > limit ? items.get(items.size() - 1).rankingId() : null;

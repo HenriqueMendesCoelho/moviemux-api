@@ -98,7 +98,7 @@ class MigrationStartupGateIT {
         Files.writeString(temporary.resolve("V1__initial_schema.sql"), v1.replace("varchar(100)", "varchar(101)"));
         assertThat(v1).contains("varchar(100)");
         assertStartupBlocked("checksum mismatch", "--spring.flyway.locations=filesystem:" + temporary);
-        assertThat(flyway().info().current().getVersion().getVersion()).isEqualTo("2");
+        assertThat(flyway().info().current().getVersion().getVersion()).isEqualTo("3");
     }
 
     @Test
@@ -114,7 +114,7 @@ class MigrationStartupGateIT {
             assertThat(result.next()).isTrue();
             assertThat(result.getInt(1)).isZero();
         }
-        assertThat(flyway().info().current().getVersion().getVersion()).isEqualTo("2");
+        assertThat(flyway().info().current().getVersion().getVersion()).isEqualTo("3");
     }
 
     @Test

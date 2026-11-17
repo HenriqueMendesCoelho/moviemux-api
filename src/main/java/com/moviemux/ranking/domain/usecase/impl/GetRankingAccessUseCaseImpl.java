@@ -21,7 +21,8 @@ public class GetRankingAccessUseCaseImpl implements GetRankingAccessUseCase {
   @Override
   public RankingAccessView execute(RankingActor actor, UUID rankingId) {
     var access = authorization.authorize(actor, rankingId, RankingCapability.READ);
-    var grants = actor.userId().equals(access.ranking().ownerUserId())
+    var grants = access.ranking().archived() ? EnumSet.of(RankingCapability.READ)
+        : actor.userId().equals(access.ranking().ownerUserId())
         ? EnumSet.allOf(RankingCapability.class) : access.membership().orElseThrow().capabilities();
     return new RankingAccessView(rankingId, grants);
   }

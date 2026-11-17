@@ -47,6 +47,8 @@ public class ReplaceMemberCapabilitiesController {
 
   @ExceptionHandler(RankingAccessDeniedException.class)
   public ResponseEntity<Map<String,String>> notFound() { return error(HttpStatus.NOT_FOUND, "ranking.not_found"); }
+  @ExceptionHandler(RankingArchivedReadOnlyException.class)
+  public ResponseEntity<Map<String,String>> archived() { return error(HttpStatus.CONFLICT, "ranking.archived_read_only"); }
   @ExceptionHandler(RankingOwnerCapabilitiesImmutableException.class)
   public ResponseEntity<Map<String,String>> immutableOwner() { return error(HttpStatus.CONFLICT, "ranking.owner_capabilities_immutable"); }
   @ExceptionHandler({InvalidRankingCapabilitiesException.class, HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})

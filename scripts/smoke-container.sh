@@ -96,7 +96,10 @@ test "$history" = 1
 ranking_history="$(docker exec "$database" psql -U moviemux_smoke -d moviemux_smoke -Atc \
   "select count(*) from public.flyway_schema_history where version='2' and type='SQL' and success")"
 test "$ranking_history" = 1
+archive_history="$(docker exec "$database" psql -U moviemux_smoke -d moviemux_smoke -Atc \
+  "select count(*) from public.flyway_schema_history where version='3' and type='SQL' and success")"
+test "$archive_history" = 1
 tables="$(docker exec "$database" psql -U moviemux_smoke -d moviemux_smoke -Atc \
   "select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'")"
 test "$tables" = 17
-printf '%s\n' 'PASS: V1 and V2 applied exactly once; 16 application tables plus Flyway history'
+printf '%s\n' 'PASS: V1, V2 and V3 applied exactly once; 16 application tables plus Flyway history'

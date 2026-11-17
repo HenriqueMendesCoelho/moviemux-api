@@ -31,10 +31,11 @@ class MovieMuxApplicationIT {
 
     @Test
     void migrationCompletesBeforeJpaValidationAndApplicationBecomesUsable() {
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("2");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("3");
         assertThat(entityManagerFactory.isOpen()).isTrue();
         assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where version='1' and success", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where version='2' and success", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where version='3' and success", Integer.class)).isEqualTo(1);
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(environment.getProperty("scheduling.enabled")).isEqualTo("false");
         assertThat(environment.getProperty("send.mail")).isEqualTo("false");

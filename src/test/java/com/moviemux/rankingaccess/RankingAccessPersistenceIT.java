@@ -61,12 +61,12 @@ class RankingAccessPersistenceIT {
     UUID movie = UUID.randomUUID();
     jdbc.update("insert into movie(id,created_at,description,director,english_title,portuguese_title,user_id) values (?,now(),'synthetic','synthetic','synthetic','synthetic',?)", movie, owner);
     jdbc.update("insert into movie_note(movie_id,user_id,created_at,note) values (?,?,now(),8)", movie, owner);
-    assertThat(migrate(null)).isEqualTo(1);
+    assertThat(migrate("2")).isEqualTo(1);
     assertThat(tables()).containsExactlyInAnyOrderElementsOf(union(oldTables, Set.of("ranking", "ranking_membership", "ranking_membership_grant")));
     assertThat(catalog(oldTables)).containsExactlyElementsOf(before);
     assertThat(jdbc.queryForObject("select note from movie_note where movie_id=? and user_id=?", Integer.class, movie, owner)).isEqualTo(8);
     assertThat(jdbc.queryForObject("select user_id from movie where id=?", UUID.class, movie)).isEqualTo(owner);
-    assertThat(migrate(null)).isZero();
+    assertThat(migrate("2")).isZero();
     assertThat(jdbc.queryForList("select version from flyway_schema_history where success order by installed_rank", String.class)).containsExactly("1", "2");
   }
 
@@ -88,7 +88,7 @@ class RankingAccessPersistenceIT {
 
     var adopted = Flyway.configure().dataSource(url, user, password).schemas(schema).defaultSchema(schema)
         .createSchemas(false).baselineOnMigrate(false).cleanDisabled(true).baselineVersion("1")
-        .baselineDescription("Synthetic audited V1 schema").locations("classpath:db/migration").load();
+        .baselineDescription("Synthetic audited V1 schema").target("2").locations("classpath:db/migration").load();
     assertThatThrownBy(adopted::migrate).isInstanceOf(org.flywaydb.core.api.FlywayException.class)
         .hasMessageContaining("non-empty");
     assertThat(jdbc.queryForObject("select count(*) from information_schema.tables where table_schema=? and table_name='flyway_schema_history'", Integer.class, schema)).isZero();

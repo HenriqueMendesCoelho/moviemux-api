@@ -10,5 +10,5 @@ import java.util.UUID;
 @FunctionalInterface
 public interface ReplaceRankingMemberCapabilities {
   Outcome replace(UUID rankingId, UUID actorUserId, UUID memberUserId, Set<RankingCapability> capabilities);
-  enum Outcome { UPDATED, NOT_FOUND, OWNER_CAPABILITIES_IMMUTABLE }
+  enum Outcome { UPDATED, NOT_FOUND, OWNER_CAPABILITIES_IMMUTABLE, ARCHIVED_READ_ONLY }
 }

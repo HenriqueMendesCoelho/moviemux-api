@@ -5,7 +5,10 @@ import java.util.UUID;
 
 /** Visibility does not imply admission or membership. */
 public record RankingIdentity(UUID id, UUID ownerUserId, RankingVisibility visibility,
-    RankingAdmission admission) {
+    RankingAdmission admission, boolean archived) {
+  public RankingIdentity(UUID id, UUID ownerUserId, RankingVisibility visibility, RankingAdmission admission) {
+    this(id, ownerUserId, visibility, admission, false);
+  }
   public RankingIdentity {
     Objects.requireNonNull(id, "id");
     Objects.requireNonNull(ownerUserId, "ownerUserId");

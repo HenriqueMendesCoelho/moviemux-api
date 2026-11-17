@@ -253,7 +253,7 @@ class ReplaceMemberCapabilitiesHttpIT {
           select exists(select 1 from pg_stat_activity activity
           where activity.datname=current_database() and activity.wait_event_type='Lock'
             and ?=any(pg_blocking_pids(activity.pid))
-            and activity.query like 'select owner_user_id from ranking where id=%for update%'
+            and activity.query like 'select owner_user_id, archived_at from ranking where id=%for update%'
             and exists(select 1 from pg_locks held where held.pid=activity.pid and held.relation=cast(? as regclass)))
           """,Boolean.class,pid,table("ranking")))) return;
       Thread.sleep(20);

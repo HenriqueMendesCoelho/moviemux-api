@@ -24,7 +24,7 @@ public class CurrentRankingAccessPostgresAdapter implements CurrentRankingAccess
     Objects.requireNonNull(rankingId, "rankingId");
     Objects.requireNonNull(actorUserId, "actorUserId");
     return jdbc.query("""
-        select r.id, r.owner_user_id, r.visibility, r.admission,
+        select r.id, r.owner_user_id, r.visibility, r.admission, r.archived_at,
                m.user_id as member_user_id, m.active, g.capability
         from ranking r
         left join ranking_membership m on m.ranking_id = r.id and m.user_id = :actor
@@ -36,7 +36,7 @@ public class CurrentRankingAccessPostgresAdapter implements CurrentRankingAccess
       var ranking = new RankingIdentity(rows.getObject("id", UUID.class),
           rows.getObject("owner_user_id", UUID.class),
           RankingVisibility.valueOf(rows.getString("visibility")),
-          RankingAdmission.valueOf(rows.getString("admission")));
+          RankingAdmission.valueOf(rows.getString("admission")), rows.getObject("archived_at") != null);
       UUID memberId = rows.getObject("member_user_id", UUID.class);
       if (memberId == null) return Optional.of(new RankingAccessSnapshot(ranking, Optional.empty()));
       boolean active = rows.getBoolean("active");

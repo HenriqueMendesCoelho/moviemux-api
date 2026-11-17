@@ -21,7 +21,7 @@ public class ListCurrentRankingAccessPostgresAdapter implements ListCurrentRanki
     // Page ranking identities, not grant rows. Filtering and grant loading share one SQL snapshot.
     return jdbc.query("""
         with accessible as (
-          select r.id, r.owner_user_id, r.visibility, r.admission, m.user_id, m.active
+          select r.id, r.owner_user_id, r.visibility, r.admission, r.archived_at, m.user_id, m.active
           from ranking r
           join ranking_membership m on m.ranking_id = r.id and m.user_id = :actor and m.active
           where (cast(:after as uuid) is null or r.id > cast(:after as uuid))
@@ -40,7 +40,7 @@ public class ListCurrentRankingAccessPostgresAdapter implements ListCurrentRanki
       while (more) {
         var ranking = new RankingIdentity(rows.getObject("id", UUID.class),
             rows.getObject("owner_user_id", UUID.class), RankingVisibility.valueOf(rows.getString("visibility")),
-            RankingAdmission.valueOf(rows.getString("admission")));
+            RankingAdmission.valueOf(rows.getString("admission")), rows.getObject("archived_at") != null);
         UUID member = rows.getObject("user_id", UUID.class);
         boolean active = rows.getBoolean("active");
         var grants = EnumSet.noneOf(RankingCapability.class);

@@ -38,6 +38,8 @@ public final class RankingAuthorization {
         && !member.capabilities().contains(capability)) {
       throw new RankingAccessDeniedException();
     }
+    if (snapshot.ranking().archived() && capability != RankingCapability.READ)
+      throw new RankingAccessDeniedException();
     return snapshot;
   }
 

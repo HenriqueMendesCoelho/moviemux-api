@@ -25,6 +25,8 @@ public class ReplaceMemberCapabilitiesUseCaseImpl implements ReplaceMemberCapabi
     var outcome = memberships.replace(rankingId, actor.userId(), memberUserId, Set.copyOf(capabilities));
     if (outcome == null || outcome == ReplaceRankingMemberCapabilities.Outcome.NOT_FOUND)
       throw new RankingAccessDeniedException();
+    if (outcome == ReplaceRankingMemberCapabilities.Outcome.ARCHIVED_READ_ONLY)
+      throw new RankingArchivedReadOnlyException();
     if (outcome == ReplaceRankingMemberCapabilities.Outcome.OWNER_CAPABILITIES_IMMUTABLE)
       throw new RankingOwnerCapabilitiesImmutableException();
   }
