@@ -172,8 +172,12 @@ class RankingAccessHttpIT {
     var globalAdmin = user(true);
     UUID ranking = ranking(owner, "PRIVATE");
     assertNotFound(get(ranking, globalAdmin.token()));
-    // The token is validly signed for the outsider's subject but lies about identity/roles.
-    String forgedClaims = jwt.generateToken(owner.id(), outsider.email(), "Synthetic forged name",
+    // A valid signature cannot bind the owner's UUID to the outsider's email.
+    String mismatchedIdentity = jwt.generateToken(owner.id(), outsider.email(), "Synthetic forged name",
+        Set.of("ROLE_ADM", "ROLE_USER"));
+    assertThat(get(ranking, mismatchedIdentity).status()).isIn(401, 403);
+    // Matching identity still cannot borrow ownership through roles or request metadata.
+    String forgedClaims = jwt.generateToken(outsider.id(), outsider.email(), "Synthetic forged name",
         Set.of("ROLE_ADM", "ROLE_USER"));
     var forged = request(path(ranking) + "?actorId=" + owner.id() + "&userId=" + owner.id()
             + "&capabilities=READ,MANAGE_MEMBERS", forgedClaims,
@@ -242,9 +246,31 @@ class RankingAccessHttpIT {
     }
   }
 
+  @Test
+  void deletedAccountsTokenCannotAuthenticateRecreatedAccountAtTheSameEmail() throws Exception {
+    var original = user(false);
+    String oldToken = original.token();
+    for (String dependent : List.of("user_roles", "user_statistics", "user_preferences")) {
+      jdbc.update("delete from " + table(dependent) + " where user_id=?", original.id());
+    }
+    jdbc.update("delete from " + table("\"user\"") + " where id=?", original.id());
+    // Removed-account lookup is an authentication denial, not a server exception.
+    assertThat(get(UUID.randomUUID(), oldToken).status()).isIn(401, 403);
+
+    var replacement = userAtEmail(false, original.email());
+    assertThat(replacement.id()).isNotEqualTo(original.id());
+    UUID ranking = ranking(replacement, "PRIVATE");
+    assertThat(get(ranking, oldToken).status()).isIn(401, 403);
+    assertAccess(get(ranking, replacement.token()), ranking,
+        Arrays.stream(RankingCapability.values()).map(Enum::name).toArray(String[]::new));
+  }
+
   private Account user(boolean admin) {
+    return userAtEmail(admin, "ranking-" + UUID.randomUUID() + "@example.invalid");
+  }
+
+  private Account userAtEmail(boolean admin, String email) {
     UUID id = UUID.randomUUID();
-    String email = "ranking-" + id + "@example.invalid";
     jdbc.update("insert into " + table("\"user\"")
         + " (id,created_at,email,name,password) values (?,now(),?,'Synthetic ranking account','synthetic-hash')", id, email);
     jdbc.update("insert into " + table("user_statistics") + " (user_id,consecutive_failed_login_attempts) values (?,0)", id);

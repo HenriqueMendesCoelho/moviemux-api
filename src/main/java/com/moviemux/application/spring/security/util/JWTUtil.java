@@ -45,27 +45,35 @@ public class JWTUtil {
 				.compact();
 	}
 
-	public boolean isTokenValid(String token) {
+	/** Signature, expiry and immutable subject identity; roles are deliberately not returned. */
+	public VerifiedTokenIdentity getVerifiedIdentity(String token) {
 		Claims claims = getClaims(token);
-		if (claims == null) {
-			return false;
+		if (claims == null) return null;
+		try {
+			String username = claims.getSubject();
+			Date expiresAt = claims.getExpiration();
+			Object rawId = claims.get("id");
+			if (StringUtils.isBlank(username) || expiresAt == null || !new Date().before(expiresAt)
+					|| !(rawId instanceof String idText)) return null;
+			UUID userId = UUID.fromString(idText);
+			// UUID.fromString also accepts shortened groups; require the issuer's canonical shape.
+			if (!userId.toString().equalsIgnoreCase(idText)) return null;
+			return new VerifiedTokenIdentity(userId, username);
+		} catch (RuntimeException invalidIdentity) {
+			return null;
 		}
+	}
 
-		boolean hasUsername = StringUtils.isNotEmpty(claims.getSubject());
-		boolean hasExpirationDate = claims.getExpiration() != null;
-		Date now = new Date(System.currentTimeMillis());
-
-		return hasUsername && hasExpirationDate && now.before(claims.getExpiration());
+	public boolean isTokenValid(String token) {
+		return getVerifiedIdentity(token) != null;
 	}
 
 	public String getUsername(String token) {
-		Claims claims = getClaims(token);
-		if (claims == null) {
-			return null;
-		}
-
-		return claims.getSubject();
+		VerifiedTokenIdentity identity = getVerifiedIdentity(token);
+		return identity == null ? null : identity.username();
 	}
+
+	public record VerifiedTokenIdentity(UUID userId, String username) {}
 
 	private Claims getClaims(String token) {
 		try {

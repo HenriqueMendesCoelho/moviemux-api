@@ -9,7 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 
@@ -37,6 +37,8 @@ public class JWTAuthorizationFilter extends BasicAuthenticationFilter {
 			UsernamePasswordAuthenticationToken auth = getAuthentication(header.substring(7));
 			if (auth != null) {
 				SecurityContextHolder.getContext().setAuthentication(auth);
+			} else {
+				SecurityContextHolder.clearContext();
 			}
 		}
 
@@ -45,12 +47,18 @@ public class JWTAuthorizationFilter extends BasicAuthenticationFilter {
 	}
 
 	private UsernamePasswordAuthenticationToken getAuthentication(String token) {
-		if (jwtUtil.isTokenValid(token)) {
-			String username = jwtUtil.getUsername(token);
-			UserDetails user = userDetailsService.loadUserByUsername(username);
+		var identity = jwtUtil.getVerifiedIdentity(token);
+		if (identity == null) return null;
+		try {
+			var current = userDetailsService.loadUserByUsername(identity.username());
+			// Email can be reused after deletion. It is a lookup key, not lasting identity.
+			if (!(current instanceof UserSS user) || !identity.userId().equals(user.getUserid())) {
+				return null;
+			}
 			return new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+		} catch (UsernameNotFoundException removedAccount) {
+			return null;
 		}
-		return null;
 	}
 
 	private void logRequest(HttpServletRequest request, HttpServletResponse response) {

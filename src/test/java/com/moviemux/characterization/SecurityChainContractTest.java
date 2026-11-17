@@ -7,7 +7,8 @@ import com.moviemux.user.application.spring.controller.UserInviteRestrictSpringC
 import org.junit.jupiter.api.*;
 import org.springframework.context.annotation.*;
 import org.springframework.mock.web.MockServletContext;
-import org.springframework.security.core.userdetails.User;
+import com.moviemux.application.spring.security.UserSS;
+import com.moviemux.user.domain.model.Role;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.web.servlet.MockMvc;
@@ -35,7 +36,9 @@ class SecurityChainContractTest {
             return jwt;
         }
         @Bean UserDetailsService userDetailsService() {
-            return username -> User.withUsername(username).password("unused").roles(username.startsWith("admin") ? "ADM" : "USER").build();
+            return username -> new UserSS(UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                    "Synthetic", username, "unused", 0,
+                    Set.of(username.startsWith("admin") ? Role.ADM : Role.USER));
         }
         @Bean UserController userController() { return mock(UserController.class); }
         @Bean UserInviteRestrictSpringController invitations(UserController users) { return new UserInviteRestrictSpringController(users); }
