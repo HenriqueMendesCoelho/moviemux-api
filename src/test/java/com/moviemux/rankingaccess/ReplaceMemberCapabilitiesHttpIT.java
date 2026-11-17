@@ -240,7 +240,7 @@ class ReplaceMemberCapabilitiesHttpIT {
     var owner=user(false); var member=user(false); UUID rank=ranking(owner,"PRIVATE"); membership(rank,member,"READ");
     jdbc.update("update "+table("user_statistics")+" set consecutive_failed_login_attempts=10 where user_id=?",owner.id());
     var before=authorizationRows();
-    assertError(put(rank,member.id(),owner.token(),"{\"capabilities\":[]}",Map.of()),404,"ranking.not_found");
+    assertThat(put(rank,member.id(),owner.token(),"{\"capabilities\":[]}",Map.of()).status()).isIn(401,403);
     assertThat(authorizationRows()).isEqualTo(before);
   }
 

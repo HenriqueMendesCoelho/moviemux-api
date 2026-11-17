@@ -55,6 +55,11 @@ public class JWTAuthorizationFilter extends BasicAuthenticationFilter {
 			if (!(current instanceof UserSS user) || !identity.userId().equals(user.getUserid())) {
 				return null;
 			}
+			// A signed token cannot bypass current account restrictions, even on legacy routes.
+			if (!user.isEnabled() || !user.isAccountNonLocked()
+					|| !user.isAccountNonExpired() || !user.isCredentialsNonExpired()) {
+				return null;
+			}
 			return new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
 		} catch (UsernameNotFoundException removedAccount) {
 			return null;

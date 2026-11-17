@@ -221,8 +221,7 @@ class RankingAccessListHttpIT {
     assertThat(list(owner, "?after=" + page.required("next_cursor").asText()).body().required("items").size()).isEqualTo(1);
     jdbc.update("update " + table("user_statistics") + " set consecutive_failed_login_attempts=10 where user_id=?", owner.id());
     var denied = list(owner, "");
-    assertThat(denied.status()).isEqualTo(404);
-    assertThat(denied.body().required("code").asText()).isEqualTo("ranking.not_found");
+    assertThat(denied.status()).isIn(401, 403);
   }
 
   @Test void technicalBoundsMalformedQueriesAndEmptyTail() throws Exception {

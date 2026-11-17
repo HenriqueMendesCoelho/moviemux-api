@@ -135,12 +135,32 @@ class JwtImmutableIdentityTest {
         .extracting("authority").containsExactly("ROLE_ADM");
   }
 
-  @Test void currentAccountStateStillReachesExistingDownstreamChecks() throws Exception {
+  @Test void currentLockedStateRevokesPreviouslyAuthenticatedTokenImmediately() throws Exception {
+    String token = token(ORIGINAL_ID, Set.of("ROLE_USER"));
+    var active = principal(ORIGINAL_ID, 9, Role.USER);
     var locked = principal(ORIGINAL_ID, 10, Role.USER);
-    when(users.loadUserByUsername(EMAIL)).thenReturn(locked);
-    var authentication = authenticate(token(ORIGINAL_ID, Set.of("ROLE_USER")));
-    assertThat(authentication.getPrincipal()).isSameAs(locked);
-    assertThat(((UserSS) authentication.getPrincipal()).isAccountNonLocked()).isFalse();
+    when(users.loadUserByUsername(EMAIL)).thenReturn(active, locked, active);
+    assertThat(authenticate(token).getPrincipal()).isSameAs(active);
+    // Prior populated context must also be cleared when the same token becomes disallowed.
+    assertThat(authenticate(token)).isNull();
+    assertThat(authenticate(token).getPrincipal()).isSameAs(active);
+  }
+
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"disabled", "locked", "accountExpired", "credentialsExpired"})
+  void everyCurrentInvalidAccountFlagFailsClosedEvenForAdmin(String invalidState) throws Exception {
+    var current = spy(principal(ORIGINAL_ID, 0, Role.ADM));
+    switch (invalidState) {
+      case "disabled" -> doReturn(false).when(current).isEnabled();
+      case "locked" -> doReturn(false).when(current).isAccountNonLocked();
+      case "accountExpired" -> doReturn(false).when(current).isAccountNonExpired();
+      case "credentialsExpired" -> doReturn(false).when(current).isCredentialsNonExpired();
+      default -> throw new AssertionError("Unrecognized state");
+    }
+    when(users.loadUserByUsername(EMAIL)).thenReturn(current);
+    SecurityContextHolder.getContext().setAuthentication(
+        new UsernamePasswordAuthenticationToken("prior", null, java.util.List.of()));
+    assertThat(authenticate(token(ORIGINAL_ID, Set.of("ROLE_ADM")))).isNull();
   }
 
   private String token(UUID id, Set<String> roles) {

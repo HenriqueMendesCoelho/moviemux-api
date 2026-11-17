@@ -238,7 +238,7 @@ class LeaveRankingHttpIT {
     UUID rank = ranking(owner, "PRIVATE"); membership(rank, member, "READ");
     jdbc.update("update " + table("user_statistics") + " set consecutive_failed_login_attempts=10 where user_id=?", member.id());
     var before = authorizationRows();
-    assertThat(leave(rank, member.token(), Map.of()).status()).isEqualTo(404);
+    assertThat(leave(rank, member.token(), Map.of()).status()).isIn(401, 403);
     assertThat(authorizationRows()).isEqualTo(before);
   }
 

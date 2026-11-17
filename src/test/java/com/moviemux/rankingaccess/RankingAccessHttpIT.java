@@ -218,7 +218,27 @@ class RankingAccessHttpIT {
     assertAccess(get(ranking, originalToken), ranking,
         Arrays.stream(RankingCapability.values()).map(Enum::name).toArray(String[]::new));
     jdbc.update("update " + table("user_statistics") + " set consecutive_failed_login_attempts=10 where user_id=?", owner.id());
-    assertNotFound(get(ranking, originalToken));
+    assertThat(get(ranking, originalToken).status()).isIn(401, 403);
+  }
+
+  @Test
+  void legacyUserAndAdminRoutesRejectTheSameBearerAfterCurrentAccountIsLocked() throws Exception {
+    for (boolean admin : List.of(false, true)) {
+      var account = user(admin);
+      String token = account.token();
+      String protectedPath = admin ? "/restricted/user" : "/user";
+      assertThat(request(protectedPath, token, Map.of()).status()).isEqualTo(200);
+      jdbc.update("update " + table("user_statistics")
+          + " set consecutive_failed_login_attempts=10 where user_id=?", account.id());
+      var denied = request(protectedPath, token, Map.of());
+      assertThat(denied.status()).isIn(401, 403);
+      assertThat(denied.body().toString()).doesNotContain(account.email(), account.id().toString());
+      // Authentication restrictions apply before role-based legacy authorization, including ADM.
+      assertThat(request("/user", token, Map.of()).status()).isIn(401, 403);
+      jdbc.update("update " + table("user_statistics")
+          + " set consecutive_failed_login_attempts=0 where user_id=?", account.id());
+      assertThat(request(protectedPath, token, Map.of()).status()).isEqualTo(200);
+    }
   }
 
   @Test
