@@ -146,6 +146,15 @@ Missing and inaccessible rankings both return `404` with
 The server reads membership and grants together for each request, rather than
 trusting token role claims, request headers or previously cached grants.
 
+`GET /rankings/access` lists only the caller's currently accessible rankings,
+with the same minimal item projection. It accepts an exclusive UUID `after`
+cursor and `limit` from 1 to 100 (default 20). The response contains `items`
+and `next_cursor` (explicitly null at the end), never a global total.
+Pagination filters access before applying the limit, uses UUID ascending order,
+and rechecks current access on every request. Invalid page parameters return
+`400` with `{"code":"ranking.invalid_page"}`; responses are not cacheable.
+These limits bound requests; they are not ranking creation quotas.
+
 V2 adds ranking authorization tables without copying or modifying the historical
 movie collection. Owner membership is checked at transaction commit, and scoped
 grants require the corresponding membership. Existing-user references are
