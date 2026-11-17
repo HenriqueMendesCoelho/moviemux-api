@@ -159,7 +159,7 @@ V2 adds ranking authorization tables without copying or modifying the historical
 movie collection. Owner membership is checked at transaction commit, and scoped
 grants require the corresponding membership. Existing-user references are
 restrictive, not cascading history deletions. This slice exposes no ranking
-creation, grant-management, ownership transfer or archive API.
+creation, ownership transfer or archive API.
 
 
 `DELETE /rankings/{rankingId}/membership/self` deactivates only the caller's
@@ -171,3 +171,22 @@ The transaction locks ranking then membership and preserves grants and historica
 ratings. Departure starts no recovery TTL and publishes no external event.
 Current access endpoints observe committed departure with the same token.
 This does not implement account deletion, owner exit or realtime session cutover.
+
+
+`PUT /rankings/{rankingId}/members/{memberId}/capabilities` replaces an active
+non-owner member's grants as one transaction. Only the current active owner may
+perform it; MANAGE_MEMBERS and instance administrator roles are not delegated
+authority for this endpoint. Body: `{"capabilities":["READ","RATE_OWN"]}`.
+An empty set revokes all grants. Known duplicates normalize to a set; missing,
+null, non-string, unknown or more than 100 input values return
+`400 ranking.invalid_capabilities` without mutation.
+Successful replacement returns `204`. Unauthorized/missing/inactive contexts
+return generic `404 ranking.not_found`; editing the owner's own grants returns
+`409 ranking.owner_capabilities_immutable`. Responses use no-store.
+Ranking/member locks revalidate ownership and active state. Insert failure rolls
+back the entire replacement. Global roles, membership status, historical ratings
+and XP are unchanged; no outbound event or newly delegated authority is created.
+
+Ranking persistence/transaction failures return only `500 ranking.operation_failed`
+with no-store, without exposing SQL or exception details. This error boundary is
+scoped to ranking controllers and does not change unrelated legacy APIs.
