@@ -104,12 +104,14 @@ class MovieBehaviorTest {
         order.verify(socket).notifyMovie(movieId,"deleted-movie",null,userId.toString());
     }
 
-    @Test void legacyDeleteRejectsOwnerWithDistinctEqualUuid() {
+    @Test void deleteAcceptsOwnerWithDistinctEqualUuid() throws Exception {
         Movie m=movie(); MovieActor detached=user(UUID.fromString(userId.toString()),"Alice");
         when(repository.findById(movieId)).thenReturn(Optional.of(m));
         when(userRepository.findById(userId)).thenReturn(Optional.of(detached));
-        assertThatThrownBy(() -> delete.execute(new DeleteMovieCommand(movieId,userId))).isInstanceOf(UserNotAuthorizedException.class);
-        verify(repository,never()).delete(any(Movie.class));
+        assertThat(detached.id()).isEqualTo(userId).isNotSameAs(userId);
+        delete.execute(new DeleteMovieCommand(movieId,userId));
+        verify(repository).delete(m);
+        verify(socket).notifyMovie(movieId,"deleted-movie",null,userId.toString());
     }
 
     @Test void missingMovieReadUsesMovieNoteNotFoundException() {

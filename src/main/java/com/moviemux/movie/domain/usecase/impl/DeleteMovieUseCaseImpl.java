@@ -48,7 +48,7 @@ public class DeleteMovieUseCaseImpl implements DeleteMovieUseCase {
       throw new UserNotAuthorizedException("user can not delete this movie");
     }
 
-    if (!user.getRoles().contains(Role.ADM) && movie.getUser().getId() != user.getId()) {
+    if (!user.getRoles().contains(Role.ADM) && !movie.getUser().getId().equals(user.getId())) {
       throw new UserNotAuthorizedException("user can not delete this movie");
     }
 

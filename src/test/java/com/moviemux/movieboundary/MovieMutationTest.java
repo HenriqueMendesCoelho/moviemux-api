@@ -50,14 +50,60 @@ class MovieMutationTest {
         verify(movies,never()).save(any()); verifyNoInteractions(announcements,notifications);
     }
 
-    @Test void legacyUpdateRejectsEqualButDistinctOwnerUuid() {
-        Movie existing=movie(false);
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void equalButDistinctOwnerUuidCanMutate(boolean update) throws Exception {
+        Movie existing = movie(false);
+        UUID distinct = UUID.fromString(userId.toString());
+        assertThat(distinct).isEqualTo(userId).isNotSameAs(userId);
+        MovieActor current = new MovieActor(distinct, "Ada", "ada@example.test", Set.of(Role.USER));
+        stubMutationIdentity(existing, current, update);
+        executeMutation(existing, current, update);
+        if (update) verify(movies).save(existing);
+        else verify(movies).delete(existing);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void differentOrdinaryUserCannotMutate(boolean update) {
+        Movie existing = movie(false);
+        UUID otherId = new UUID(userId.getMostSignificantBits(), userId.getLeastSignificantBits() ^ 1L);
+        MovieActor current = new MovieActor(otherId, "Other", "other@example.test", Set.of(Role.USER));
+        stubMutationIdentity(existing, current, update);
+        assertThatThrownBy(() -> executeMutation(existing, current, update))
+            .isInstanceOf(UserNotAuthorizedException.class);
+        verify(movies, never()).save(any());
+        verify(movies, never()).delete(any());
+        verifyNoInteractions(announcements, notifications);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+    void administratorCanMutateAnotherCreatorsMovie(boolean update) throws Exception {
+        Movie existing = movie(false);
+        UUID adminId = new UUID(userId.getMostSignificantBits(), userId.getLeastSignificantBits() ^ 1L);
+        MovieActor current = new MovieActor(adminId, "Admin", "admin@example.test", Set.of(Role.USER, Role.ADM));
+        stubMutationIdentity(existing, current, update);
+        executeMutation(existing, current, update);
+        if (update) verify(movies).save(existing);
+        else verify(movies).delete(existing);
+    }
+
+    private void stubMutationIdentity(Movie existing, MovieActor current, boolean update) {
         when(movies.findById(movieId)).thenReturn(Optional.of(existing));
-        when(identities.findByEmail("ada@example.test")).thenReturn(new MovieActor(UUID.fromString(userId.toString()),"Ada","ada@example.test",Set.of(Role.USER)));
-        assertThatThrownBy(() -> new UpdateMovieUseCaseImpl(movies,identities,announcements,notifications)
-                .execute(new UpdateMovieCommand(movie(true),movieId,"ada@example.test")))
-                .isInstanceOf(UserNotAuthorizedException.class);
-        verify(movies,never()).save(any());
+        if (update) when(identities.findByEmail(current.email())).thenReturn(current);
+        else when(identities.findById(current.id())).thenReturn(Optional.of(current));
+    }
+
+    private void executeMutation(Movie existing, MovieActor current, boolean update) throws Exception {
+        if (update) {
+            when(movies.save(existing)).thenReturn(existing);
+            new UpdateMovieUseCaseImpl(movies, identities, announcements, notifications)
+                .execute(new UpdateMovieCommand(movie(false), movieId, current.email()));
+        } else {
+            new DeleteMovieUseCaseImpl(movies, identities, notifications)
+                .execute(new DeleteMovieCommand(movieId, current.id()));
+        }
     }
 
     @Test void administratorUpdatePreservesLegacyFieldsAndEmitsOnlyVisibilityChange() throws Exception {

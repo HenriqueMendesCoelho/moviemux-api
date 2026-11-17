@@ -49,7 +49,7 @@ public class UpdateMovieUseCaseImpl implements UpdateMovieUseCase {
       throw new UserNotAuthorizedException();
     }
 
-    if (!user.getRoles().contains(Role.ADM) && movieToUpdate.getUser().getId() != user.getId()) {
+    if (!user.getRoles().contains(Role.ADM) && !movieToUpdate.getUser().getId().equals(user.getId())) {
       throw new UserNotAuthorizedException();
     }
 
