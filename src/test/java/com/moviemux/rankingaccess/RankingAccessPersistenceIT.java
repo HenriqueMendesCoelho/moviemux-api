@@ -114,6 +114,68 @@ class RankingAccessPersistenceIT {
         .containsExactly("1:BASELINE:true", "2:SQL:true");
   }
 
+  @Test void explicitlyBaselinedLegacySchemaUpgradesToLatestWithoutAssigningOrChangingHistory() throws Exception {
+    // Synthetic legacy installation: the actual immutable V1, with no Flyway SQL history.
+    try (var connection = DriverManager.getConnection(url, user, password)) {
+      connection.setSchema(schema);
+      org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(connection,
+          new org.springframework.core.io.ClassPathResource("db/migration/V1__initial_schema.sql"));
+    }
+    UUID owner = addUser(), movie = UUID.randomUUID(), wishlist = UUID.randomUUID();
+    jdbc.update("insert into movie(id,created_at,description,director,english_title,portuguese_title,user_id,show_notes) values (?,now(),'Synthetic baseline history','Synthetic','Synthetic','Synthetic',?,false)", movie, owner);
+    jdbc.update("insert into movie_note(movie_id,user_id,created_at,note) values (?,?,now(),9)", movie, owner);
+    jdbc.update("insert into user_roles(user_id,roles) values (?,0)", owner);
+    jdbc.update("insert into movie_discord(movie_id,message_id) values (?,'synthetic-message')", movie);
+    Long genre = jdbc.queryForObject("insert into movie_genre(name,tmdb_id) values ('Synthetic',123) returning id", Long.class);
+    jdbc.update("insert into movies_genres(genre_id,movie_id) values (?,?)", genre, movie);
+    jdbc.update("insert into user_invites(code) values ('synthetic-invite')");
+    jdbc.update("insert into user_preferences(user_id,notify) values (?,false)", owner);
+    jdbc.update("insert into user_statistics(user_id,consecutive_failed_login_attempts) values (?,2)", owner);
+    jdbc.update("insert into user_wishlist(id,created_at,name,shareable,user_id) values (?,now(),'Synthetic',false,?)", wishlist, owner);
+    jdbc.update("insert into movie_wishlist(tmdb_id,title,title_english,url_image) values (123,'Synthetic','Synthetic','https://example.invalid/image')");
+    jdbc.update("insert into movie_wishlist_user_wishlist(movie_id,wishlist_id,wishlist_order) values (123,?,0)", wishlist);
+    var oldTables = tables();
+    assertThat(oldTables).hasSize(13);
+    var beforeCatalog = catalog(oldTables);
+    var beforeRows = tableRows(oldTables);
+    assertThat(beforeRows.values()).allSatisfy(rows -> assertThat(rows).hasSize(1));
+
+    // Intentionally no target: this proves the real latest startup path, currently V4.
+    var adopted = Flyway.configure().dataSource(url, user, password).schemas(schema).defaultSchema(schema)
+        .createSchemas(false).baselineOnMigrate(false).cleanDisabled(true).baselineVersion("1")
+        .baselineDescription("Synthetic audited V1 schema").locations("classpath:db/migration").load();
+    assertThatThrownBy(adopted::migrate).isInstanceOf(org.flywaydb.core.api.FlywayException.class)
+        .hasMessageContaining("non-empty");
+    assertThat(jdbc.queryForObject("select count(*) from information_schema.tables where table_schema=? and table_name='flyway_schema_history'", Integer.class, schema)).isZero();
+    assertThat(catalog(oldTables)).containsExactlyElementsOf(beforeCatalog);
+    assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
+    adopted.baseline(); // Explicit baseline only in this isolated disposable synthetic schema.
+    assertThat(adopted.migrate().migrationsExecuted).isEqualTo(3);
+    assertThat(adopted.info().current().getVersion().getVersion()).isEqualTo("4");
+    var newTables = Set.of("ranking", "ranking_membership", "ranking_membership_grant", "ranking_author_identity");
+    assertThat(tables()).containsExactlyInAnyOrderElementsOf(union(oldTables, newTables));
+    assertThat(tableRows(newTables).values()).allSatisfy(rows -> assertThat(rows).isEmpty());
+    assertThat(catalog(oldTables)).containsExactlyElementsOf(beforeCatalog);
+    assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
+    assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
+        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true");
+    assertThat(adopted.migrate().migrationsExecuted).isZero();
+    assertThat(catalog(oldTables)).containsExactlyElementsOf(beforeCatalog);
+    assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
+    assertThat(tableRows(newTables).values()).allSatisfy(rows -> assertThat(rows).isEmpty());
+    assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
+        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true");
+  }
+
+  private Map<String, List<String>> tableRows(Set<String> tableNames) {
+    var result = new TreeMap<String, List<String>>();
+    // Identifiers originate only from this isolated schema's catalog or fixed test table names.
+    for (String table : tableNames) {
+      result.put(table, jdbc.queryForList("select row_to_json(t)::text from \"" + table + "\" t order by row_to_json(t)::text", String.class));
+    }
+    return result;
+  }
+
   @Test void readerUsesExactRankingAndActorWithFreshMembershipAndGrants() {
     migrate(null);
     UUID ownerA=addUser(), ownerB=addUser(), member=addUser(), outsider=addUser();
