@@ -34,6 +34,7 @@ class FlywayMigrationIT {
     private String user;
     private String password;
     private String schema;
+    private String historicalLocation;
     @TempDir Path temporary;
 
     @BeforeEach
@@ -43,6 +44,13 @@ class FlywayMigrationIT {
         password = System.getenv().getOrDefault("TEST_DATABASE_PASSWORD", "moviemux_test");
         assertThat(url).as("TEST_DATABASE_URL must name a disposable local PostgreSQL database")
                 .matches("jdbc:postgresql://(localhost|127\\.0\\.0\\.1):[0-9]+/[a-zA-Z0-9_]*test[a-zA-Z0-9_]*(\\?.*)?");
+        // Historical probes intentionally exercise the immutable V1 in isolation.
+        // Copy the actual migration bytes rather than maintaining a second SQL baseline.
+        Path historicalMigrations = Files.createDirectory(temporary.resolve("historical-v1"));
+        try (var input = new ClassPathResource("db/migration/V1__initial_schema.sql").getInputStream()) {
+            Files.copy(input, historicalMigrations.resolve("V1__initial_schema.sql"));
+        }
+        historicalLocation = "filesystem:" + historicalMigrations;
         schema = "migration_test_" + UUID.randomUUID().toString().replace("-", "");
         try (Connection connection = connection()) { connection.createStatement().execute("create schema " + schema); }
     }
@@ -56,10 +64,11 @@ class FlywayMigrationIT {
 
     @Test
     void emptyDatabaseMigratesBeforeJpaValidationAndRestartDoesNotReapply() throws Exception {
-        Flyway flyway = flyway();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
-        assertThat(count("select count(*) from information_schema.tables where table_schema='" + schema + "'" )).isEqualTo(14);
+        Flyway flyway = latestFlyway();
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(2);
+        assertThat(count("select count(*) from information_schema.tables where table_schema='" + schema + "'" )).isEqualTo(17);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='1' and success")).isEqualTo(1);
+        assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='2' and success")).isEqualTo(1);
         validateJpa();
         List<String> before = catalog();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
@@ -69,7 +78,7 @@ class FlywayMigrationIT {
 
     @Test
     void completeCatalogMatchesHistoricalExportIncludingAllTwelveForeignKeys() throws Exception {
-        flyway().migrate();
+        configuration().target("1").load().migrate();
         String historical = schema + "_historical";
         try (Connection connection = connection(); var statement = connection.createStatement()) {
             statement.execute("create schema " + historical);
@@ -119,12 +128,12 @@ class FlywayMigrationIT {
             connection.createStatement().execute("insert into user_invites(code) values ('synthetic-invite')");
         }
         List<String> before = catalog();
-        assertThatThrownBy(() -> flyway().migrate()).isInstanceOf(FlywayException.class).hasMessageContaining("non-empty");
+        assertThatThrownBy(() -> historicalFlyway().migrate()).isInstanceOf(FlywayException.class).hasMessageContaining("non-empty");
         assertThat(count("select count(*) from " + schema + ".user_invites")).isEqualTo(1);
-        flyway().baseline();
+        historicalFlyway().baseline();
         assertThat(catalog()).isEqualTo(before);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='1' and type='BASELINE'")).isEqualTo(1);
-        assertThat(flyway("classpath:db/fixture/upgrade").migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(historicalFlyway("classpath:db/fixture/upgrade").migrate().migrationsExecuted).isEqualTo(1);
         assertThat(count("select id from " + schema + ".user_invites where code='synthetic-invite'")).isEqualTo(1);
         assertThat(count("insert into " + schema + ".user_invites(code) values ('second-synthetic-invite') returning id")).isEqualTo(2);
         assertThat(count("select count(*) from " + schema + ".migration_probe")).isEqualTo(1);
@@ -141,9 +150,9 @@ class FlywayMigrationIT {
         }
         List<String> before = catalog();
         assertThat(before).anyMatch(definition -> definition.contains("ukt52x8vytfwq3vic32in8tb8y8"));
-        assertThatThrownBy(() -> flyway().migrate()).isInstanceOf(FlywayException.class).hasMessageContaining("non-empty");
-        flyway().baseline(); // Explicit adoption is permitted only for this inspected, disposable fixture.
-        assertThat(flyway().migrate().migrationsExecuted).isZero();
+        assertThatThrownBy(() -> historicalFlyway().migrate()).isInstanceOf(FlywayException.class).hasMessageContaining("non-empty");
+        historicalFlyway().baseline(); // Explicit adoption is permitted only for this inspected, disposable fixture.
+        assertThat(historicalFlyway().migrate().migrationsExecuted).isZero();
         validateJpa();
         assertThat(catalog()).isEqualTo(before);
 
@@ -152,6 +161,7 @@ class FlywayMigrationIT {
                 "--spring.datasource.url=" + url, "--spring.datasource.username=" + user,
                 "--spring.datasource.password=" + password, "--spring.datasource.hikari.schema=" + schema,
                 "--spring.flyway.default-schema=" + schema, "--spring.flyway.schemas=" + schema,
+                "--spring.flyway.locations=" + historicalLocation, "--spring.flyway.target=1",
                 "--spring.jpa.properties.hibernate.default_schema=" + schema)) {
             var users = context.getBean(com.moviemux.user.adapter.repository.UserRepository.class);
             var wishlists = context.getBean(com.moviemux.wishlist.domain.repository.WishlistRepository.class);
@@ -213,12 +223,22 @@ class FlywayMigrationIT {
 
     @Test
     void changedAppliedMigrationChecksumFailsWithoutRepair() throws Exception {
-        flyway().migrate();
-        String migration = new String(new ClassPathResource("db/migration/V1__initial_schema.sql").getInputStream().readAllBytes());
-        Files.writeString(temporary.resolve("V1__initial_schema.sql"), migration.replace("varchar(100)", "varchar(101)"));
-        Flyway changed = configuration().locations("filesystem:" + temporary).load();
+        latestFlyway().migrate();
+        Path changedMigrations = Files.createDirectory(temporary.resolve("changed-migrations"));
+        // Keep every applied version present so checksum mismatch is the only intended drift.
+        for (var resource : new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+                .getResources("classpath*:db/migration/V*__*.sql")) {
+            try (var input = resource.getInputStream()) {
+                Files.copy(input, changedMigrations.resolve(java.util.Objects.requireNonNull(resource.getFilename())));
+            }
+        }
+        Path v1 = changedMigrations.resolve("V1__initial_schema.sql");
+        String migration = Files.readString(v1);
+        assertThat(migration).contains("varchar(100)");
+        Files.writeString(v1, migration.replace("varchar(100)", "varchar(101)"));
+        Flyway changed = configuration().locations("filesystem:" + changedMigrations).load();
         assertThatThrownBy(changed::migrate).isInstanceOf(FlywayException.class).hasMessageContaining("checksum mismatch");
-        assertThat(count("select count(*) from " + schema + ".flyway_schema_history where success")).isEqualTo(1);
+        assertThat(count("select count(*) from " + schema + ".flyway_schema_history where success")).isEqualTo(2);
     }
 
     @Test
@@ -268,18 +288,18 @@ class FlywayMigrationIT {
 
     @Test
     void failedLaterMigrationKeepsEarlierCommitButRollsBackItsOwnDdl() throws Exception {
-        assertThatThrownBy(() -> flyway("classpath:db/fixture/upgrade", "classpath:db/fixture/failure").migrate())
+        assertThatThrownBy(() -> historicalFlyway("classpath:db/fixture/upgrade", "classpath:db/fixture/failure").migrate())
                 .isInstanceOf(FlywayException.class);
         assertThat(count("select count(*) from " + schema + ".migration_probe")).isEqualTo(1);
         assertThat(count("select count(*) from information_schema.tables where table_schema='" + schema + "' and table_name='must_rollback'")).isZero();
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where success")).isEqualTo(2);
-        assertThat(flyway("classpath:db/fixture/upgrade").migrate().migrationsExecuted).isZero();
+        assertThat(historicalFlyway("classpath:db/fixture/upgrade").migrate().migrationsExecuted).isZero();
     }
 
     @Test
     void deferredConstraintFailureAtCommitRollsBackMigration() throws Exception {
-        flyway().migrate();
-        assertThatThrownBy(() -> flyway("classpath:db/fixture/commit-failure").migrate()).isInstanceOf(FlywayException.class);
+        historicalFlyway().migrate();
+        assertThatThrownBy(() -> historicalFlyway("classpath:db/fixture/commit-failure").migrate()).isInstanceOf(FlywayException.class);
         assertThat(count("select count(*) from information_schema.tables where table_schema='" + schema + "' and table_name='commit_parent'")).isZero();
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where success")).isEqualTo(1);
     }
@@ -290,13 +310,14 @@ class FlywayMigrationIT {
         var first = CompletableFuture.supplyAsync(() -> migrateAfter(start));
         var second = CompletableFuture.supplyAsync(() -> migrateAfter(start));
         start.countDown();
-        assertThat(first.get(30, TimeUnit.SECONDS) + second.get(30, TimeUnit.SECONDS)).isEqualTo(1);
+        assertThat(first.get(30, TimeUnit.SECONDS) + second.get(30, TimeUnit.SECONDS)).isEqualTo(2);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='1' and success")).isEqualTo(1);
+        assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='2' and success")).isEqualTo(1);
     }
 
     @Test
     void lockContentionFailsWithinConfiguredRetryBudgetWithoutPartialHistory() throws Exception {
-        flyway().migrate();
+        historicalFlyway().migrate();
         CountDownLatch lockHeld = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         Callback pause = new Callback() {
@@ -309,11 +330,11 @@ class FlywayMigrationIT {
                 catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException(e); }
             }
         };
-        var first = CompletableFuture.supplyAsync(() -> configuration().locations("classpath:db/migration", "classpath:db/fixture/upgrade")
+        var first = CompletableFuture.supplyAsync(() -> configuration().locations(historicalLocation, "classpath:db/fixture/upgrade")
                 .callbacks(pause).load().migrate().migrationsExecuted);
         try {
             assertThat(lockHeld.await(15, TimeUnit.SECONDS)).isTrue();
-            assertThatThrownBy(() -> configuration().locations("classpath:db/migration", "classpath:db/fixture/upgrade")
+            assertThatThrownBy(() -> configuration().locations(historicalLocation, "classpath:db/fixture/upgrade")
                     .lockRetryCount(0).load().migrate()).isInstanceOf(FlywayException.class).hasMessageContaining("lock");
         } finally { release.countDown(); }
         assertThat(first.get(15, TimeUnit.SECONDS)).isEqualTo(1);
@@ -343,7 +364,7 @@ class FlywayMigrationIT {
     private int migrateAfter(CountDownLatch start) {
         try { if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("Start latch timed out"); }
         catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new IllegalStateException(e); }
-        return flyway().migrate().migrationsExecuted;
+        return latestFlyway().migrate().migrationsExecuted;
     }
 
     private org.flywaydb.core.api.configuration.FluentConfiguration configuration() {
@@ -352,9 +373,17 @@ class FlywayMigrationIT {
                 .validateOnMigrate(true).outOfOrder(false).ignoreMigrationPatterns(new String[0]).failOnMissingLocations(true).validateMigrationNaming(true).locations("classpath:db/migration");
     }
 
-    private Flyway flyway(String... additional) {
-        List<String> locations = new ArrayList<>(); locations.add("classpath:db/migration"); locations.addAll(List.of(additional));
+    private Flyway flyway() {
+        return configuration().load();
+    }
+
+    private Flyway historicalFlyway(String... additional) {
+        List<String> locations = new ArrayList<>(); locations.add(historicalLocation); locations.addAll(List.of(additional));
         return configuration().locations(locations.toArray(String[]::new)).load();
+    }
+
+    private Flyway latestFlyway() {
+        return configuration().locations("classpath:db/migration").load();
     }
 
     private Connection connection() throws Exception { return DriverManager.getConnection(url, user, password); }

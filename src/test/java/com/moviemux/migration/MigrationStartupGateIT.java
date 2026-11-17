@@ -88,16 +88,23 @@ class MigrationStartupGateIT {
             assertThat(input).isNotNull();
             v1 = new String(input.readAllBytes(), StandardCharsets.UTF_8);
         }
+        // Preserve every applied version; absence of V2 must not mask the checksum failure.
+        for (var resource : new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+                .getResources("classpath*:db/migration/V*__*.sql")) {
+            try (var input = resource.getInputStream()) {
+                Files.copy(input, temporary.resolve(java.util.Objects.requireNonNull(resource.getFilename())));
+            }
+        }
         Files.writeString(temporary.resolve("V1__initial_schema.sql"), v1.replace("varchar(100)", "varchar(101)"));
         assertThat(v1).contains("varchar(100)");
         assertStartupBlocked("checksum mismatch", "--spring.flyway.locations=filesystem:" + temporary);
-        assertThat(flyway().info().current().getVersion().getVersion()).isEqualTo("1");
+        assertThat(flyway().info().current().getVersion().getVersion()).isEqualTo("2");
     }
 
     @Test
     void invalidPendingDdlBlocksReadinessConnectorAndBothEnabledJobs() throws Exception {
         flyway().migrate();
-        Files.writeString(temporary.resolve("V2__startup_gate_invalid_ddl.sql"),
+        Files.writeString(temporary.resolve("V9000__startup_gate_invalid_ddl.sql"),
                 "create table startup_gate_rollback_probe(id integer);\ncreate table deliberately_invalid (;");
         assertStartupBlocked("syntax error", "--spring.flyway.locations=classpath:db/migration,filesystem:" + temporary);
         try (var connection = DriverManager.getConnection(url, user, password);
@@ -107,7 +114,7 @@ class MigrationStartupGateIT {
             assertThat(result.next()).isTrue();
             assertThat(result.getInt(1)).isZero();
         }
-        assertThat(flyway().info().current().getVersion().getVersion()).isEqualTo("1");
+        assertThat(flyway().info().current().getVersion().getVersion()).isEqualTo("2");
     }
 
     @Test

@@ -1,0 +1,186 @@
+package com.moviemux.rankingaccess;
+
+import static org.assertj.core.api.Assertions.*;
+import com.moviemux.ranking.adapter.repository.postgres.CurrentRankingAccessPostgresAdapter;
+import com.moviemux.ranking.domain.model.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.*;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.transaction.support.TransactionTemplate;
+
+class RankingAccessPersistenceIT {
+  private String url, user, password, schema;
+  private JdbcTemplate jdbc;
+  private TransactionTemplate transactions;
+  private CurrentRankingAccessPostgresAdapter access;
+
+  @BeforeEach void isolatedDatabaseSchema() throws Exception {
+    url = System.getenv("TEST_DATABASE_URL");
+    assertThat(url).matches("jdbc:postgresql://(localhost|127\\.0\\.0\\.1):[0-9]+/[a-zA-Z0-9_]*test[a-zA-Z0-9_]*");
+    user = System.getenv().getOrDefault("TEST_DATABASE_USER", "moviemux_test");
+    password = System.getenv().getOrDefault("TEST_DATABASE_PASSWORD", "moviemux_test");
+    schema = "ranking_access_test_" + UUID.randomUUID().toString().replace("-", "");
+    try (var connection = DriverManager.getConnection(url, user, password)) {
+      connection.createStatement().execute("create schema " + schema);
+    }
+    var dataSource = new DriverManagerDataSource(url, user, password) {
+      @Override public Connection getConnection() throws SQLException {
+        var connection = super.getConnection();
+        connection.setSchema(schema);
+        return connection;
+      }
+    };
+    jdbc = new JdbcTemplate(dataSource);
+    transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
+    access = new CurrentRankingAccessPostgresAdapter(new NamedParameterJdbcTemplate(dataSource));
+  }
+
+  @AfterEach void removeOnlyOwnedSchema() throws Exception {
+    if (schema != null) try (var connection = DriverManager.getConnection(url, user, password)) {
+      connection.createStatement().execute("drop schema " + schema + " cascade");
+    }
+  }
+
+  @Test void upgradeIsStrictlyAdditiveAndPreservesLegacyRowsAndCatalog() {
+    migrate("1");
+    var oldTables = tables();
+    assertThat(oldTables).hasSize(13);
+    var before = catalog(oldTables);
+    UUID owner = addUser();
+    UUID movie = UUID.randomUUID();
+    jdbc.update("insert into movie(id,created_at,description,director,english_title,portuguese_title,user_id) values (?,now(),'synthetic','synthetic','synthetic','synthetic',?)", movie, owner);
+    jdbc.update("insert into movie_note(movie_id,user_id,created_at,note) values (?,?,now(),8)", movie, owner);
+    assertThat(migrate(null)).isEqualTo(1);
+    assertThat(tables()).containsExactlyInAnyOrderElementsOf(union(oldTables, Set.of("ranking", "ranking_membership", "ranking_membership_grant")));
+    assertThat(catalog(oldTables)).containsExactlyElementsOf(before);
+    assertThat(jdbc.queryForObject("select note from movie_note where movie_id=? and user_id=?", Integer.class, movie, owner)).isEqualTo(8);
+    assertThat(jdbc.queryForObject("select user_id from movie where id=?", UUID.class, movie)).isEqualTo(owner);
+    assertThat(migrate(null)).isZero();
+    assertThat(jdbc.queryForList("select version from flyway_schema_history where success order by installed_rank", String.class)).containsExactly("1", "2");
+  }
+
+  @Test void readerUsesExactRankingAndActorWithFreshMembershipAndGrants() {
+    migrate(null);
+    UUID ownerA=addUser(), ownerB=addUser(), member=addUser(), outsider=addUser();
+    UUID a=addRanking(ownerA), b=addRanking(ownerB);
+    addMember(a, member, true, "READ", "RATE_OWN");
+    addMember(b, member, true, "READ", "ADD_ENTRY");
+    assertThat(access.find(a, member).orElseThrow().membership().orElseThrow().capabilities()).containsExactlyInAnyOrder(RankingCapability.READ, RankingCapability.RATE_OWN);
+    assertThat(access.find(b, member).orElseThrow().membership().orElseThrow().capabilities()).containsExactlyInAnyOrder(RankingCapability.READ, RankingCapability.ADD_ENTRY);
+    assertThat(access.find(a, outsider).orElseThrow().membership()).isEmpty();
+    assertThat(access.find(UUID.randomUUID(), member)).isEmpty();
+    assertThat(access.find(a, ownerA).orElseThrow().membership().orElseThrow().capabilities()).isEmpty();
+    jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='READ'", a, member);
+    assertThat(access.find(a, member).orElseThrow().membership().orElseThrow().capabilities()).containsExactly(RankingCapability.RATE_OWN);
+    jdbc.update("update ranking_membership set active=false where ranking_id=? and user_id=?", a, member);
+    assertThat(access.find(a, member).orElseThrow().membership().orElseThrow().active()).isFalse();
+    assertThat(access.find(b, member).orElseThrow().membership().orElseThrow().active()).isTrue();
+    assertThatNullPointerException().isThrownBy(() -> access.find(null, member));
+    assertThatNullPointerException().isThrownBy(() -> access.find(a, null));
+  }
+
+  @Test void ownerMustHaveActiveMatchingMembershipAtCommit() {
+    migrate(null);
+    UUID owner = addUser(), rank = UUID.randomUUID();
+    assertThatThrownBy(() -> transactions.executeWithoutResult(status -> insertRanking(rank, owner)))
+        .isInstanceOf(org.springframework.transaction.TransactionSystemException.class);
+    assertThat(jdbc.queryForObject("select count(*) from ranking", Integer.class)).isZero();
+    UUID valid = addRanking(owner);
+    assertThatThrownBy(() -> transactions.executeWithoutResult(status ->
+        jdbc.update("update ranking_membership set active=false where ranking_id=? and user_id=?", valid, owner)))
+        .isInstanceOf(org.springframework.transaction.TransactionSystemException.class);
+    assertThat(access.find(valid, owner).orElseThrow().membership().orElseThrow().active()).isTrue();
+    assertThatThrownBy(() -> jdbc.update("update ranking set owner_membership_active=false where id=?", valid))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
+  @Test void scopedConstraintsRejectOrphansDuplicateGrantsAndUnknownCapabilities() {
+    migrate(null);
+    UUID owner=addUser(), member=addUser(), rank=addRanking(owner), other=addRanking(addUser());
+    addMember(rank, member, true, "READ");
+    assertThatThrownBy(() -> addMember(rank, member, true)).isInstanceOf(DataIntegrityViolationException.class);
+    assertThatThrownBy(() -> grant(rank, member, "READ")).isInstanceOf(DataIntegrityViolationException.class);
+    assertThatThrownBy(() -> grant(other, member, "READ")).isInstanceOf(DataIntegrityViolationException.class);
+    assertThatThrownBy(() -> grant(rank, member, "GLOBAL_ADMIN")).isInstanceOf(DataIntegrityViolationException.class);
+    assertThatThrownBy(() -> jdbc.update("update ranking set visibility='UNLISTED' where id=?", rank)).isInstanceOf(DataIntegrityViolationException.class);
+    assertThatThrownBy(() -> jdbc.update("update ranking set admission='UNKNOWN' where id=?", rank)).isInstanceOf(DataIntegrityViolationException.class);
+    assertThatThrownBy(() -> jdbc.update("delete from \"user\" where id=?", owner)).isInstanceOf(DataIntegrityViolationException.class);
+    assertThat(jdbc.queryForObject("select count(*) from ranking", Integer.class)).isEqualTo(2);
+  }
+
+  @Test void concurrentMembershipInsertionCommitsExactlyOne() throws Exception {
+    migrate(null);
+    UUID rank=addRanking(addUser()), member=addUser();
+    var start = new CountDownLatch(1);
+    var attempts = new ArrayList<CompletableFuture<Boolean>>();
+    for (int i=0;i<2;i++) attempts.add(CompletableFuture.supplyAsync(() -> {
+      try { start.await(10, TimeUnit.SECONDS); addMember(rank, member, true); return true; }
+      catch (DataIntegrityViolationException expected) { return false; }
+      catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new RuntimeException(interrupted); }
+    }));
+    start.countDown();
+    assertThat(attempts.get(0).get(15, TimeUnit.SECONDS) ^ attempts.get(1).get(15, TimeUnit.SECONDS)).isTrue();
+    assertThat(jdbc.queryForObject("select count(*) from ranking_membership where ranking_id=? and user_id=?", Integer.class, rank, member)).isEqualTo(1);
+  }
+
+  @Test void conflictingPreexistingTableFailsWithoutPartialAdoptionOrDestruction() {
+    migrate("1");
+    jdbc.execute("create table ranking(id integer primary key)");
+    jdbc.update("insert into ranking values (42)");
+    assertThatThrownBy(() -> migrate(null)).isInstanceOf(org.flywaydb.core.api.FlywayException.class);
+    assertThat(jdbc.queryForObject("select id from ranking", Integer.class)).isEqualTo(42);
+    assertThat(tables()).doesNotContain("ranking_membership", "ranking_membership_grant");
+    assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where version='2' and success", Integer.class)).isZero();
+  }
+
+  private int migrate(String target) {
+    var config = Flyway.configure().dataSource(url,user,password).schemas(schema).defaultSchema(schema)
+        .createSchemas(false).baselineOnMigrate(false).cleanDisabled(true).locations("classpath:db/migration");
+    if (target != null) config.target(target);
+    return config.load().migrate().migrationsExecuted;
+  }
+  private UUID addUser() {
+    UUID id=UUID.randomUUID();
+    jdbc.update("insert into \"user\"(id,created_at,email,name,password) values (?,now(),?,'Synthetic','synthetic-hash')", id,id+"@example.invalid");
+    return id;
+  }
+  private void insertRanking(UUID id, UUID owner) {
+    jdbc.update("insert into ranking(id,owner_user_id,visibility,admission,created_at) values (?,?,'PRIVATE','INVITATION',now())", id,owner);
+  }
+  private UUID addRanking(UUID owner) {
+    UUID id=UUID.randomUUID();
+    transactions.executeWithoutResult(status -> { insertRanking(id,owner); addMember(id,owner,true); });
+    return id;
+  }
+  private void addMember(UUID rank, UUID member, boolean active, String... grants) {
+    jdbc.update("insert into ranking_membership(ranking_id,user_id,active,created_at) values (?,?,?,now())",rank,member,active);
+    for(String grant:grants) grant(rank,member,grant);
+  }
+  private void grant(UUID rank, UUID member, String capability) {
+    jdbc.update("insert into ranking_membership_grant(ranking_id,user_id,capability) values (?,?,?)",rank,member,capability);
+  }
+  private Set<String> tables() {
+    return new TreeSet<>(jdbc.queryForList("select table_name from information_schema.tables where table_schema=? and table_name<>'flyway_schema_history'", String.class, schema));
+  }
+  private Set<String> union(Set<String> first,Set<String> second) { var both=new TreeSet<>(first);both.addAll(second);return both; }
+  private List<String> catalog(Set<String> tableNames) {
+    String names=tableNames.stream().map(name -> "'"+name+"'").collect(java.util.stream.Collectors.joining(","));
+    var result=new ArrayList<String>();
+    for(String sql:List.of(
+        "select table_name||':'||column_name||':'||data_type||':'||udt_name||':'||coalesce(character_maximum_length::text,'')||':'||is_nullable||':'||coalesce(column_default,'')||':'||is_identity||':'||coalesce(identity_generation,'') from information_schema.columns where table_schema=? and table_name in ("+names+") order by table_name,ordinal_position",
+        "select c.relname||':'||con.conname||':'||pg_get_constraintdef(con.oid) from pg_constraint con join pg_class c on c.oid=con.conrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname=? and c.relname in ("+names+") order by c.relname,con.conname",
+        "select tablename||':'||indexname||':'||indexdef from pg_indexes where schemaname=? and tablename in ("+names+") order by tablename,indexname")) result.addAll(jdbc.queryForList(sql,String.class,schema));
+    return result;
+  }
+}
