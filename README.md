@@ -243,3 +243,33 @@ APIs interpret these exceptional states. Existing movie, wishlist and Discord
 rows remain untouched. There is no consumer cutover, account deletion/recovery
 flow, production authorization or guarantee of lossless rollback after new
 contextual writes. Tests use only synthetic disposable PostgreSQL schemas.
+
+### Contextual catalog browsing and existing-catalog inclusion
+
+Authenticated readers can use `GET /rankings/{rankingId}/entries?after={entryId}&limit=20`
+and `GET /rankings/{rankingId}/entries/{entryId}/rounds?afterNumber={number}&limit=20`.
+Both filter authorization before keyset pagination in the same SQL snapshot,
+return `items` plus explicit nullable `next_cursor`, and use `Cache-Control: no-store`.
+Entry metadata has no ratings, authors, vote counts or aggregates. Round listing
+preserves nullable `revealed` as raw historical state and does not reveal votes or
+advance any timer. Invalid pages return400, inaccessible/missing scope404, and
+persistence failures generic500. No public/anonymous route is enabled.
+
+`POST /rankings/{rankingId}/entries/catalog` accepts only an authoritative
+`movie_id` referring to an existing global catalog record. Current ADD_ENTRY or
+ownership is revalidated under locks; global ADM is not an override. A new entry
+gets a separate first round with hidden votes and its own creation time. Response
+is `{entry_id}` with201 for creation or200 for an existing entry. Retry does not
+open another round, change creator, reveal votes or refresh metadata. Archived
+rankings reject the write. The transaction creates no global movie, notifications
+or XP; rollback also removes any newly allocated contextual author identity.
+
+This is **not full TMDB import**. Creating new catalog rows is blocked from this
+flow because legacy list/detail/statistics still treat `movie` as a global
+ranking. Full import and legacy writer compatibility need coordinated isolation.
+Existing contextual FKs also protect catalog records against legacy deletion;
+production activation must account for that rather than deleting history.
+Missing provider metadata remains absent, not invented localized text. Future UI
+fallbacks should be translated and may use original/English title candidates;
+legacy required columns and consumers are unchanged until a compatible path is
+verified. No fallback is persisted or new catalog insert enabled by these routes.
