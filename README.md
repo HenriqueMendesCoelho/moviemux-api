@@ -206,3 +206,11 @@ The user row is locked before reference checks; protected accounts, credentials,
 ratings and wishlists remain unchanged. Accounts without these references retain
 the legacy deletion behavior. This guard does not implement recoverable account
 deletion, pseudonymization, or legacy ranking assignment.
+
+V4 adds an empty contextual author-identity foundation. Allocation requires an
+existing READ_COMMITTED transaction and contextual membership, participates in
+outer rollback, and resolves bounded UUID collisions without sharing codes
+between rankings. It does not assign legacy ratings or unlink accounts.
+The detached-author projection contains only `kind: DELETED` and an opaque code;
+it rejects a still-linked account. Clients localize the semantic label without
+changing the code. No identity endpoint or account lifecycle is exposed.

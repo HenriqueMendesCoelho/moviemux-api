@@ -62,7 +62,7 @@ class RankingArchiveMigrationIT {
     var oldCatalog = catalog();
     var oldData = historyRows();
 
-    assertThat(migrate(null)).isEqualTo(1);
+    assertThat(migrate("3")).isEqualTo(1);
     assertThat(tables()).containsExactlyElementsOf(oldTables);
     var expectedCatalog = new ArrayList<>(oldCatalog);
     expectedCatalog.add("column:ranking:archived_at:timestamp with time zone:timestamptz::YES::NO:");
@@ -74,14 +74,14 @@ class RankingArchiveMigrationIT {
         .containsExactly("1:SQL:true", "2:SQL:true", "3:SQL:true");
 
     var after = catalog();
-    assertThat(migrate(null)).isZero();
+    assertThat(migrate("3")).isZero();
     assertThat(catalog()).containsExactlyElementsOf(after);
     assertThat(historyRows()).isEqualTo(oldData);
     assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where version='3' and success", Integer.class)).isEqualTo(1);
   }
 
   @Test void archiveTimestampCannotBeClearedOrRewrittenAndNeverDeletesHistory() {
-    assertThat(migrate(null)).isEqualTo(3);
+    assertThat(migrate("3")).isEqualTo(3);
     UUID ranking = insertSyntheticHistory();
     var before = historyRows();
     assertThat(jdbc.queryForObject("select archived_at from ranking where id=?", Timestamp.class, ranking)).isNull();
@@ -94,7 +94,7 @@ class RankingArchiveMigrationIT {
     assertThat(jdbc.update("update ranking set archived_at=archived_at where id=?", ranking)).isEqualTo(1);
     assertThat(historyRows()).isEqualTo(before);
     assertThat(jdbc.queryForObject("select count(*) from movie_note where note=8", Integer.class)).isEqualTo(1);
-    assertThat(migrate(null)).isZero();
+    assertThat(migrate("3")).isZero();
     assertThat(jdbc.queryForObject("select archived_at from ranking where id=?", Timestamp.class, ranking).toInstant()).isEqualTo(archivedAt);
     assertThat(historyRows()).isEqualTo(before);
   }
