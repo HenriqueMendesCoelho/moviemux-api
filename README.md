@@ -298,3 +298,35 @@ These commands do not emit global notifications, websocket events or XP, and do
 not call legacy movie-note usecases. They do not implement rating deletion or
 restoration. Before activating a future soft-delete lifecycle, its state must be
 checked by these commands as well as by contextual reads and catalog inclusion.
+
+### Recoverable ranking-entry removal
+
+Entries have a contextual, recoverable 24-hour lifecycle. `GET
+/rankings/{rankingId}/entries/{entryId}/removal-preview` returns `entry_id`,
+`version`, nullable `removed_at`, `expires_at`, `removal_token`, the localized-UI
+warning key `ranking.entry_removal_permanent_after_retention`, and
+`recovery_seconds: 86400`. It does not expose rating counts or aggregates.
+`DELETE /rankings/{rankingId}/entries/{entryId}` requires
+`{"expected_version": 0, "confirm": true}` and returns the new state. The
+version comes from the preview, not a hardcoded client default. An outdated
+version conflicts instead of extending the window or deleting a restored entry.
+`POST /rankings/{rankingId}/entries/{entryId}/restore` requires the current
+`removal_token`. A stale token conflicts, including after successful restoration.
+All responses are no-store. The frontend must show the recovery deadline and
+permanent-loss warning before confirmation, in the selected interface language.
+
+Active owners or members with `REMOVE_ENTRY` can remove/restore any entry;
+`REMOVE_OWN_ENTRY` permits only their own persisted inclusions. READ is not an
+additional requirement. Re-including the same catalog movie with `ADD_ENTRY`
+before the deadline restores its existing history, not a duplicate entry/round.
+Archived rankings reject user mutations. Removed entries are absent from active
+entry/round reads and cannot receive ratings. At or after the database deadline,
+restore/re-inclusion is rejected even if physical cleanup has not yet run.
+
+Expiration is an explicit internal batch operation, not an HTTP endpoint,
+startup action or enabled scheduler. It removes only expired contextual
+ratings/rounds/entries, never the global movie or other rankings. Legacy mapping
+receipts retain original IDs and a terminal purge marker; their live references
+are closed transactionally, and offline migration replay is blocked thereafter.
+Previously requested removals continue to expire even if their ranking is later archived; active archived history is not purged. Operational scheduling remains disabled pending cutover. Deleting accounts,
+individual ratings or ex-member ratings is not covered by this entry lifecycle.
