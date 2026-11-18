@@ -16,7 +16,7 @@ public class RankingMovieRoundListPostgresAdapter implements RankingMovieRoundLi
           select e.ranking_id, e.entry_id from ranking_movie_entry e
           join ranking r on r.id=e.ranking_id
           join ranking_membership m on m.ranking_id=r.id and m.user_id=:actor and m.active
-          where e.ranking_id=:ranking and e.entry_id=:entry
+          where e.ranking_id=:ranking and e.entry_id=:entry and e.removed_at is null
             and (r.owner_user_id=:actor or exists (
               select 1 from ranking_membership_grant g
               where g.ranking_id=r.id and g.user_id=:actor and g.capability='READ'))

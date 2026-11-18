@@ -28,7 +28,7 @@ public class CurrentRankingEntriesPostgresAdapter implements CurrentRankingEntri
                  m.portuguese_title, m.url_image, m.release_date, m.runtime, e.created_at
           from allowed a join ranking_movie_entry e on e.ranking_id=a.ranking_id
           join movie m on m.id=e.movie_id
-          where cast(:after as uuid) is null or e.entry_id>cast(:after as uuid)
+          where e.removed_at is null and (cast(:after as uuid) is null or e.entry_id>cast(:after as uuid))
           order by e.entry_id limit :maxRows
         )
         select a.ranking_id, a.actor_user_id, p.* from allowed a left join page p on true

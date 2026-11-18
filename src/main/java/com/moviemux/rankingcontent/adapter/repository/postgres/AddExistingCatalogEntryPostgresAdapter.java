@@ -2,6 +2,7 @@ package com.moviemux.rankingcontent.adapter.repository.postgres;
 
 import com.moviemux.ranking.domain.repository.RankingAuthorIdentities;
 import com.moviemux.rankingcontent.domain.exception.ArchivedCatalogEntryException;
+import com.moviemux.rankingcontent.domain.exception.ExpiredEntryRecoveryException;
 import com.moviemux.rankingcontent.domain.exception.RankingEntriesDeniedException;
 import com.moviemux.rankingcontent.domain.model.AddedCatalogEntry;
 import com.moviemux.rankingcontent.domain.port.AddExistingCatalogEntry;
@@ -21,6 +22,7 @@ public class AddExistingCatalogEntryPostgresAdapter implements AddExistingCatalo
     this.jdbc=Objects.requireNonNull(jdbc);this.authors=Objects.requireNonNull(authors);
   }
   private record LockedRanking(UUID owner,boolean archived) {}
+  private record ExistingEntry(UUID id, boolean removed) {}
   @Override @Transactional(propagation=Propagation.MANDATORY)
   public AddedCatalogEntry write(UUID rankingId,UUID actorUserId,UUID movieId) {
     var params=Map.of("ranking",Objects.requireNonNull(rankingId),"actor",Objects.requireNonNull(actorUserId),"movie",Objects.requireNonNull(movieId));
@@ -37,8 +39,22 @@ public class AddExistingCatalogEntryPostgresAdapter implements AddExistingCatalo
     // No provider call, catalog insert/update, legacy creation usecase, or global notification.
     var movies=jdbc.query("select id from movie where id=:movie for key share",params,(row,n)->row.getObject("id",UUID.class));
     if(movies.isEmpty())throw new RankingEntriesDeniedException();
-    var existing=jdbc.query("select entry_id from ranking_movie_entry where ranking_id=:ranking and movie_id=:movie",params,(row,n)->row.getObject("entry_id",UUID.class));
-    if(!existing.isEmpty())return new AddedCatalogEntry(existing.get(0),false);
+    var existing=jdbc.query("select entry_id,removed_at from ranking_movie_entry where ranking_id=:ranking and movie_id=:movie for update",
+        params,(row,n)->new ExistingEntry(row.getObject("entry_id",UUID.class),row.getObject("removed_at")!=null));
+    if(!existing.isEmpty()) {
+      var entry=existing.get(0);
+      if(entry.removed()) {
+        // Check the deadline after acquiring the locks. Restore only the lifecycle marker,
+        // never the original creator, contextual timestamps, rounds, revelation, or ratings.
+        int restored=jdbc.update("""
+            update ranking_movie_entry set removed_at=null,removal_token=null,lifecycle_version=lifecycle_version+1
+            where ranking_id=:ranking and movie_id=:movie and removed_at is not null
+              and clock_timestamp() < removed_at + interval '24 hours'
+            """,params);
+        if(restored!=1)throw new ExpiredEntryRecoveryException();
+      }
+      return new AddedCatalogEntry(entry.id(),false);
+    }
     var author=authors.getOrCreate(rankingId,actorUserId);
     if(!rankingId.equals(author.rankingId()) || !actorUserId.equals(author.accountId()))throw new RankingEntriesDeniedException();
     UUID entry=UUID.randomUUID(),round=UUID.randomUUID();

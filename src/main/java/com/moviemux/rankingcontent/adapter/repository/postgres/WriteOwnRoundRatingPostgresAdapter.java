@@ -59,7 +59,7 @@ public class WriteOwnRoundRatingPostgresAdapter implements WriteOwnRoundRating {
     var rounds = jdbc.query("""
         select r.round_id from ranking_movie_round r
         join ranking_movie_entry e on e.ranking_id=r.ranking_id and e.entry_id=r.entry_id
-        where r.ranking_id=:ranking and r.round_id=:round for update of e,r
+        where r.ranking_id=:ranking and r.round_id=:round and e.removed_at is null for update of e,r
         """, params, (row, n) -> row.getObject("round_id", UUID.class));
     if (rounds.isEmpty()) throw new RankingEntriesDeniedException();
     // Editing a missing rating must not allocate a new contextual identity.

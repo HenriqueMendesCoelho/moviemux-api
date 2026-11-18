@@ -34,6 +34,8 @@ public class AddExistingCatalogEntryController {
   public record EntryResponse(UUID entryId) {}
   @ExceptionHandler(RankingEntriesDeniedException.class)
   public ResponseEntity<Map<String,String>> notFound(){return error(HttpStatus.NOT_FOUND,"ranking.not_found");}
+  @ExceptionHandler(ExpiredEntryRecoveryException.class)
+  public ResponseEntity<Map<String,String>> recoveryExpired(){return error(HttpStatus.CONFLICT,"ranking.entry_recovery_expired");}
   @ExceptionHandler(ArchivedCatalogEntryException.class)
   public ResponseEntity<Map<String,String>> archived(){return error(HttpStatus.CONFLICT,"ranking.archived_read_only");}
   @ExceptionHandler({InvalidCatalogEntryException.class,HttpMessageNotReadableException.class,MethodArgumentTypeMismatchException.class})

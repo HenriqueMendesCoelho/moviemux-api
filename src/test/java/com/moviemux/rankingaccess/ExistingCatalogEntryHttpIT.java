@@ -227,6 +227,57 @@ class ExistingCatalogEntryHttpIT {
       assertThat(jdbc.queryForObject("select count(*) from "+table(name),Integer.class)).isEqualTo(1);
   }
 
+  @Test void removedEntryIsHiddenAndCannotReceiveRatingsUntilSameIdentityRestored() throws Exception {
+    var owner=user(false);UUID rank=ranking(owner,"PRIVATE"),movie=movie(owner);
+    var added=post(rank,owner.token(),body(movie));assertEntry(added,201);
+    UUID entry=UUID.fromString(added.body().required("entry_id").asText());
+    UUID round=jdbc.queryForObject("select round_id from "+table("ranking_movie_round")+" where entry_id=?",UUID.class,entry);
+    var history=rows(List.of("ranking_movie_round","ranking_author_identity","ranking_movie_rating"));
+    var original=jdbc.queryForMap("select added_by_author_id,created_at,updated_at from "+table("ranking_movie_entry")+" where entry_id=?",entry);
+    var sources=sourceRows();
+    jdbc.update("update "+table("ranking_movie_entry")+" set removed_at=clock_timestamp()-interval '1 hour',removal_token=?,lifecycle_version=lifecycle_version+1 where entry_id=?",UUID.randomUUID(),entry);
+    long removedVersion=jdbc.queryForObject("select lifecycle_version from "+table("ranking_movie_entry")+" where entry_id=?",Long.class,entry);
+    for(String suffix:List.of("", "?after=00000000-0000-0000-0000-000000000000")) {
+      var list=contextRequest("GET","/rankings/"+rank+"/entries"+suffix,owner.token(),null);
+      assertThat(list.status()).isEqualTo(200);assertThat(list.body().required("items").size()).isZero();
+    }
+    assertError(contextRequest("GET","/rankings/"+rank+"/entries/"+entry+"/rounds",owner.token(),null),404,"ranking.not_found");
+    for(String method:List.of("POST","PATCH"))
+      assertError(contextRequest(method,"/rankings/"+rank+"/rounds/"+round+"/rating/me",owner.token(),"{\"score\":8}"),404,"ranking.not_found");
+    var restored=post(rank,owner.token(),body(movie));assertEntry(restored,200);assertThat(restored.body()).isEqualTo(added.body());
+    assertThat(jdbc.queryForMap("select added_by_author_id,created_at,updated_at from "+table("ranking_movie_entry")+" where entry_id=?",entry)).isEqualTo(original);
+    assertThat(jdbc.queryForObject("select count(*) from "+table("ranking_movie_entry")+" where entry_id=? and removed_at is null and removal_token is null and lifecycle_version=?",Integer.class,entry,removedVersion+1)).isEqualTo(1);
+    assertThat(rows(List.of("ranking_movie_round","ranking_author_identity","ranking_movie_rating"))).isEqualTo(history);
+    var afterRestore=targetRows();assertEntry(post(rank,owner.token(),body(movie)),200);assertThat(targetRows()).isEqualTo(afterRestore);
+    assertThat(sourceRows()).isEqualTo(sources);
+  }
+
+  @Test void expiredRecoveryAfterWaitingForRankingLockDoesNotDeleteOrRestoreAnything() throws Exception {
+    var owner=user(false);UUID rank=ranking(owner,"PRIVATE"),movie=movie(owner);
+    var added=post(rank,owner.token(),body(movie));UUID entry=UUID.fromString(added.body().required("entry_id").asText());
+    jdbc.update("update "+table("ranking_movie_entry")+" set removed_at=clock_timestamp()-interval '1 hour',removal_token=?,lifecycle_version=lifecycle_version+1 where entry_id=?",UUID.randomUUID(),entry);
+    try(var blocker=dataSource.getConnection()) {
+      blocker.setAutoCommit(false);lockRanking(blocker,rank);
+      var pending=http.sendAsync(postRequest(rank,owner.token(),body(movie)),HttpResponse.BodyHandlers.ofString());
+      awaitBlockedRequests(blocker,1);
+      try(var expire=blocker.prepareStatement("update "+table("ranking_movie_entry")+" set removed_at=clock_timestamp()-interval '24 hours' where entry_id=?")) {
+        expire.setObject(1,entry);expire.executeUpdate();
+      }
+      blocker.commit();var expired=targetRows();
+      assertError(response(pending.get(15,java.util.concurrent.TimeUnit.SECONDS)),409,"ranking.entry_recovery_expired");
+      assertThat(targetRows()).isEqualTo(expired);
+      assertError(post(rank,owner.token(),body(movie)),409,"ranking.entry_recovery_expired");
+      assertThat(targetRows()).isEqualTo(expired);
+    }
+  }
+
+  private ApiResponse contextRequest(String method,String path,String token,String body) throws Exception {
+    var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith"+path))
+        .timeout(Duration.ofSeconds(15)).header("Authorization","Bearer "+token).header("Content-Type","application/json")
+        .method(method,body==null?HttpRequest.BodyPublishers.noBody():HttpRequest.BodyPublishers.ofString(body)).build();
+    return response(http.send(request,HttpResponse.BodyHandlers.ofString()));
+  }
+
   private void lockRanking(java.sql.Connection connection,UUID rank) throws Exception {
     try(var statement=connection.prepareStatement("select id from "+table("ranking")+" where id=? for update")) {
       statement.setObject(1,rank);try(var result=statement.executeQuery()){assertThat(result.next()).isTrue();}
