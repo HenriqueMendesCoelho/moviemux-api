@@ -330,3 +330,11 @@ receipts retain original IDs and a terminal purge marker; their live references
 are closed transactionally, and offline migration replay is blocked thereafter.
 Previously requested removals continue to expire even if their ranking is later archived; active archived history is not purged. Operational scheduling remains disabled pending cutover. Deleting accounts,
 individual ratings or ex-member ratings is not covered by this entry lifecycle.
+
+`GET /rankings/{rankingId}/rounds/{roundId}/rating/me` reads only the current
+member's own rating, requiring active READ membership or ownership. It returns
+`round_id` and `score`, including explicit null or historical out-of-range values
+without normalization. Hidden rounds and archived rankings remain readable to
+the authorized author; removed entries, missing own ratings and inaccessible
+contexts share the same generic 404. This read neither reveals others' votes nor
+updates timestamps, creates author identities or changes revelation.
