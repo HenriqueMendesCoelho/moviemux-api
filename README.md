@@ -338,3 +338,22 @@ without normalization. Hidden rounds and archived rankings remain readable to
 the authorized author; removed entries, missing own ratings and inaccessible
 contexts share the same generic 404. This read neither reveals others' votes nor
 updates timestamps, creates author identities or changes revelation.
+
+`GET /rankings/{rankingId}/entries/{entryId}/ratings/aggregate` is an authenticated,
+read-only projection for active `READ` members or the active owner. It returns only
+`entry_id`, exact integer `total`, integer `votes`, and `partial`. The total and
+count include numeric scores from rounds whose persisted `revealed` flag is
+explicitly true. Historical null scores are not numeric votes and do not become
+zero; historical out-of-range scores remain unchanged and contribute their exact
+value. The ratio `total / votes` is the weighted overall mean, not a mean of round
+means. With zero votes, no mean exists; the response does not invent a zero mean
+or select display precision. Clients must preserve integer precision.
+
+`partial` means at least one round is not explicitly revealed, even if it has no
+votes. No hidden vote values, participation counts, authors, or timestamps appear
+in this projection. Changing hidden votes does not change its response. This read
+never advances revelation or changes its timer. Archived history remains readable
+under current authorization; removed entries, missing entries, and inaccessible
+rankings return the same generic 404. Authorization and aggregation share one SQL
+snapshot and responses use `Cache-Control: no-store`. Public/anonymous projections,
+ranking-wide ordering, and event delivery are not introduced by this endpoint.
