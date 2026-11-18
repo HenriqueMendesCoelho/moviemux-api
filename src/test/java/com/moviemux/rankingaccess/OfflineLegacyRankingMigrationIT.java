@@ -147,13 +147,19 @@ class OfflineLegacyRankingMigrationIT {
 
   @org.junit.jupiter.params.ParameterizedTest
   @org.junit.jupiter.params.provider.ValueSource(strings = {"source_users", "source_movies", "source_ratings"})
-  void tamperedLedgerCountsRejectReplayWithoutFurtherMutation(String column) {
+  void immutableLedgerRejectsCountTamperingAndOriginalReplayStillSucceeds(String column) {
     var plan = migration.preview(owner, rank); migration.apply(plan, true);
     var sourceBefore = snapshot(SOURCES);
-    jdbc.update("update legacy_ranking_migration set " + column + "=" + column + "+1");
     var targetBefore = snapshot(TARGETS);
-    assertThatThrownBy(() -> migration.apply(plan, true)).isInstanceOf(IllegalStateException.class)
-        .hasMessage("migration.already_applied_different_state");
+    assertThatThrownBy(() -> jdbc.update("update legacy_ranking_migration set " + column + "=" + column + "+1"))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+        .satisfies(error -> {
+          var cause = ((org.springframework.dao.DataIntegrityViolationException) error).getMostSpecificCause();
+          assertThat(cause).isInstanceOf(SQLException.class);
+          assertThat(((SQLException) cause).getSQLState()).isEqualTo("23514");
+        });
+    assertThat(snapshot(TARGETS)).isEqualTo(targetBefore);
+    assertThat(migration.apply(plan, true).alreadyApplied()).isTrue();
     assertThat(snapshot(TARGETS)).isEqualTo(targetBefore);
     assertThat(snapshot(SOURCES)).isEqualTo(sourceBefore);
   }

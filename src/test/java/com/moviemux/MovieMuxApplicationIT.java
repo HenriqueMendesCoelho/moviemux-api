@@ -31,7 +31,7 @@ class MovieMuxApplicationIT {
 
     @Test
     void migrationCompletesBeforeJpaValidationAndApplicationBecomesUsable() {
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("7");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("8");
         assertThat(entityManagerFactory.isOpen()).isTrue();
         assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where version='1' and success", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where version='2' and success", Integer.class)).isEqualTo(1);
@@ -40,6 +40,7 @@ class MovieMuxApplicationIT {
         assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where version='5' and success", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where version='6' and success", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where version='7' and success", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from flyway_schema_history where version='8' and success", Integer.class)).isEqualTo(1);
         assertThat(environment.getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         assertThat(environment.getProperty("scheduling.enabled")).isEqualTo("false");
         assertThat(environment.getProperty("send.mail")).isEqualTo("false");

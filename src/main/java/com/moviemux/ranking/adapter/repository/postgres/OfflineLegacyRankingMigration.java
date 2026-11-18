@@ -48,7 +48,7 @@ public final class OfflineLegacyRankingMigration {
   public Plan preview(UUID ownerId, UUID rankingId) {
     Objects.requireNonNull(ownerId); Objects.requireNonNull(rankingId);
     return transaction(true).execute(status -> {
-      setupSession(); requireSchema();
+      setupSession(); requireSchema(); requireReplayOpen();
       return snapshot(ownerId, rankingId);
     });
   }
@@ -62,6 +62,7 @@ public final class OfflineLegacyRankingMigration {
       jdbc.execute("lock table legacy_ranking_migration in share row exclusive mode");
       jdbc.execute("lock table \"user\", movie, movie_note in share mode");
       jdbc.execute("lock table ranking, ranking_membership, ranking_membership_grant, ranking_author_identity, ranking_movie_entry, ranking_movie_round, ranking_movie_rating, legacy_ranking_movie_map in share mode");
+      requireReplayOpen();
       Plan current = snapshot(plan.ownerId(), plan.rankingId());
       if (!plan.equals(current)) throw new IllegalStateException("migration.source_changed");
       var ledger = jdbc.queryForList("select * from legacy_ranking_migration where migration_key=?", KEY);
@@ -103,9 +104,9 @@ public final class OfflineLegacyRankingMigration {
             select ?,?,?,1,null,created_at,updated_at,show_notes from movie where id=?
             """, plan.rankingId(), entry, round, movie);
         jdbc.update("""
-            insert into legacy_ranking_movie_map(migration_key,ranking_id,legacy_movie_id,entry_id,round_id)
-            values (?,?,?,?,?)
-            """, KEY, plan.rankingId(), movie, entry, round);
+            insert into legacy_ranking_movie_map(migration_key,ranking_id,legacy_movie_id,entry_id,round_id,live_entry_id,live_round_id)
+            values (?,?,?,?,?,?,?)
+            """, KEY, plan.rankingId(), movie, entry, round, entry, round);
       }
       jdbc.update("""
           insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at,updated_at)
@@ -137,10 +138,17 @@ public final class OfflineLegacyRankingMigration {
 
   private void requireSchema() {
     var versions = jdbc.queryForList("select version from flyway_schema_history where success order by installed_rank", String.class);
-    if (!versions.equals(List.of("1","2","3","4","5","6","7")))
+    if (!versions.equals(List.of("1","2","3","4","5","6","7","8")))
       throw new IllegalStateException("migration.schema_version_mismatch");
     if (count("select count(*) from flyway_schema_history where not success") != 0)
       throw new IllegalStateException("migration.schema_history_failed");
+  }
+
+  private void requireReplayOpen() {
+    if (count("select count(*) from legacy_ranking_migration where migration_key=? and replay_closed_at is not null",KEY) != 0)
+      throw new IllegalStateException("migration.replay_closed_after_context_purge");
+    if (count("select count(*) from ranking_movie_entry where (removed_at is not null or lifecycle_version <> 0) and ranking_id in (select ranking_id from legacy_ranking_migration where migration_key=?)",KEY) != 0)
+      throw new IllegalStateException("migration.already_applied_different_state");
   }
 
   private Plan snapshot(UUID owner, UUID ranking) {
@@ -202,7 +210,14 @@ public final class OfflineLegacyRankingMigration {
     MessageDigest hash=digest();
     for(String table:TARGET_TABLES) {
       String column=table.equals("ranking")?"id":"ranking_id";
-      hashQuery(hash,table,"select row_to_json(s)::text from "+table+" s where "+column+"='"+rank+"'::uuid order by row_to_json(s)::text");
+      // Algorithm1 preserves V7 JSON field order regardless of later schema expansion.
+      String columns = switch(table) {
+        case "ranking_movie_entry" -> "ranking_id,entry_id,movie_id,added_by_author_id,created_at,updated_at";
+        case "legacy_ranking_movie_map" -> "migration_key,ranking_id,legacy_movie_id,entry_id,round_id";
+        default -> "*";
+      };
+      hashQuery(hash,table,"select row_to_json(s)::text from (select "+columns+" from "+table
+          +" where "+column+"='"+rank+"'::uuid) s order by row_to_json(s)::text");
     }
     return HexFormat.of().formatHex(hash.digest());
   }
