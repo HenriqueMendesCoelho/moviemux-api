@@ -273,3 +273,28 @@ Missing provider metadata remains absent, not invented localized text. Future UI
 fallbacks should be translated and may use original/English title candidates;
 legacy required columns and consumers are unchanged until a compatible path is
 verified. No fallback is persisted or new catalog insert enabled by these routes.
+
+### Contextual own-rating writes
+
+Authenticated clients can create (`POST`, 201) or explicitly edit (`PATCH`, 200)
+`/rankings/{rankingId}/rounds/{roundId}/rating/me` with `{"score": 0}` through
+`{"score": 10}`. The score must be a JSON integer: null, omission, decimal,
+string, boolean and out-of-range values are rejected, not silently coerced.
+The response contains only `round_id` and the authenticated author's `score`.
+Creation of an existing rating returns 409 (`ranking.rating_exists`), without
+turning retries into edits. Editing a missing rating returns the same generic
+404 as an inaccessible context. Both responses and errors are `no-store`.
+
+Membership and `RATE_OWN` (or ownership) are revalidated after the ranking lock.
+A global administrator has no implicit participation privilege. Archived
+rankings reject writes. A new member may rate an older round; rating a round
+never changes its revelation state or starts a new window. Identical edits
+preserve `updated_at`; actual edits preserve `created_at`. Concurrent edits are
+serialized, with the last authorized write winning; this API does not claim
+optimistic conflict detection. Historical null/out-of-range scores remain
+untouched unless their own author explicitly edits that exact contextual rating.
+
+These commands do not emit global notifications, websocket events or XP, and do
+not call legacy movie-note usecases. They do not implement rating deletion or
+restoration. Before activating a future soft-delete lifecycle, its state must be
+checked by these commands as well as by contextual reads and catalog inclusion.
