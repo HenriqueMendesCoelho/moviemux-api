@@ -6,7 +6,8 @@ import java.util.UUID;
 
 /**
  * Receipt of a previously authorized, committed award, not an incoming client command. The account
- * is opaque: account-wide versus per-ranking scope must be decided by the caller's approved policy.
+ * identifies a single account-wide progression balance within the current instance, combining
+ * authorized activities across rankings without creating a per-ranking XP balance.
  * This value does not establish eligibility, authorize an action or implement revocation semantics.
  */
 public record XpAward(
