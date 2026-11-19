@@ -357,3 +357,20 @@ under current authorization; removed entries, missing entries, and inaccessible
 rankings return the same generic 404. Authorization and aggregation share one SQL
 snapshot and responses use `Cache-Control: no-store`. Public/anonymous projections,
 ranking-wide ordering, and event delivery are not introduced by this endpoint.
+
+### Account-wide progression foundation
+
+XP progression belongs to the account within this installation, not to a ranking
+membership. Authorized awards from different rankings feed the same account's
+balance. `OwnAccountProgressProjection` projects a trusted local balance only for
+its expected account and requires an explicitly supplied `ProgressionPolicy`.
+Its `LevelProgress` output has no ranking IDs, source events, award counts or
+origin history; equal balances under the same policy yield equal progress.
+
+This pure component is not an HTTP authorization boundary, storage reader or XP
+awarder. It selects no production starting level, unit, curve, reward, cap,
+retention or correction policy. There is no new endpoint, persistence or
+historical backfill. Integration remains gated on those policies and current
+account authorization. Progression never grants ranking permissions or changes
+movie rating averages. No public visibility or cross-installation account link
+is introduced by this foundation.
