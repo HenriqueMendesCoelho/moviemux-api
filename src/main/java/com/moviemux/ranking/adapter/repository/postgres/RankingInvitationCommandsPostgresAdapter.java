@@ -5,6 +5,7 @@ import com.moviemux.ranking.domain.exception.RankingInvitationNotFoundException;
 import com.moviemux.ranking.domain.model.RankingInvitationReceipt;
 import com.moviemux.ranking.domain.port.RankingInvitationCommands;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -28,14 +29,20 @@ public class RankingInvitationCommandsPostgresAdapter implements RankingInvitati
   @Override
   public RankingInvitationReceipt issue(UUID actor, UUID rankingId, String recipientCode) {
     var rank = lockRanking(rankingId);
-    if (!rank.invitationMode() || !hasAuthority(actor, rankingId, rank)) throw missing();
-    // Resolve only after authorization, inside the same transaction. Rotation takes a conflicting
-    // row lock so it either precedes issuance (old code fails) or follows a bound invitation.
+    if (!rank.invitationMode() || !hasAuthority(actor, rankingId, rank) || !enabledNow(actor)) throw missing();
+    // Resolve an untrusted candidate only for an authorized issuer. Do not lock an address before
+    // the accounts: account deletion already holds the account and must be able to remove artifacts.
+    byte[] digest=protection.digest(recipientCode);
     var invitee = jdbc.queryForList("""
-        select account_id from ranking_invitation_address where lookup_digest=:digest for share
-        """, Map.of("digest", protection.digest(recipientCode)), UUID.class).stream().findFirst()
+        select account_id from ranking_invitation_address where lookup_digest=:digest
+        """, Map.of("digest",digest), UUID.class).stream().findFirst()
         .orElseThrow(RankingInvitationCommandsPostgresAdapter::missing);
-    if (hasMembership(rankingId, invitee, false) || !enabled(invitee)) throw missing();
+    if (!lockEnabledAccounts(actor,invitee) || hasMembership(rankingId,invitee,false)) throw missing();
+    // Re-resolve the exact digest/account under a share lock. Rotation may have happened while waiting.
+    if (jdbc.queryForList("""
+        select account_id from ranking_invitation_address
+        where lookup_digest=:digest and account_id=:account for share
+        """, Map.of("digest",digest,"account",invitee),UUID.class).isEmpty()) throw missing();
 
     var target = Map.of("rank", rankingId, "target", invitee);
     // An expired, unconsumed slot can be replaced. Mark the terminal time without prolonging validity.
@@ -63,14 +70,17 @@ public class RankingInvitationCommandsPostgresAdapter implements RankingInvitati
   @Override
   public void accept(UUID actor, UUID rankingId, UUID inviteId) {
     var rank = lockRanking(rankingId);
-    var invite = lockInvitation(rankingId, inviteId);
-    if (!actor.equals(invite.invitee()) || !enabled(actor)) throw missing();
+    var invite = invitation(rankingId,inviteId,false);
+    if (!actor.equals(invite.invitee())) throw missing();
     if (invite.consumed()) {
-      if (!hasMembership(rankingId, actor, true)) throw missing();
+      // Consumed replay never depends on current issuer eligibility and never recreates membership.
+      if (!lockEnabledAccounts(actor) || !invite.equals(invitation(rankingId,inviteId,true))
+          || !hasMembership(rankingId,actor,true)) throw missing();
       return;
     }
-    if (!rank.invitationMode() || invite.revoked() || !hasAuthority(invite.issuer(), rankingId, rank)
-        || hasMembership(rankingId, actor, false)) throw missing();
+    if (!rank.invitationMode() || invite.revoked() || !hasAuthority(invite.issuer(),rankingId,rank)
+        || !lockEnabledAccounts(actor,invite.issuer()) || hasMembership(rankingId,actor,false)
+        || !invite.equals(invitation(rankingId,inviteId,true))) throw missing();
     var p = Map.of("rank", rankingId, "invite", inviteId, "actor", actor);
     // Database wall clock is evaluated after serialization. An expired invite cannot create membership.
     if (jdbc.update("""
@@ -93,9 +103,9 @@ public class RankingInvitationCommandsPostgresAdapter implements RankingInvitati
   @Override
   public void revoke(UUID actor, UUID rankingId, UUID inviteId) {
     var rank = lockRanking(rankingId);
-    var invite = lockInvitation(rankingId, inviteId);
-    if (!hasAuthority(actor, rankingId, rank) || (!rank.owner().equals(actor) && !invite.issuer().equals(actor))
-        || invite.consumed()) throw missing();
+    if (!hasAuthority(actor,rankingId,rank) || !lockEnabledAccounts(actor)) throw missing();
+    var invite = invitation(rankingId,inviteId,true);
+    if ((!rank.owner().equals(actor) && !invite.issuer().equals(actor)) || invite.consumed()) throw missing();
     if (!invite.revoked()) jdbc.update("""
         update ranking_invitation set revoked_at=clock_timestamp()
         where ranking_id=:rank and invite_id=:invite
@@ -111,12 +121,12 @@ public class RankingInvitationCommandsPostgresAdapter implements RankingInvitati
         .stream().findFirst().orElseThrow(RankingInvitationCommandsPostgresAdapter::missing);
   }
 
-  private LockedInvitation lockInvitation(UUID rank, UUID invite) {
+  private LockedInvitation invitation(UUID rank, UUID invite, boolean lock) {
     return jdbc.query("""
         select invited_by_user_id,invitee_user_id,consumed_at is not null as consumed,
           revoked_at is not null as revoked
-        from ranking_invitation where ranking_id=:rank and invite_id=:invite for update
-        """, Map.of("rank", rank, "invite", invite), (row,index)->new LockedInvitation(
+        from ranking_invitation where ranking_id=:rank and invite_id=:invite
+        """ + (lock ? " for update" : ""), Map.of("rank", rank, "invite", invite), (row,index)->new LockedInvitation(
             row.getObject("invited_by_user_id", UUID.class),row.getObject("invitee_user_id", UUID.class),
             row.getBoolean("consumed"),row.getBoolean("revoked")))
         .stream().findFirst().orElseThrow(RankingInvitationCommandsPostgresAdapter::missing);
@@ -128,7 +138,7 @@ public class RankingInvitationCommandsPostgresAdapter implements RankingInvitati
           where m.ranking_id=:rank and m.user_id=:actor and m.active
             and (:owner or exists(select 1 from ranking_membership_grant g
               where g.ranking_id=m.ranking_id and g.user_id=m.user_id and g.capability='INVITE_MEMBER')))
-        """, Map.of("rank", ranking, "actor", actor, "owner", rank.owner().equals(actor))) && enabled(actor);
+        """, Map.of("rank", ranking, "actor", actor, "owner", rank.owner().equals(actor)));
   }
 
   private boolean hasMembership(UUID ranking, UUID actor, boolean activeOnly) {
@@ -138,14 +148,20 @@ public class RankingInvitationCommandsPostgresAdapter implements RankingInvitati
         """, Map.of("rank", ranking, "actor", actor, "activeOnly", activeOnly));
   }
 
-  private boolean enabled(UUID actor) {
-    // Match the current account restrictions for the invitation's other party as well as the caller.
-    // Shared row locks keep the decision ordered against account deletion and account lock updates.
-    return !jdbc.queryForList("""
+  private boolean enabledNow(UUID actor) {
+    return exists("""
+        select exists(select 1 from user_statistics
+          where user_id=:actor and consecutive_failed_login_attempts<10)
+        """,Map.of("actor",actor));
+  }
+
+  private boolean lockEnabledAccounts(UUID... ids) {
+    var accounts=List.of(ids).stream().distinct().toList();
+    return jdbc.queryForList("""
         select u.id from "user" u join user_statistics s on s.user_id=u.id
-        where u.id=:actor and s.consecutive_failed_login_attempts<10
-        for key share of u for share of s
-        """, Map.of("actor", actor), UUID.class).isEmpty();
+        where u.id in (:accounts) and s.consecutive_failed_login_attempts<10
+        order by u.id for key share of u for share of s
+        """, Map.of("accounts",accounts), UUID.class).size()==accounts.size();
   }
 
   private boolean exists(String query, Map<String,?> parameters) {

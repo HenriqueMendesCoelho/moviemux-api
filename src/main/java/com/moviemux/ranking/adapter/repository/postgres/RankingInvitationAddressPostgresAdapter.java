@@ -37,8 +37,11 @@ public class RankingInvitationAddressPostgresAdapter implements CurrentRankingIn
   public String rotate(UUID actor) {
     jdbc.query("select pg_advisory_xact_lock(hashtextextended('moviemux.invitation.address:' || cast(:actor as text),0))",
         Map.of("actor", actor), rows -> { rows.next(); return null; });
-    if (jdbc.queryForList("select id from \"user\" where id=:actor for key share",
-        Map.of("actor", actor), UUID.class).isEmpty()) throw new RankingAccessDeniedException();
+    if (jdbc.queryForList("""
+        select u.id from "user" u join user_statistics s on s.user_id=u.id
+        where u.id=:actor and s.consecutive_failed_login_attempts<10
+        for key share of u for share of s
+        """, Map.of("actor", actor), UUID.class).isEmpty()) throw new RankingAccessDeniedException();
     String old = find(actor).orElse(null);
     for (int attempt=0; attempt<4; attempt++) {
       byte[] entropy = new byte[16];
