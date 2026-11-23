@@ -420,8 +420,7 @@ still-authorized issuing member can revoke a pending invitation with
 
 These are private no-store contracts. The invitation ID grants no access by
 itself, and acceptance does not reactivate an inactive membership. No email,
-Discord, or other external notification is sent. Rate limits, private inbox
-integration, and rollout verification are separate release requirements.
+Discord, or other external notification is sent. Rate limits and rollout verification are separate release requirements.
 
 Provision different Base64-encoded 32-byte secrets for
 `ranking.invitation.address.digest-key` and
@@ -432,3 +431,12 @@ with `503 ranking.invitation_address_unavailable`; acceptance/revocation of
 already-issued invitations does not depend on these keys. Keep both secrets
 stable across replicas/restarts. Changing key material after issuance requires a
 separately planned operational rotation.
+
+Signed-in recipients can list their own usable invitations with
+`GET /ranking-invitations/incoming?after=<invite UUID>&limit=20`. Each item
+contains only `invite_id`, `ranking_id`, nullable `ranking_name` and
+`expires_at`, plus `next_cursor` at page level. The current issuer's
+authorization and both accounts' eligibility are checked before pagination.
+Once expired, revoked, consumed or unusable, the invitation stops contributing
+a name or an item. Seeing an invitation never authorizes reading the ranking
+before acceptance. Missing historical names remain null.
