@@ -615,6 +615,22 @@ immediately, even if physical cleanup is delayed. Monitor the
 expired count (capped at batch size + 1). Cleanup removes only receipt rows,
 never scores. No production activation is part of this change.
 
+### Previewing several own-rating pairs
+
+`POST /movies/collections/{destinationRankingId}/ratings/me/copy-bulk-preview`
+(and its exact `/rankings` alias) compares 1–50 explicit source and destination
+entry/round pairs in one read-only snapshot; the JSON body is limited to 32 KiB.
+Supply one `source_ranking_id` and `items` with exact `source_entry_id`,
+`source_round_id`, `destination_entry_id`, and `destination_round_id` UUIDs.
+The two collections must be different, live and currently authorized.
+
+The private no-store response contains only `items` in input order:
+`{index,status,source_score}`. Only `READY` contains the caller's eligible
+0–10 score. `UNAVAILABLE` does not identify which relationship failed;
+`DESTINATION_EXISTS` and `SOURCE_INELIGIBLE` also return a null score.
+Duplicates are reported independently. This preview never needs the single-copy
+key or worker, issues no token and changes no ratings. There is no batch apply.
+
 ### Canonical movie catalog versus legacy board
 
 The shared `movie` table retains canonical movie identity. V12 adds immutable
