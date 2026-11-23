@@ -29,6 +29,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -36,6 +37,8 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 /** Real HTTP filters, current principal, Flyway and PostgreSQL; no mocked authorization. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -43,6 +46,13 @@ import org.springframework.test.context.DynamicPropertySource;
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class RankingAccessListHttpIT {
   private static final String SCHEMA = "ranking_list_http_test_" + UUID.randomUUID().toString().replace("-", "");
+  private static final String COLLECTIONS = "/movies/collections";
+  private static final String LEGACY_COLLECTIONS = "/rankings";
+  private static final String PUBLIC_COLLECTIONS = "/public/movies/collections";
+  private static final String LEGACY_PUBLIC_COLLECTIONS = "/public/rankings";
+  private static final String INCOMING = COLLECTIONS + "/invitations/incoming";
+  private static final String LEGACY_INCOMING = "/ranking-invitations/incoming";
+  private static final String INVITATION_ADDRESS = "/user/ranking-invitation-address";
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final AtomicInteger OUTBOUND = new AtomicInteger();
   private static final AtomicInteger TMDB_CALLS = new AtomicInteger();
@@ -57,6 +67,9 @@ class RankingAccessListHttpIT {
   @Autowired private JdbcTemplate jdbc;
   @Autowired private DataSource dataSource;
   @Autowired private JWTUtil jwt;
+  @Autowired
+  @Qualifier("requestMappingHandlerMapping")
+  private RequestMappingHandlerMapping mvcMappings;
   @Autowired private com.moviemux.movie.domain.repository.MovieReadLookup movieReadLookup;
   @Autowired private com.moviemux.movie.adapter.repository.postgres.MovieActivityJpaReader movieActivityReader;
   @Autowired private com.moviemux.movie.domain.repository.MovieStatisticsReader movieStatisticsReader;
@@ -202,6 +215,125 @@ class RankingAccessListHttpIT {
   @AfterEach
   void accessReadsNeverCallProvidersOrPublishEvents() {
     assertThat(OUTBOUND.get()).isZero();
+  }
+
+  @Test void collectionAliasesShareEveryHandlerAndMethodCondition() {
+    var checkedMethods = new HashSet<RequestMethod>();
+    var selfMethods = new HashSet<RequestMethod>();
+    int[] pairs = {0};
+    mvcMappings.getHandlerMethods().forEach((mapping, handler) -> {
+      var patterns = mapping.getPatternValues();
+      for (String path : patterns) {
+        if (hasRoutePrefix(path, INVITATION_ADDRESS)) {
+          assertThat(patterns).as("account-scoped handler %s", handler).containsExactly(path);
+          assertThat(mapping.getMethodsCondition().getMethods()).containsExactly(
+              path.equals(INVITATION_ADDRESS) ? RequestMethod.GET : RequestMethod.POST);
+          if (!path.equals(INVITATION_ADDRESS)) assertThat(path).isEqualTo(INVITATION_ADDRESS + "/rotate");
+          selfMethods.addAll(mapping.getMethodsCondition().getMethods());
+          continue;
+        }
+        String peer = matchingCollectionRoute(path);
+        if (peer == null) continue;
+        // A single RequestMappingInfo implies identical verbs, query/header constraints,
+        // consumes/produces and custom conditions, as well as the same HandlerMethod.
+        assertThat(patterns).as("alias of %s for %s", path, handler).contains(peer);
+        assertThat(mapping.getMethodsCondition().getMethods()).isNotEmpty();
+        checkedMethods.addAll(mapping.getMethodsCondition().getMethods());
+        if (hasRoutePrefix(path, LEGACY_COLLECTIONS) || hasRoutePrefix(path, LEGACY_PUBLIC_COLLECTIONS)
+            || path.equals(LEGACY_INCOMING)) pairs[0]++;
+      }
+    });
+    assertThat(pairs[0]).isGreaterThanOrEqualTo(24);
+    assertThat(checkedMethods).containsExactlyInAnyOrder(RequestMethod.GET, RequestMethod.HEAD,
+        RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE);
+    assertThat(selfMethods).containsExactlyInAnyOrder(RequestMethod.GET, RequestMethod.POST);
+  }
+
+  private static String matchingCollectionRoute(String path) {
+    if (path.equals(INCOMING)) return LEGACY_INCOMING;
+    if (path.equals(LEGACY_INCOMING)) return INCOMING;
+    if (hasRoutePrefix(path, LEGACY_PUBLIC_COLLECTIONS))
+      return PUBLIC_COLLECTIONS + path.substring(LEGACY_PUBLIC_COLLECTIONS.length());
+    if (hasRoutePrefix(path, PUBLIC_COLLECTIONS))
+      return LEGACY_PUBLIC_COLLECTIONS + path.substring(PUBLIC_COLLECTIONS.length());
+    if (hasRoutePrefix(path, LEGACY_COLLECTIONS))
+      return COLLECTIONS + path.substring(LEGACY_COLLECTIONS.length());
+    if (hasRoutePrefix(path, COLLECTIONS))
+      return LEGACY_COLLECTIONS + path.substring(COLLECTIONS.length());
+    return null;
+  }
+
+  private static boolean hasRoutePrefix(String path, String prefix) {
+    return path.equals(prefix) || path.startsWith(prefix + "/");
+  }
+
+  @Test void canonicalMutationAndLegacyReplayShareAuthorizedCurrentState() throws Exception {
+    var owner = user(false);
+    var outsider = user(true);
+    var created = rankingJsonAction(owner, "POST", COLLECTIONS, JSON.createObjectNode()
+        .put("name", "Canonical cinema").put("visibility", "PRIVATE").put("admission", "INVITATION"));
+    assertThat(created.status()).isEqualTo(201);
+    assertThat(created.headers().firstValue("Cache-Control")).hasValue("no-store");
+    UUID rank = UUID.fromString(created.body().required("ranking_id").asText());
+    String canonical = COLLECTIONS + "/" + rank;
+    String legacy = LEGACY_COLLECTIONS + "/" + rank;
+    var legacyDirectory = request(LEGACY_COLLECTIONS, owner.token(), Map.of());
+    var canonicalDirectory = request(COLLECTIONS, owner.token(), Map.of());
+    assertThat(legacyDirectory.body().required("items").get(0)).isEqualTo(created.body());
+    assertSameNoStoreResponse(canonicalDirectory, legacyDirectory, 200);
+    assertSameNoStoreResponse(request(canonical, owner.token(), Map.of()), request(legacy, owner.token(), Map.of()), 200);
+    assertThat(request(canonical, null, Map.of()).status()).isIn(401, 403);
+    var denied = request(legacy, outsider.token(), Map.of());
+    assertSameNoStoreResponse(request(canonical, outsider.token(), Map.of()), denied, 404);
+    assertThat(denied.body()).isEqualTo(JSON.createObjectNode().put("code", "ranking.not_found"));
+
+    UUID entry = seedRevealEntry(rank);
+    seedRound(rank, entry, 1, true, 3600);
+    String canonicalRounds = canonical + "/entries/" + entry + "/rounds";
+    String legacyRounds = legacy + "/entries/" + entry + "/rounds";
+    var repeatEnabled = JSON.createObjectNode().put("repeat_enabled", true);
+    assertSameNoStoreResponse(rankingJsonAction(owner, "PUT", canonical + "/settings/rounds", repeatEnabled),
+        request(legacy + "/settings/rounds", owner.token(), Map.of()), 200);
+    var command = roundCommand(UUID.randomUUID(), "Same round through both paths");
+    var newRound = rankingJsonAction(owner, "POST", canonicalRounds, command);
+    assertThat(newRound.status()).isEqualTo(201);
+    assertThat(newRound.headers().firstValue("Cache-Control")).hasValue("no-store");
+    var replay = rankingJsonAction(owner, "POST", legacyRounds, command);
+    assertThat(replay.status()).isEqualTo(200);
+    assertThat(replay.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(replay.body()).isEqualTo(newRound.body());
+    assertThat(jdbc.queryForList("select round_number from ranking_movie_round where ranking_id=? and entry_id=? order by round_number",
+        Long.class, rank, entry)).containsExactly(1L, 2L);
+
+    // Synthetic ownership change establishes that neither route can replay a receipt
+    // using the previous owner's token after losing permission.
+    var successor = user(false);
+    membership(rank, successor, "READ");
+    jdbc.update("update ranking set owner_user_id=? where id=?", successor.id(), rank);
+    assertSameNoStoreResponse(rankingJsonAction(owner, "POST", canonicalRounds, command), denied, 404);
+    assertSameNoStoreResponse(rankingJsonAction(owner, "POST", legacyRounds, command), denied, 404);
+  }
+
+  @Test void canonicalIncomingInvitationUsesSamePrivateInboxAndRecipientAddress() throws Exception {
+    var owner = user(false);
+    var recipient = user(false);
+    var outsider = user(true);
+    UUID rank = ranking(owner, "PRIVATE");
+    assertThat(inviteRequest(owner, "POST", rank, "", rotateInvitationAddress(recipient)).statusCode()).isEqualTo(201);
+    var legacy = request(LEGACY_INCOMING + "?limit=1", recipient.token(), Map.of());
+    assertSameNoStoreResponse(request(INCOMING + "?limit=1", recipient.token(), Map.of()), legacy, 200);
+    assertThat(legacy.body().required("items")).hasSize(1);
+    assertThat(legacy.body().at("/items/0/ranking_id").asText()).isEqualTo(rank.toString());
+    assertEmpty(request(INCOMING, outsider.token(), Map.of("X-User-Id", recipient.id().toString())));
+    assertThat(request(INCOMING, null, Map.of()).status()).isIn(401, 403);
+  }
+
+  private void assertSameNoStoreResponse(ApiResponse actual, ApiResponse expected, int status) {
+    assertThat(actual.status()).isEqualTo(status);
+    assertThat(expected.status()).isEqualTo(status);
+    assertThat(actual.body()).isEqualTo(expected.body());
+    assertThat(actual.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(expected.headers().firstValue("Cache-Control")).hasValue("no-store");
   }
 
   @Test void paginationFiltersBeforePagingAndKeepsAllGrantsWithoutDuplicates() throws Exception {
@@ -1234,7 +1366,8 @@ class RankingAccessListHttpIT {
         new Object[]{rank,unknown,actor,10},new Object[]{separate,unrelated,foreign,10})) {
       jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",row);
     }
-    String path="/public/rankings/"+rank;
+    String path=LEGACY_PUBLIC_COLLECTIONS+"/"+rank;
+    String canonical=PUBLIC_COLLECTIONS+"/"+rank;
     for(String mode:List.of("INVITATION","OPEN","APPROVAL")) {
       jdbc.update("update ranking set admission=? where id=?",mode,rank);
       var summary=request(path,null,Map.of());
@@ -1249,6 +1382,10 @@ class RankingAccessListHttpIT {
       assertThat(noisy.status()).isEqualTo(200);
       assertThat(noisy.body()).isEqualTo(summary.body());
       assertThat(noisy.headers().allValues("Set-Cookie")).isEmpty();
+      var canonicalNoisy=request(canonical,null,Map.of("Authorization","Bearer intentionally-invalid-public-visitor-token",
+          "Cookie","JSESSIONID=obsolete","X-User-Id",signedVisitor.id().toString(),"Accept-Language","pt-BR"));
+      assertSameNoStoreResponse(canonicalNoisy,summary,200);
+      assertThat(canonicalNoisy.headers().allValues("Set-Cookie")).isEmpty();
     }
     jdbc.update("update ranking set name='Synthetic public name' where id=?",rank);
     assertThat(request(path,null,Map.of()).body().required("ranking_name").asText()).isEqualTo("Synthetic public name");
@@ -1256,6 +1393,7 @@ class RankingAccessListHttpIT {
     var catalogue=request(path+"/entries",null,Map.of());
     assertThat(catalogue.status()).isEqualTo(200);
     assertThat(catalogue.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertSameNoStoreResponse(request(canonical+"/entries",null,Map.of()),catalogue,200);
     assertThat(fields(catalogue.body())).containsExactlyInAnyOrder("items","next_cursor");
     assertThat(catalogue.body().required("next_cursor").isNull()).isTrue();
     var publicRows=new java.util.LinkedHashMap<String,JsonNode>();
@@ -1275,7 +1413,8 @@ class RankingAccessListHttpIT {
     jdbc.update("update ranking_movie_rating set score=235 where ranking_id=? and round_id in (?,?)",rank,overdue,unknown);
     jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",
         rank,hiddenOnly,actor,3);
-    assertThat(request(path+"/entries",null,Map.of()).body()).isEqualTo(catalogue.body());
+    assertSameNoStoreResponse(request(path+"/entries",null,Map.of()),catalogue,200);
+    assertSameNoStoreResponse(request(canonical+"/entries",null,Map.of()),catalogue,200);
     assertThat(jdbc.queryForObject("select revealed from ranking_movie_round where ranking_id=? and round_id=?",
         Boolean.class,rank,overdue)).isFalse();
     var head=request(path+"/entries?limit=1",null,Map.of()).body();
@@ -1299,6 +1438,7 @@ class RankingAccessListHttpIT {
       assertThat(withheld.status()).isEqualTo(404);
       assertThat(withheld.body()).isEqualTo(generic.body());
       assertThat(withheld.headers().firstValue("Cache-Control")).hasValue("no-store");
+      assertSameNoStoreResponse(request(canonical+suffix,null,Map.of()),withheld,404);
     }
     jdbc.update("update ranking set visibility='PUBLIC',archived_at=now() where id=?",rank);
     assertThat(request(path,null,Map.of()).body()).isEqualTo(generic.body());
@@ -1309,28 +1449,30 @@ class RankingAccessListHttpIT {
   @Test void anonymousRankingNamespaceOnlyAllowsExactPublicReadsNothingElse() throws Exception {
     UUID rank=ranking(user(false),"PUBLIC");
     var baseline=copyAffectedRows();
-    String path="/public/rankings/"+rank;
-    for (String suffix:List.of("", "/entries")) {
-      for (String method:List.of("HEAD","OPTIONS","POST","PUT","PATCH","DELETE")) {
-        var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith"+path+suffix))
-            .timeout(Duration.ofSeconds(10)).method(method,HttpRequest.BodyPublishers.noBody()).build();
-        var rejected=http.send(request,HttpResponse.BodyHandlers.ofString());
-        assertThat(rejected.statusCode()).isEqualTo(404);
-        assertThat(rejected.headers().firstValue("Cache-Control")).hasValueSatisfying(v->assertThat(v).contains("no-store"));
-        if (method.equals("HEAD")) assertThat(rejected.body()).isEmpty();
-        else assertThat(JSON.readTree(rejected.body()).required("code").asText()).isEqualTo("ranking.not_found");
+    for (String prefix : List.of(LEGACY_PUBLIC_COLLECTIONS, PUBLIC_COLLECTIONS)) {
+      String path=prefix+"/"+rank;
+      for (String suffix:List.of("", "/entries")) {
+        for (String method:List.of("HEAD","OPTIONS","POST","PUT","PATCH","DELETE")) {
+          var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith"+path+suffix))
+              .timeout(Duration.ofSeconds(10)).method(method,HttpRequest.BodyPublishers.noBody()).build();
+          var rejected=http.send(request,HttpResponse.BodyHandlers.ofString());
+          assertThat(rejected.statusCode()).isEqualTo(404);
+          assertThat(rejected.headers().firstValue("Cache-Control")).hasValueSatisfying(v->assertThat(v).contains("no-store"));
+          if (method.equals("HEAD")) assertThat(rejected.body()).isEmpty();
+          else assertThat(JSON.readTree(rejected.body()).required("code").asText()).isEqualTo("ranking.not_found");
+        }
       }
+      for(var alias:List.of(request(prefix,null,Map.of()),request(path+"/rating",null,Map.of()))) {
+        assertThat(alias.status()).isEqualTo(404);
+        assertThat(alias.headers().firstValue("Cache-Control")).hasValueSatisfying(v->assertThat(v).contains("no-store"));
+        assertThat(alias.body().required("code").asText()).isEqualTo("ranking.not_found");
+      }
+      var preflight=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith"+path))
+          .header("Origin","https://synthetic.example.test").header("Access-Control-Request-Method","GET")
+          .method("OPTIONS",HttpRequest.BodyPublishers.noBody()).build();
+      assertThat(http.send(preflight,HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(404);
+      assertThat(request(path+"/entries",null,Map.of()).body().required("items").size()).isZero();
     }
-    for(var alias:List.of(request("/public/rankings",null,Map.of()),request(path+"/rating",null,Map.of()))) {
-      assertThat(alias.status()).isEqualTo(404);
-      assertThat(alias.headers().firstValue("Cache-Control")).hasValueSatisfying(v->assertThat(v).contains("no-store"));
-      assertThat(alias.body().required("code").asText()).isEqualTo("ranking.not_found");
-    }
-    var preflight=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith"+path))
-        .header("Origin","https://synthetic.example.test").header("Access-Control-Request-Method","GET")
-        .method("OPTIONS",HttpRequest.BodyPublishers.noBody()).build();
-    assertThat(http.send(preflight,HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(404);
-    assertThat(request(path+"/entries",null,Map.of()).body().required("items").size()).isZero();
     assertThat(copyAffectedRows()).isEqualTo(baseline);
   }
 
