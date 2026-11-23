@@ -466,6 +466,30 @@ returns `400 ranking.invalid_join`; authentication still uses the existing
 boundary. There is no automatic join on read, external message, invitation,
 activity or XP. `APPROVAL` and `INVITATION` cannot be bypassed here.
 
+### Anonymous disclosed ranking reads
+
+A visitor with the exact ID of a currently live `PUBLIC` ranking may read
+`GET /public/rankings/{rankingId}` (no query) and
+`GET /public/rankings/{rankingId}/entries?after=<entry UUID>&limit=20`.
+Only those two GET patterns are permitted in the ranking's public namespace.
+There is no discovery, participation, membership fallback, or automatic reveal;
+private authenticated ranking routes still check the member's rights.
+
+Summary returns `ranking_id` and nullable `ranking_name`. The entries page
+(max 50) returns `items`, nullable `next_cursor` and only `entry_id`, nullable
+`title`, `total`, and `votes` per item. Title uses original, English,
+Portuguese fallback. Rows are ordered by entry UUID, not by scores or activity.
+Sums and counts include only non-null scores in disclosed rounds. Zero votes
+provide no average; always label an average on this surface as revealed rounds,
+with no signal of hidden rounds or participants. Do not cache public ranking
+payloads at the CDN, SSR, PWA or browser.
+
+Missing, malformed, archived and private rankings all return the same no-store
+404. Malformed pagination or extras return the generic 400 only after live
+PUBLIC scope is checked. Committed visibility changes are authoritative on
+the next read. This slice exposes no note author, individual rating, owner,
+grant, invite, image, URL, or internal catalog/provider identity.
+
 ### Read-only own rating copy preview
 
 `POST /rankings/{rankingId}/entries/{entryId}/rounds/{roundId}/rating/me/copy-preview`
