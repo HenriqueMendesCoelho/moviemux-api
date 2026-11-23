@@ -48,7 +48,7 @@ public final class OfflineLegacyRankingMigration {
   public Plan preview(UUID ownerId, UUID rankingId) {
     Objects.requireNonNull(ownerId); Objects.requireNonNull(rankingId);
     return transaction(true).execute(status -> {
-      setupSession(); var source = legacySource(); requireReplayOpen();
+      setupSession(); var source = legacySource(); requireReplayOpen(source);
       return snapshot(ownerId, rankingId, source);
     });
   }
@@ -62,7 +62,7 @@ public final class OfflineLegacyRankingMigration {
       jdbc.execute("lock table legacy_ranking_migration in share row exclusive mode");
       jdbc.execute("lock table \"user\", movie, movie_note in share mode");
       jdbc.execute("lock table ranking, ranking_membership, ranking_membership_grant, ranking_author_identity, ranking_movie_entry, ranking_movie_round, ranking_movie_rating, legacy_ranking_movie_map in share mode");
-      requireReplayOpen();
+      requireReplayOpen(source);
       Plan current = snapshot(plan.ownerId(), plan.rankingId(), source);
       if (!plan.equals(current)) throw new IllegalStateException("migration.source_changed");
       var ledger = jdbc.queryForList("select * from legacy_ranking_migration where migration_key=?", KEY);
@@ -139,7 +139,7 @@ public final class OfflineLegacyRankingMigration {
   private LegacySource legacySource() {
     var versions = jdbc.queryForList("select version from flyway_schema_history where success order by installed_rank", String.class);
     int latest = versions.size();
-    if (latest < 8 || latest > 13 || !versions.equals(java.util.stream.IntStream.rangeClosed(1, latest)
+    if (latest < 8 || latest > 14 || !versions.equals(java.util.stream.IntStream.rangeClosed(1, latest)
         .mapToObj(Integer::toString).toList()))
       throw new IllegalStateException("migration.schema_version_mismatch");
     if (count("select count(*) from flyway_schema_history where not success") != 0)
@@ -151,15 +151,22 @@ public final class OfflineLegacyRankingMigration {
         + "updated_at,url_image,user_id from movie" + (isolated ? " where legacy_eligible" : "");
     String ratings = "select n.created_at,n.note,n.updated_at,n.movie_id,n.user_id from movie_note n"
         + (isolated ? " join movie m on m.id=n.movie_id and m.legacy_eligible" : "");
-    return new LegacySource(movies, ratings);
+    return new LegacySource(movies, ratings, latest >= 14);
   }
 
-  private record LegacySource(String movies, String ratings) {}
+  private record LegacySource(String movies, String ratings, boolean repeatedRoundPolicy) {}
 
-  private void requireReplayOpen() {
+  private void requireReplayOpen(LegacySource source) {
     if (count("select count(*) from legacy_ranking_migration where migration_key=? and replay_closed_at is not null",KEY) != 0)
       throw new IllegalStateException("migration.replay_closed_after_context_purge");
     if (count("select count(*) from ranking_movie_entry where (removed_at is not null or lifecycle_version <> 0) and ranking_id in (select ranking_id from legacy_ranking_migration where migration_key=?)",KEY) != 0)
+      throw new IllegalStateException("migration.already_applied_different_state");
+    if (source.repeatedRoundPolicy() && count("""
+        select count(*) from legacy_ranking_migration l join ranking k on k.id=l.ranking_id
+        where l.migration_key=? and (k.repeat_rounds_enabled or exists (
+          select 1 from ranking_movie_round r where r.ranking_id=k.id and r.round_number>1
+        ))
+        """, KEY) != 0)
       throw new IllegalStateException("migration.already_applied_different_state");
   }
 
@@ -230,6 +237,7 @@ public final class OfflineLegacyRankingMigration {
       String columns = switch(table) {
         case "ranking" -> "id,owner_user_id,visibility,admission,owner_membership_active,created_at,archived_at";
         case "ranking_movie_entry" -> "ranking_id,entry_id,movie_id,added_by_author_id,created_at,updated_at";
+        case "ranking_movie_round" -> "ranking_id,entry_id,round_id,round_number,description,created_at,updated_at,revealed";
         case "legacy_ranking_movie_map" -> "migration_key,ranking_id,legacy_movie_id,entry_id,round_id";
         default -> "*";
       };
