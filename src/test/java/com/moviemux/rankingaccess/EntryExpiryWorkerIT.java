@@ -38,7 +38,7 @@ class EntryExpiryWorkerIT {
     };
     jdbc=new JdbcTemplate(source);
     Flyway.configure().dataSource(url,user,password).schemas(schema).defaultSchema(schema)
-        .createSchemas(false).cleanDisabled(true).load().migrate();
+        .createSchemas(false).cleanDisabled(true).target("16").load().migrate();
     owner=UUID.randomUUID();rank=UUID.randomUUID();
     jdbc.update("insert into \"user\"(id,created_at,email,name,password) values (?,now(),?,'Synthetic','synthetic')",owner,owner+"@example.invalid");
     for(int i=0;i<2;i++){

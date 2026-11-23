@@ -140,7 +140,7 @@ class RankingAccessPersistenceIT {
     var beforeRows = tableRows(oldTables);
     assertThat(beforeRows.values()).allSatisfy(rows -> assertThat(rows).hasSize(1));
 
-    // Intentionally no target: this proves the real latest startup path, currently V16.
+    // Intentionally no target: this proves the real latest startup path, currently V17.
     var adopted = Flyway.configure().dataSource(url, user, password).schemas(schema).defaultSchema(schema)
         .createSchemas(false).baselineOnMigrate(false).cleanDisabled(true).baselineVersion("1")
         .baselineDescription("Synthetic audited V1 schema").locations("classpath:db/migration").load();
@@ -150,8 +150,8 @@ class RankingAccessPersistenceIT {
     assertThat(catalog(oldTables)).containsExactlyElementsOf(beforeCatalog);
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
     adopted.baseline(); // Explicit baseline only in this isolated disposable synthetic schema.
-    assertThat(adopted.migrate().migrationsExecuted).isEqualTo(15);
-    assertThat(adopted.info().current().getVersion().getVersion()).isEqualTo("16");
+    assertThat(adopted.migrate().migrationsExecuted).isEqualTo(16);
+    assertThat(adopted.info().current().getVersion().getVersion()).isEqualTo("17");
     var expectedV13Catalog = new ArrayList<>(beforeCatalog);
     expectedV13Catalog.add("movie:legacy_eligible:boolean:bool::NO:true:NO:");
     for (String oldDefinition : List.of(
@@ -166,7 +166,8 @@ class RankingAccessPersistenceIT {
         "ranking_movie_entry", "ranking_movie_round", "ranking_movie_rating",
         "legacy_ranking_migration", "legacy_ranking_movie_map", "ranking_invitation", "ranking_invitation_address",
         "ranking_rating_copy_receipt");
-    assertThat(tables()).containsExactlyInAnyOrderElementsOf(union(oldTables, newTables));
+    assertThat(tables()).containsExactlyInAnyOrderElementsOf(union(union(oldTables, newTables),Set.of("legacy_board_cutover")));
+    assertThat(jdbc.queryForList("select phase from legacy_board_cutover",String.class)).containsExactly("LEGACY");
     assertThat(tableRows(newTables).values()).allSatisfy(rows -> assertThat(rows).isEmpty());
     var upgraded = catalog(oldTables);
     String checkPrefix = "movie:movie_legacy_required_metadata_ck:";
@@ -177,14 +178,14 @@ class RankingAccessPersistenceIT {
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
     assertThat(jdbc.queryForList("select legacy_eligible from movie", Boolean.class)).containsExactly(true);
     assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
-        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true", "12:SQL:true", "13:SQL:true", "14:SQL:true", "15:SQL:true", "16:SQL:true");
+        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true", "12:SQL:true", "13:SQL:true", "14:SQL:true", "15:SQL:true", "16:SQL:true", "17:SQL:true");
     assertThat(adopted.migrate().migrationsExecuted).isZero();
     assertThat(catalog(oldTables)).containsExactlyElementsOf(upgraded);
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
     assertThat(jdbc.queryForList("select legacy_eligible from movie", Boolean.class)).containsExactly(true);
     assertThat(tableRows(newTables).values()).allSatisfy(rows -> assertThat(rows).isEmpty());
     assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
-        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true", "12:SQL:true", "13:SQL:true", "14:SQL:true", "15:SQL:true", "16:SQL:true");
+        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true", "12:SQL:true", "13:SQL:true", "14:SQL:true", "15:SQL:true", "16:SQL:true", "17:SQL:true");
   }
 
   private Map<String, List<String>> tableRows(Set<String> tableNames) {

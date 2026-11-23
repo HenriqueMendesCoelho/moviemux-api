@@ -42,7 +42,7 @@ class OfflineLegacyRankingMigrationIT {
     };
     jdbc = new JdbcTemplate(source);
     Flyway.configure().dataSource(url, user, password).schemas(schema).defaultSchema(schema)
-        .createSchemas(false).cleanDisabled(true).load().migrate();
+        .createSchemas(false).cleanDisabled(true).target("16").load().migrate();
     migration = new OfflineLegacyRankingMigration(source, 10_000);
     owner = account(false); admin = account(true); voter = account(false); idle = account(false); rank = UUID.randomUUID();
     UUID first = movie(owner, true), second = movie(voter, false), third = movie(null, null);

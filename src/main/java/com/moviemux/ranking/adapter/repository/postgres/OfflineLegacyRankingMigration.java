@@ -26,14 +26,25 @@ public final class OfflineLegacyRankingMigration {
   private final JdbcTemplate jdbc;
   private final DataSourceTransactionManager manager;
   private final RankingAuthorIdentityPostgresAdapter authors;
+
   private final int maxSourceRows;
+  private final Set<String> runtimeRoles;
 
   public OfflineLegacyRankingMigration(DataSource source, int maxSourceRows) {
+    this(source, maxSourceRows, Set.of());
+  }
+
+  /** All still-connected prospective runtime login roles must be explicitly inventoried for V17. */
+  public OfflineLegacyRankingMigration(DataSource source, int maxSourceRows, Set<String> runtimeRoles) {
     if (maxSourceRows < 1 || maxSourceRows > 100_000) throw new IllegalArgumentException("migration.invalid_bound");
     this.jdbc = new JdbcTemplate(Objects.requireNonNull(source));
     this.manager = new DataSourceTransactionManager(source);
     this.authors = new RankingAuthorIdentityPostgresAdapter(new NamedParameterJdbcTemplate(source));
     this.maxSourceRows = maxSourceRows;
+    this.runtimeRoles = Set.copyOf(Objects.requireNonNull(runtimeRoles));
+    if (this.runtimeRoles.size() > 32 || this.runtimeRoles.stream().anyMatch(role -> role.isBlank()
+        || role.getBytes(StandardCharsets.UTF_8).length > 63 || role.codePoints().anyMatch(Character::isISOControl)))
+      throw new IllegalArgumentException("migration.invalid_runtime_roles");
   }
 
   public record Plan(UUID ownerId, UUID rankingId, String fingerprint, long users, long movies, long ratings) {
@@ -45,19 +56,58 @@ public final class OfflineLegacyRankingMigration {
   }
   public record Result(boolean alreadyApplied, long users, long movies, long ratings) {}
 
+  /**
+   * Enter a durable maintenance fence, never a startup action. Acknowledgement attests that old
+   * pods, direct/transient writers, and queued effects were independently drained and the backup verified.
+   */
+  public void fence(UUID ownerId, UUID rankingId, boolean maintenanceAcknowledged) {
+    Objects.requireNonNull(ownerId); Objects.requireNonNull(rankingId);
+    requireMaintenance(maintenanceAcknowledged);
+    transaction(false).executeWithoutResult(status -> {
+      setupSession();
+      if (!legacySource().interlocked()) throw new IllegalStateException("migration.interlock_schema_required");
+      var gate = phase(true);
+      var proof = runtimeRoleDigest();
+      if (gate.mode() == Mode.FENCED) {
+        requireBinding(gate, ownerId, rankingId);
+        requireRoleDigest(gate, proof);
+        return;
+      }
+      if (gate.mode() != Mode.LEGACY || count("select count(*) from legacy_ranking_migration where migration_key=?",KEY)!=0)
+        throw new IllegalStateException("migration.already_applied_different_state");
+      requireOwner(ownerId);
+      if (count("select count(*) from ranking where id=?",rankingId)!=0)
+        throw new IllegalStateException("migration.destination_not_empty");
+      if (jdbc.update("""
+          update legacy_board_cutover set phase='FENCED',owner_user_id=?,ranking_id=?,
+            runtime_roles_digest=?,fenced_at=clock_timestamp() where singleton and phase='LEGACY'
+          """,ownerId,rankingId,proof)!=1)
+        throw new IllegalStateException("migration.interlock_unavailable");
+    });
+  }
+
   public Plan preview(UUID ownerId, UUID rankingId) {
     Objects.requireNonNull(ownerId); Objects.requireNonNull(rankingId);
     return transaction(true).execute(status -> {
-      setupSession(); var source = legacySource(); requireReplayOpen(source);
+      setupSession(); var source = legacySource();
+      if (source.interlocked()) requireBinding(phase(false), ownerId, rankingId);
+      requireReplayOpen(source);
       return snapshot(ownerId, rankingId, source);
     });
   }
 
   public Result apply(Plan plan, boolean maintenanceAcknowledged) {
     Objects.requireNonNull(plan);
-    if (!maintenanceAcknowledged) throw new IllegalStateException("migration.maintenance_required");
+    requireMaintenance(maintenanceAcknowledged);
     return transaction(false).execute(status -> {
       setupSession(); var source = legacySource();
+      Phase gate = null;
+      if (source.interlocked()) {
+        gate = phase(true);
+        requireBinding(gate, plan.ownerId(), plan.rankingId());
+        // Fresh privilege proof before any first apply. ACTIVE replay does not open or change phase.
+        if (gate.mode() == Mode.FENCED) requireRoleDigest(gate, runtimeRoleDigest());
+      }
       // Serialize applies before locking sources. SHARE blocks INSERT/UPDATE/DELETE while allowing reads.
       jdbc.execute("lock table legacy_ranking_migration in share row exclusive mode");
       jdbc.execute("lock table \"user\", movie, movie_note in share mode");
@@ -67,6 +117,8 @@ public final class OfflineLegacyRankingMigration {
       if (!plan.equals(current)) throw new IllegalStateException("migration.source_changed");
       var ledger = jdbc.queryForList("select * from legacy_ranking_migration where migration_key=?", KEY);
       if (!ledger.isEmpty()) {
+        if (gate != null && gate.mode() != Mode.ACTIVE)
+          throw new IllegalStateException("migration.already_applied_different_state");
         var previous = ledger.get(0);
         if (((Number) previous.get("algorithm_version")).intValue() != 1
             || ((Number) previous.get("source_users")).longValue() != plan.users()
@@ -82,6 +134,13 @@ public final class OfflineLegacyRankingMigration {
       }
       if (count("select count(*) from ranking where id=?", plan.rankingId()) != 0)
         throw new IllegalStateException("migration.destination_not_empty");
+      if (gate != null) {
+        if (gate.mode()!=Mode.FENCED || jdbc.update("""
+            update legacy_board_cutover set phase='ACTIVE', activated_at=greatest(clock_timestamp(),fenced_at)
+            where singleton and phase='FENCED'
+            """)!=1) throw new IllegalStateException("migration.interlock_unavailable");
+        // No other transaction sees ACTIVE before reconciliation and the deferred ledger assertion succeed.
+      }
       insertRankingAndMembers(plan);
       for (UUID account : jdbc.queryForList("select id from \"user\" order by id", UUID.class))
         authors.getOrCreate(plan.rankingId(), account);
@@ -139,7 +198,7 @@ public final class OfflineLegacyRankingMigration {
   private LegacySource legacySource() {
     var versions = jdbc.queryForList("select version from flyway_schema_history where success order by installed_rank", String.class);
     int latest = versions.size();
-    if (latest < 8 || latest > 16 || !versions.equals(java.util.stream.IntStream.rangeClosed(1, latest)
+    if (latest < 8 || latest > 17 || !versions.equals(java.util.stream.IntStream.rangeClosed(1, latest)
         .mapToObj(Integer::toString).toList()))
       throw new IllegalStateException("migration.schema_version_mismatch");
     if (count("select count(*) from flyway_schema_history where not success") != 0)
@@ -151,10 +210,70 @@ public final class OfflineLegacyRankingMigration {
         + "updated_at,url_image,user_id from movie" + (isolated ? " where legacy_eligible" : "");
     String ratings = "select n.created_at,n.note,n.updated_at,n.movie_id,n.user_id from movie_note n"
         + (isolated ? " join movie m on m.id=n.movie_id and m.legacy_eligible" : "");
-    return new LegacySource(movies, ratings, latest >= 14);
+    return new LegacySource(movies, ratings, latest >= 14, latest >= 17);
   }
 
-  private record LegacySource(String movies, String ratings, boolean repeatedRoundPolicy) {}
+  private record LegacySource(String movies, String ratings, boolean repeatedRoundPolicy, boolean interlocked) {}
+  private enum Mode { LEGACY, FENCED, ACTIVE }
+  private record Phase(Mode mode, UUID owner, UUID ranking, String roleDigest) {}
+
+  private Phase phase(boolean lock) {
+    var rows = jdbc.query("select phase,owner_user_id,ranking_id,runtime_roles_digest from legacy_board_cutover where singleton"
+        + (lock ? " for update" : ""), (row,index) -> new Phase(Mode.valueOf(row.getString("phase")),
+            row.getObject("owner_user_id",UUID.class), row.getObject("ranking_id",UUID.class),
+            row.getString("runtime_roles_digest")));
+    if (rows.size()!=1) throw new IllegalStateException("migration.interlock_unavailable");
+    return rows.getFirst();
+  }
+
+  private void requireBinding(Phase gate, UUID owner, UUID ranking) {
+    if (gate.mode()==Mode.LEGACY) throw new IllegalStateException("migration.cutover_fence_required");
+    if (!owner.equals(gate.owner()) || !ranking.equals(gate.ranking()))
+      throw new IllegalStateException("migration.cutover_binding_mismatch");
+  }
+
+  private void requireRoleDigest(Phase gate, String digest) {
+    if (!digest.equals(gate.roleDigest())) throw new IllegalStateException("migration.runtime_role_proof_changed");
+  }
+
+  private String runtimeRoleDigest() {
+    if (runtimeRoles.isEmpty()) throw new IllegalStateException("migration.runtime_role_proof_required");
+    var digest=digest();
+    feed(digest,"legacy-board-runtime-roles-v1");
+    int pgVersion=Objects.requireNonNull(jdbc.queryForObject(
+        "select current_setting('server_version_num')::integer",Integer.class));
+    for(String role:runtimeRoles.stream().sorted().toList()) {
+      var oid=jdbc.queryForList("select oid::text from pg_roles where rolname=? and rolcanlogin",String.class,role);
+      if (oid.size()!=1 || !Boolean.TRUE.equals(jdbc.queryForObject("""
+          select has_function_privilege(cast(? as oid),'lock_legacy_board_phase()','EXECUTE')
+            and not exists(
+              select 1 from pg_roles accessible where pg_has_role(cast(? as oid),accessible.oid,'MEMBER') and (
+                accessible.rolsuper or accessible.rolcreaterole or accessible.rolreplication
+                or accessible.rolbypassrls or accessible.rolname in ('pg_write_all_data','pg_write_server_files','pg_execute_server_program')
+                or has_schema_privilege(accessible.oid,current_schema(),'CREATE')
+                or has_table_privilege(accessible.oid,'legacy_board_cutover','INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER')
+                or has_any_column_privilege(accessible.oid,'legacy_board_cutover','INSERT,UPDATE')
+                or exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+                  where n.nspname=current_schema() and c.relowner=accessible.oid
+                    and c.relname in ('legacy_board_cutover','ranking','movie','movie_note','movie_discord','user'))
+              )
+            )
+          """,Boolean.class,oid.getFirst(),oid.getFirst()))) throw new IllegalStateException("migration.runtime_role_unsafe");
+      // PostgreSQL 15 introduced grants of SET on individual parameters, including trigger bypass.
+      if (pgVersion>=150000 && Boolean.TRUE.equals(jdbc.queryForObject("""
+          select exists(select 1 from pg_roles accessible
+            where pg_has_role(cast(? as oid),accessible.oid,'MEMBER')
+              and has_parameter_privilege(accessible.oid,'session_replication_role','SET'))
+          """, Boolean.class, oid.getFirst()))) throw new IllegalStateException("migration.runtime_role_unsafe");
+      feed(digest,role);
+      feed(digest,oid.getFirst());
+    }
+    return HexFormat.of().formatHex(digest.digest());
+  }
+
+  private static void requireMaintenance(boolean acknowledged) {
+    if (!acknowledged) throw new IllegalStateException("migration.maintenance_required");
+  }
 
   private void requireReplayOpen(LegacySource source) {
     if (count("select count(*) from legacy_ranking_migration where migration_key=? and replay_closed_at is not null",KEY) != 0)
@@ -171,8 +290,7 @@ public final class OfflineLegacyRankingMigration {
   }
 
   private Plan snapshot(UUID owner, UUID ranking, LegacySource source) {
-    if (count("select count(*) from \"user\" where id=?", owner) != 1)
-      throw new IllegalArgumentException("migration.owner_not_found");
+    requireOwner(owner);
     long users=count("select count(*) from \"user\""),
         movies=count("select count(*) from ("+source.movies()+") legacy"),
         ratings=count("select count(*) from ("+source.ratings()+") legacy");
@@ -184,6 +302,11 @@ public final class OfflineLegacyRankingMigration {
     hashQuery(hash, "movies", "select row_to_json(s)::text from ("+source.movies()+" order by id) s");
     hashQuery(hash, "ratings", "select row_to_json(s)::text from (select * from ("+source.ratings()+") legacy order by movie_id,user_id) s");
     return new Plan(owner,ranking,HexFormat.of().formatHex(hash.digest()),users,movies,ratings);
+  }
+
+  private void requireOwner(UUID owner) {
+    if (count("select count(*) from \"user\" where id=?",owner)!=1)
+      throw new IllegalArgumentException("migration.owner_not_found");
   }
 
   private void insertRankingAndMembers(Plan plan) {
