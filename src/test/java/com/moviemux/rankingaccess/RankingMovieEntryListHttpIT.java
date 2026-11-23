@@ -74,7 +74,6 @@ class RankingMovieEntryListHttpIT {
     properties.add("spring.datasource.hikari.schema", () -> SCHEMA);
     properties.add("spring.flyway.default-schema", () -> SCHEMA);
     properties.add("spring.flyway.schemas", () -> SCHEMA);
-    properties.add("spring.flyway.target", () -> "8");
     properties.add("spring.jpa.properties.hibernate.default_schema", () -> SCHEMA);
     properties.add("spring.datasource.hikari.connection-init-sql", () -> "SET statement_timeout = '10s'");
     externalStub = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);

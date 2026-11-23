@@ -140,7 +140,7 @@ class RankingAccessPersistenceIT {
     var beforeRows = tableRows(oldTables);
     assertThat(beforeRows.values()).allSatisfy(rows -> assertThat(rows).hasSize(1));
 
-    // Intentionally no target: this proves the real latest startup path, currently V8.
+    // Intentionally no target: this proves the real latest startup path, currently V9.
     var adopted = Flyway.configure().dataSource(url, user, password).schemas(schema).defaultSchema(schema)
         .createSchemas(false).baselineOnMigrate(false).cleanDisabled(true).baselineVersion("1")
         .baselineDescription("Synthetic audited V1 schema").locations("classpath:db/migration").load();
@@ -150,8 +150,8 @@ class RankingAccessPersistenceIT {
     assertThat(catalog(oldTables)).containsExactlyElementsOf(beforeCatalog);
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
     adopted.baseline(); // Explicit baseline only in this isolated disposable synthetic schema.
-    assertThat(adopted.migrate().migrationsExecuted).isEqualTo(7);
-    assertThat(adopted.info().current().getVersion().getVersion()).isEqualTo("8");
+    assertThat(adopted.migrate().migrationsExecuted).isEqualTo(8);
+    assertThat(adopted.info().current().getVersion().getVersion()).isEqualTo("9");
     var newTables = Set.of("ranking", "ranking_membership", "ranking_membership_grant", "ranking_author_identity",
         "ranking_movie_entry", "ranking_movie_round", "ranking_movie_rating",
         "legacy_ranking_migration", "legacy_ranking_movie_map");
@@ -160,13 +160,13 @@ class RankingAccessPersistenceIT {
     assertThat(catalog(oldTables)).containsExactlyElementsOf(beforeCatalog);
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
     assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
-        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true");
+        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true");
     assertThat(adopted.migrate().migrationsExecuted).isZero();
     assertThat(catalog(oldTables)).containsExactlyElementsOf(beforeCatalog);
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
     assertThat(tableRows(newTables).values()).allSatisfy(rows -> assertThat(rows).isEmpty());
     assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
-        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true");
+        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true");
   }
 
   private Map<String, List<String>> tableRows(Set<String> tableNames) {

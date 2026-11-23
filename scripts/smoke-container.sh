@@ -102,7 +102,7 @@ test "$archive_history" = 1
 author_history="$(docker exec "$database" psql -U moviemux_smoke -d moviemux_smoke -Atc \
   "select count(*) from public.flyway_schema_history where version='4' and type='SQL' and success")"
 test "$author_history" = 1
-for version in 5 6 7 8; do
+for version in 5 6 7 8 9; do
   current_history="$(docker exec "$database" psql -U moviemux_smoke -d moviemux_smoke -Atc \
     "select count(*) from public.flyway_schema_history where version='$version' and type='SQL' and success")"
   test "$current_history" = 1
@@ -110,4 +110,4 @@ done
 tables="$(docker exec "$database" psql -U moviemux_smoke -d moviemux_smoke -Atc \
   "select count(*) from information_schema.tables where table_schema='public' and table_type='BASE TABLE'")"
 test "$tables" = 23
-printf '%s\n' 'PASS: V1 through V8 applied exactly once; 22 application tables plus Flyway history'
+printf '%s\n' 'PASS: V1 through V9 applied exactly once; 22 application tables plus Flyway history'

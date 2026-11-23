@@ -138,7 +138,9 @@ public final class OfflineLegacyRankingMigration {
 
   private void requireSchema() {
     var versions = jdbc.queryForList("select version from flyway_schema_history where success order by installed_rank", String.class);
-    if (!versions.equals(List.of("1","2","3","4","5","6","7","8")))
+    // V9 adds nullable display metadata without changing the offline copy contract.
+    if (!versions.equals(List.of("1","2","3","4","5","6","7","8"))
+        && !versions.equals(List.of("1","2","3","4","5","6","7","8","9")))
       throw new IllegalStateException("migration.schema_version_mismatch");
     if (count("select count(*) from flyway_schema_history where not success") != 0)
       throw new IllegalStateException("migration.schema_history_failed");
@@ -212,6 +214,7 @@ public final class OfflineLegacyRankingMigration {
       String column=table.equals("ranking")?"id":"ranking_id";
       // Algorithm1 preserves V7 JSON field order regardless of later schema expansion.
       String columns = switch(table) {
+        case "ranking" -> "id,owner_user_id,visibility,admission,owner_membership_active,created_at,archived_at";
         case "ranking_movie_entry" -> "ranking_id,entry_id,movie_id,added_by_author_id,created_at,updated_at";
         case "legacy_ranking_movie_map" -> "migration_key,ranking_id,legacy_movie_id,entry_id,round_id";
         default -> "*";

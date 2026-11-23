@@ -40,7 +40,7 @@ class OfflineLegacyRankingConcurrencyIT {
     };
     jdbc=new JdbcTemplate(source);
     Flyway.configure().dataSource(url,user,password).schemas(schema).defaultSchema(schema)
-        .createSchemas(false).cleanDisabled(true).baselineOnMigrate(false).target("8").load().migrate();
+        .createSchemas(false).cleanDisabled(true).baselineOnMigrate(false).load().migrate();
     migration=new OfflineLegacyRankingMigration(source,100);
     owner=UUID.randomUUID();movie=UUID.randomUUID();rank=UUID.randomUUID();
     jdbc.update("insert into \"user\"(id,created_at,email,name,password) values (?,now(),?,'Synthetic','synthetic-hash')",owner,owner+"@example.invalid");
