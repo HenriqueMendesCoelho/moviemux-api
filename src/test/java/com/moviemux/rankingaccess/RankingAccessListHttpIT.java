@@ -46,6 +46,8 @@ class RankingAccessListHttpIT {
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final AtomicInteger OUTBOUND = new AtomicInteger();
   private static final AtomicInteger TMDB_CALLS = new AtomicInteger();
+  private static final java.util.concurrent.atomic.AtomicReference<String> PICKER_QUERY = new java.util.concurrent.atomic.AtomicReference<>();
+  private static final AtomicInteger PICKER_CALLS = new AtomicInteger();
   private static volatile java.util.concurrent.CountDownLatch providerArrived, releaseProvider;
   private static String databaseUrl, databaseUser, databasePassword;
   private static boolean ownsSchema;
@@ -92,6 +94,43 @@ class RankingAccessListHttpIT {
     externalStub.createContext("/", exchange -> {
       String base = "/api/v1/tmdb/movie/";
       String path = exchange.getRequestURI().getPath();
+      if (path.equals("/api/v1/tmdb/search/movie")) {
+        PICKER_CALLS.incrementAndGet();
+        String raw=exchange.getRequestURI().getRawQuery();
+        PICKER_QUERY.set(raw);
+        var params=new java.util.HashMap<String,String>();
+        for (String pair:raw.split("&")) {
+          var fields=pair.split("=",2);
+          params.put(fields[0],java.net.URLDecoder.decode(fields[1],java.nio.charset.StandardCharsets.UTF_8));
+        }
+        String q=params.get("query");
+        int page=Integer.parseInt(params.get("page"));
+        int status=q.equals("KIT delayed failure") ? 429 : 200;
+        if(q.equals("KIT delayed failure")) {
+          var arrived=providerArrived; var release=releaseProvider;
+          if(arrived!=null && release!=null) {
+            arrived.countDown();
+            try { if(!release.await(6,java.util.concurrent.TimeUnit.SECONDS)) status=500; }
+            catch(InterruptedException interrupted) { Thread.currentThread().interrupt(); status=500; }
+          }
+        }
+        var payload=JSON.createObjectNode().put("page",page).put("total_pages",30).put("total_results",1500);
+        var rows=payload.putArray("results");
+        if(!q.equals("No results")) {
+          rows.addObject().put("id",820010).put("title","Cinema traduzido").put("original_title","Synthetic Original")
+              .put("release_date","2001-01-02").put("poster_path","/safe_movie.jpg")
+              .put("vote_average",8.4).put("vote_count",300).put("overview","sensitive provider field");
+          rows.addObject().put("id",820011).put("original_title","Fallback title").put("poster_path","/../unsafe.jpg")
+              .put("popularity",100).put("adult",false);
+        }
+        byte[] bytes=(status==200?payload.toString():"synthetic-private-upstream-search-error")
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type","application/json");
+        exchange.sendResponseHeaders(status,bytes.length);
+        exchange.getResponseBody().write(bytes);
+        exchange.close();
+        return;
+      }
       if (path.matches("/api/v1/tmdb/movie/82000[1-7]/summary")) {
         TMDB_CALLS.incrementAndGet();
         int id = Integer.parseInt(path.substring(base.length(), path.length() - "/summary".length()));
@@ -154,6 +193,8 @@ class RankingAccessListHttpIT {
     jdbc.execute("truncate table " + table("\"user\"") + " restart identity cascade");
     OUTBOUND.set(0);
     TMDB_CALLS.set(0);
+    PICKER_CALLS.set(0);
+    PICKER_QUERY.set(null);
   }
 
   @AfterEach
@@ -803,6 +844,76 @@ class RankingAccessListHttpIT {
         values (?,?,?,?,?,clock_timestamp()-make_interval(secs=>?),now(),'Synthetic round')
         """,rank,entry,round,number,revealed,ageSeconds);
     return round;
+  }
+
+  @Test void tmdbPickerEncodesEachParameterAndProjectsNoVotesOrWrites() throws Exception {
+    var owner=user(false);
+    var outsider=user(true);
+    UUID rank=ranking(owner,"PRIVATE");
+    assertThat(picker(outsider,rank,"Cinema & ação + #",1,"pt-BR").statusCode()).isEqualTo(404);
+    assertThat(picker(owner,rank,"X",1,"pt-BR").statusCode()).isEqualTo(400);
+    assertThat(picker(owner,rank,"Cinema",1,"en").statusCode()).isEqualTo(400);
+    assertThat(PICKER_CALLS.get()).isZero();
+    var response=picker(owner,rank,"  Cinema & ação + #  ",1,"pt-BR");
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(response.headers().firstValue("Cache-Control")).hasValueSatisfying(v->assertThat(v).contains("no-store"));
+    String raw=PICKER_QUERY.get();
+    assertThat(raw.split("&")).hasSize(4);
+    assertThat(raw).contains("query=Cinema%20%26%20a%C3%A7%C3%A3o%20%2B%20%23","page=1","language=pt-BR","include_adult=false")
+        .doesNotContain(rank.toString(),owner.id().toString());
+    var body=JSON.readTree(response.body());
+    assertThat(fields(body)).containsExactlyInAnyOrder("items","page","has_more");
+    assertThat(body.required("has_more").asBoolean()).isTrue();
+    for(var item:body.required("items")) assertThat(fields(item)).containsExactlyInAnyOrder(
+        "tmdb_id","title","original_title","release_date","poster_path");
+    assertThat(body.at("/items/0/poster_path").asText()).isEqualTo("/safe_movie.jpg");
+    assertThat(body.at("/items/1/title").asText()).isEqualTo("Fallback title");
+    assertThat(body.at("/items/1/poster_path").isNull()).isTrue();
+    assertThat(JSON.readTree(picker(owner,rank,"Cinema",20,"en-US").body()).required("has_more").asBoolean()).isFalse();
+    var empty=JSON.readTree(picker(owner,rank,"No results",2,"en-US").body());
+    assertThat(empty.required("items").size()).isZero();
+    assertThat(empty.required("has_more").asBoolean()).isFalse();
+    assertThat(jdbc.queryForObject("select count(*) from movie",Long.class)).isZero();
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_entry",Long.class)).isZero();
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+  void pickerRevocationDuringProviderErrorWinsOverUpstreamOutcome(boolean blockAccount) throws Exception {
+    var owner=user(false);
+    var member=user(false);
+    UUID rank=ranking(owner,"PRIVATE");
+    membership(rank,member,"ADD_ENTRY");
+    var arrived=new java.util.concurrent.CountDownLatch(1);
+    var resume=new java.util.concurrent.CountDownLatch(1);
+    providerArrived=arrived;
+    releaseProvider=resume;
+    try(var executor=java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+      var call=executor.submit(()->picker(member,rank,"KIT delayed failure",1,"en-US"));
+      try {
+        assertThat(arrived.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        if (blockAccount)
+          jdbc.update("update user_statistics set consecutive_failed_login_attempts=10 where user_id=?",member.id());
+        else
+          jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='ADD_ENTRY'",
+              rank,member.id());
+      } finally { resume.countDown(); }
+      var denied=call.get(15,java.util.concurrent.TimeUnit.SECONDS);
+      assertThat(denied.statusCode()).isEqualTo(404);
+      assertThat(JSON.readTree(denied.body()).required("code").asText()).isEqualTo("ranking.not_found");
+    } finally {
+      providerArrived=null;
+      releaseProvider=null;
+    }
+    assertThat(PICKER_CALLS.get()).isEqualTo(1);
+  }
+
+  private HttpResponse<String> picker(Account actor,UUID rank,String query,int page,String language) throws Exception {
+    var json=JSON.createObjectNode().put("query",query).put("page",page).put("language",language);
+    var post=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith/rankings/"+rank+"/entries/tmdb/search"))
+        .timeout(Duration.ofSeconds(12)).header("Authorization","Bearer "+actor.token()).header("Content-Type","application/json")
+        .POST(HttpRequest.BodyPublishers.ofString(json.toString())).build();
+    return http.send(post,HttpResponse.BodyHandlers.ofString());
   }
 
   private String rotateInvitationAddress(Account actor) throws Exception {
