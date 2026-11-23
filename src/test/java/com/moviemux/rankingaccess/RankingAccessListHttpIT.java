@@ -309,6 +309,31 @@ class RankingAccessListHttpIT {
         .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json)).build();
   }
 
+  @Test void contextualSummaryMatchesDirectoryAndDoesNotRevealMissingVersusPrivate() throws Exception {
+    var owner = user(false);
+    var member = user(false);
+    var outsider = user(true);
+    var rank = ranking(owner, "PUBLIC");
+    membership(rank, member, "READ", "ADD_ENTRY");
+    var endpoint = "/rankings/" + rank;
+    var detail = request(endpoint, member.token(), Map.of());
+    assertThat(detail.status()).isEqualTo(200);
+    assertThat(detail.body()).isEqualTo(request("/rankings", member.token(), Map.of()).body().required("items").get(0));
+    assertThat(detail.body().required("name").isNull()).isTrue();
+    jdbc.update("update ranking set name='Artes e filmes',archived_at=now() where id=?", rank);
+    detail = request(endpoint, member.token(), Map.of());
+    assertThat(detail.body().required("name").asText()).isEqualTo("Artes e filmes");
+    assertThat(detail.body().required("capabilities").size()).isEqualTo(1);
+    assertThat(detail.body().at("/capabilities/0").asText()).isEqualTo("READ");
+    var denied = request(endpoint, outsider.token(), Map.of());
+    assertThat(denied.status()).isEqualTo(404);
+    assertThat(denied.body().required("code").asText()).isEqualTo("ranking.not_found");
+    assertThat(denied.headers().firstValue("Cache-Control")).hasValueSatisfying(v -> assertThat(v).contains("no-store"));
+    assertThat(request("/rankings/wrong", outsider.token(), Map.of()).body()).isEqualTo(denied.body());
+    jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='READ'", rank, member.id());
+    assertThat(request(endpoint, member.token(), Map.of()).body()).isEqualTo(denied.body());
+  }
+
   @Test void privateInvitationIsBoundToRecipientAndOnlyAddsDefaultGrantsOnce() throws Exception {
     var owner = user(false);
     var recipient = user(false);
