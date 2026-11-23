@@ -1319,6 +1319,132 @@ class RankingAccessListHttpIT {
     assertThat(PICKER_CALLS.get()).isZero();
   }
 
+  @Test void bulkOwnRatingPreviewUsesOneScopedOrderedProjectionAndNeverWrites() throws Exception {
+    var owner=user(false); var actor=user(false);
+    UUID sourceRank=ranking(owner,"PRIVATE"),targetRank=ranking(owner,"PRIVATE"),foreignRank=ranking(owner,"PRIVATE");
+    membership(sourceRank,actor,"READ"); membership(targetRank,actor,"READ","RATE_OWN");
+    UUID sourceEntry=seedRevealEntry(sourceRank),targetEntry=UUID.randomUUID(),wrongEntry=seedRevealEntry(targetRank);
+    UUID removedEntry=seedRevealEntry(targetRank), sourceRemovedEntry=UUID.randomUUID(), foreign=seedRevealEntry(foreignRank);
+    jdbc.update("""
+        insert into ranking_movie_entry(ranking_id,entry_id,movie_id,created_at)
+        select ?,?,movie_id,now() from ranking_movie_entry where ranking_id=? and entry_id=?
+        """,targetRank,targetEntry,sourceRank,sourceEntry);
+    jdbc.update("""
+        insert into ranking_movie_entry(ranking_id,entry_id,movie_id,created_at)
+        select ?,?,movie_id,now() from ranking_movie_entry where ranking_id=? and entry_id=?
+        """,sourceRank,sourceRemovedEntry,targetRank,removedEntry);
+    UUID sourceRemovedRound=seedRound(sourceRank,sourceRemovedEntry,1,true,4800);
+    UUID own=seedRound(sourceRank,sourceEntry,1,false,4800),missing=seedRound(sourceRank,sourceEntry,2,false,4800),
+        nullScore=seedRound(sourceRank,sourceEntry,3,null,4800),badScore=seedRound(sourceRank,sourceEntry,4,true,4800);
+    UUID target=seedRound(targetRank,targetEntry,2,false,4800),taken=seedRound(targetRank,targetEntry,4,null,4800),
+        wrong=seedRound(targetRank,wrongEntry,1,false,4800),removed=seedRound(targetRank,removedEntry,1,true,4800),
+        outside=seedRound(foreignRank,foreign,1,true,4800);
+    // A removed target shares the canonical movie but remains a non-disclosing unavailable pair.
+    jdbc.update("""
+        update ranking_movie_entry set removed_at=clock_timestamp(),removal_token=? where ranking_id=? and entry_id=?
+        """,UUID.randomUUID(),targetRank,removedEntry);
+    UUID sourceAuthor=seedAuthor(sourceRank,actor.id()),targetAuthor=seedAuthor(targetRank,actor.id()),
+        sourcePeer=seedAuthor(sourceRank,owner.id()),targetPeer=seedAuthor(targetRank,owner.id());
+    for(var row:List.of(new Object[]{sourceRank,own,sourceAuthor,0},new Object[]{sourceRank,missing,sourcePeer,9},
+        new Object[]{sourceRank,nullScore,sourceAuthor,null},new Object[]{sourceRank,badScore,sourceAuthor,11},
+        new Object[]{targetRank,target,targetPeer,8},new Object[]{targetRank,taken,targetAuthor,null}))
+      jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",row);
+
+    var ready=bulkPair(sourceEntry,own,targetEntry,target);
+    var body=bulkPayload(sourceRank,ready,
+        bulkPair(sourceEntry,missing,targetEntry,target),
+        bulkPair(sourceEntry,missing,targetEntry,taken),
+        bulkPair(sourceEntry,nullScore,targetEntry,target),
+        bulkPair(sourceEntry,badScore,targetEntry,target),
+        bulkPair(sourceEntry,own,wrongEntry,wrong),
+        bulkPair(sourceRemovedEntry,sourceRemovedRound,removedEntry,removed),
+        bulkPair(sourceEntry,own,foreign,outside),
+        bulkPair(sourceEntry,own,targetEntry,wrong),
+        ready);
+    var before=copyAffectedRows();
+    var receipts=jdbc.queryForObject("select count(*) from ranking_rating_copy_receipt",Long.class);
+    String suffix="/"+targetRank+"/ratings/me/copy-bulk-preview";
+    var canonical=copyPreview(actor,COLLECTIONS+suffix,body);
+    var legacy=copyPreview(actor,LEGACY_COLLECTIONS+suffix,body);
+    assertSameNoStoreResponse(canonical,legacy,200);
+    assertThat(fields(canonical.body())).containsExactly("items");
+    var rows=canonical.body().required("items");
+    assertThat(rows.size()).isEqualTo(10);
+    var statuses=List.of("READY","SOURCE_INELIGIBLE","DESTINATION_EXISTS","SOURCE_INELIGIBLE","SOURCE_INELIGIBLE",
+        "UNAVAILABLE","UNAVAILABLE","UNAVAILABLE","UNAVAILABLE","READY");
+    for(int index=0;index<statuses.size();index++){
+      var row=rows.get(index);
+      assertThat(fields(row)).containsExactlyInAnyOrder("index","status","source_score");
+      assertThat(row.required("index").asInt(-1)).isEqualTo(index);
+      assertThat(row.required("status").asText()).isEqualTo(statuses.get(index));
+      if(statuses.get(index).equals("READY")) {
+        assertThat(row.required("source_score").isIntegralNumber()).isTrue();
+        assertThat(row.required("source_score").asInt()).isZero();
+      } else assertThat(row.required("source_score").isNull()).isTrue();
+    }
+    assertThat(copyAffectedRows()).isEqualTo(before);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_rating_copy_receipt",Long.class)).isEqualTo(receipts);
+    assertThat(TMDB_CALLS.get()).isZero();
+    assertThat(PICKER_CALLS.get()).isZero();
+  }
+
+  @Test void bulkPreviewEnforcesBothCurrentScopesAndBoundedExactInputs() throws Exception {
+    var owner=user(false); var actor=user(false); var outsider=user(true);
+    UUID source=ranking(owner,"PRIVATE"),dest=ranking(owner,"PRIVATE"),foreign=ranking(owner,"PUBLIC");
+    membership(source,actor,"READ"); membership(dest,actor,"READ","RATE_OWN");
+    var pair=bulkPair(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID());
+    var valid=bulkPayload(source,pair);
+    String canonical=COLLECTIONS+"/"+dest+"/ratings/me/copy-bulk-preview";
+    var denied=copyPreview(outsider,canonical,valid);
+    assertThat(denied.status()).isEqualTo(404);
+    assertThat(fields(denied.body())).containsExactly("code");
+    assertThat(denied.body().required("code").asText()).isEqualTo("ranking.not_found");
+    assertSameNoStoreResponse(denied,copyPreview(actor,canonical,bulkPayload(foreign,pair)),404);
+    assertSameNoStoreResponse(denied,copyPreview(actor,canonical.replace(dest.toString(),"bad"),valid),404);
+    var good=copyPreview(actor,canonical,valid);
+    assertThat(good.status()).isEqualTo(200);
+    assertThat(good.body().at("/items/0/status").asText()).isEqualTo("UNAVAILABLE");
+    var max=bulkPayload(source,java.util.Collections.nCopies(50,pair).toArray(com.fasterxml.jackson.databind.node.ObjectNode[]::new));
+    assertThat(copyPreview(actor,canonical,max).body().required("items").size()).isEqualTo(50);
+
+    for(var invalid:List.of(bulkPayload(dest,pair),bulkPayload(source),
+        bulkPayload(source,java.util.Collections.nCopies(51,pair).toArray(com.fasterxml.jackson.databind.node.ObjectNode[]::new)),
+        bulkPayload(source,pair.deepCopy().put("score",3)),
+        bulkPayload(source,pair.deepCopy().put("source_round_id","short")),
+        valid.deepCopy().put("preview_token","should-not-be-input"))) {
+      var bad=copyPreview(actor,canonical,invalid);
+      assertThat(bad.status()).isEqualTo(400);
+      assertThat(bad.body().required("code").asText()).isEqualTo("ranking.invalid_rating_copy");
+      assertThat(bad.headers().firstValue("Cache-Control")).hasValue("no-store");
+    }
+    var tooLarge=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith"+canonical))
+        .timeout(Duration.ofSeconds(10)).header("Authorization","Bearer "+actor.token()).header("Content-Type","application/json")
+        .POST(HttpRequest.BodyPublishers.ofString(valid.toString()+" ".repeat(32768))).build();
+    assertThat(response(http.send(tooLarge,HttpResponse.BodyHandlers.ofString())).status()).isEqualTo(400);
+    assertThat(copyPreview(actor,canonical+"?x=1",valid).status()).isEqualTo(400);
+
+    jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='RATE_OWN'",dest,actor.id());
+    assertSameNoStoreResponse(denied,copyPreview(actor,canonical,valid),404);
+    grant(dest,actor,"RATE_OWN");
+    jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='READ'",source,actor.id());
+    assertSameNoStoreResponse(denied,copyPreview(actor,canonical,valid),404);
+    grant(source,actor,"READ");
+    jdbc.update("update ranking set archived_at=clock_timestamp() where id=?",source);
+    assertSameNoStoreResponse(denied,copyPreview(actor,canonical,valid),404);
+  }
+
+  private com.fasterxml.jackson.databind.node.ObjectNode bulkPair(UUID sourceEntry,UUID sourceRound,UUID destEntry,UUID destRound) {
+    return JSON.createObjectNode().put("source_entry_id",sourceEntry.toString()).put("source_round_id",sourceRound.toString())
+        .put("destination_entry_id",destEntry.toString()).put("destination_round_id",destRound.toString());
+  }
+
+  private com.fasterxml.jackson.databind.node.ObjectNode bulkPayload(UUID source,com.fasterxml.jackson.databind.node.ObjectNode... items) {
+    var body=JSON.createObjectNode().put("source_ranking_id",source.toString());
+    var array=body.putArray("items");
+    for(var item:items) array.add(item);
+    return body;
+  }
+
   @Test void copyApplyConcurrentAliasesCommitOnceAndReplayOriginalAfterOwnEdits() throws Exception {
     var c=seedCopyApply();
     var outsider=user(true);
