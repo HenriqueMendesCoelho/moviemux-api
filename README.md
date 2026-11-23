@@ -441,6 +441,15 @@ Once expired, revoked, consumed or unusable, the invitation stops contributing
 a name or an item. Seeing an invitation never authorizes reading the ranking
 before acceptance. Missing historical names remain null.
 
+On an explicitly requested account deletion that already passes existing
+protected-history guards, the same transaction removes the account's
+invitation address and any invitation referencing it as issuer or recipient.
+This only clears ephemeral invitation records; no notes, rankings, memberships,
+or other accounts' unrelated invitations are changed. If deletion rolls back,
+its invitation records are also restored. Account, rotation and invitation
+operations serialize before artifact locks, so they cannot recreate references
+to a deleted account.
+
 ### Explicit OPEN admission
 
 For a known ranking identifier, an authenticated user may explicitly
