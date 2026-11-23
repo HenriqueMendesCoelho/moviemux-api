@@ -711,6 +711,100 @@ class RankingAccessListHttpIT {
     return http.send(request,HttpResponse.BodyHandlers.ofString());
   }
 
+  @Test void authorizedDetailRevealsAtThirtyMinutesButListsAndAggregatesNeverAdvanceIt() throws Exception {
+    var owner = user(false);
+    var reader = user(false);
+    var outsider = user(true);
+    UUID rank = ranking(owner, "PRIVATE"), alternate = ranking(owner, "PRIVATE");
+    membership(rank, reader, "READ");
+    UUID entry=seedRevealEntry(rank), due=seedRound(rank,entry,1,false,1800),
+        fresh=seedRound(rank,entry,2,false,60), unknown=seedRound(rank,entry,3,null,1900);
+    UUID author=UUID.randomUUID();
+    jdbc.update("insert into ranking_author_identity(ranking_id,author_id,account_id,deleted_public_code) values (?,?,?,?)",
+        rank,author,owner.id(),UUID.randomUUID());
+    jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,8,now())",
+        rank,due,author);
+    String entryPath="/rankings/"+rank+"/entries/"+entry;
+    String rounds=entryPath+"/rounds";
+    var initial=jdbc.queryForMap(
+        "select created_at,updated_at,description from ranking_movie_round where ranking_id=? and round_id=?",rank,due);
+    assertThat(request(rounds,reader.token(),Map.of()).body().at("/items/0/revealed").asBoolean()).isFalse();
+    var subtotal=request(entryPath+"/ratings/aggregate",reader.token(),Map.of()).body();
+    assertThat(subtotal.required("votes").asInt()).isZero();
+    assertThat(subtotal.required("partial").asBoolean()).isTrue();
+    assertThat(request(rounds+"/"+due,outsider.token(),Map.of()).status()).isEqualTo(404);
+    assertThat(request("/rankings/"+alternate+"/entries/"+entry+"/rounds/"+due,owner.token(),Map.of()).status()).isEqualTo(404);
+    assertThat(request(rounds+"/bad-id",owner.token(),Map.of()).status()).isEqualTo(404);
+    assertThat(jdbc.queryForObject("select revealed from ranking_movie_round where ranking_id=? and round_id=?",
+        Boolean.class,rank,due)).isFalse();
+
+    var failBefore=request(rounds+"/"+fresh,reader.token(),Map.of());
+    assertThat(failBefore.status()).isEqualTo(200);
+    assertThat(failBefore.body().required("revealed").asBoolean()).isFalse();
+    var nil=request(rounds+"/"+unknown,reader.token(),Map.of());
+    assertThat(nil.status()).isEqualTo(200);
+    assertThat(nil.body().required("revealed").isNull()).isTrue();
+    try(var executor=java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+      var gate=new java.util.concurrent.CountDownLatch(1);
+      var first=executor.submit(()->{gate.await();return request(rounds+"/"+due,reader.token(),Map.of());});
+      var second=executor.submit(()->{gate.await();return request(rounds+"/"+due,owner.token(),Map.of());});
+      gate.countDown();
+      for(var future:List.of(first,second)) {
+        var revealed=future.get(15,java.util.concurrent.TimeUnit.SECONDS);
+        assertThat(revealed.status()).isEqualTo(200);
+        assertThat(revealed.headers().firstValue("Cache-Control")).hasValueSatisfying(v -> assertThat(v).contains("no-store"));
+        assertThat(fields(revealed.body())).containsExactlyInAnyOrder("round_id","round_number","revealed");
+        assertThat(revealed.body().required("revealed").asBoolean()).isTrue();
+      }
+    }
+    assertThat(jdbc.queryForMap("select created_at,updated_at,description from ranking_movie_round where ranking_id=? and round_id=?",
+        rank,due)).isEqualTo(initial);
+    assertThat(jdbc.queryForObject("select score from ranking_movie_rating where ranking_id=? and round_id=?",
+        Integer.class,rank,due)).isEqualTo(8);
+    var after=request(entryPath+"/ratings/aggregate",reader.token(),Map.of()).body();
+    assertThat(after.required("votes").asInt()).isEqualTo(1);
+    assertThat(after.required("total").asInt()).isEqualTo(8);
+    assertThat(after.required("partial").asBoolean()).isTrue();
+  }
+
+  @Test void archivedOrRemovedOrNoLongerReadableDetailsDoNotReveal() throws Exception {
+    var owner=user(false);
+    var reader=user(false);
+    UUID rank=ranking(owner,"PRIVATE");
+    membership(rank, reader, "READ");
+    UUID entry=seedRevealEntry(rank), round=seedRound(rank,entry,1,false,1900);
+    String path="/rankings/"+rank+"/entries/"+entry+"/rounds/"+round;
+    jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='READ'",rank,reader.id());
+    assertThat(request(path,reader.token(),Map.of()).status()).isEqualTo(404);
+    jdbc.update("update ranking set archived_at=now() where id=?",rank);
+    assertThat(request(path,owner.token(),Map.of()).body().required("revealed").asBoolean()).isFalse();
+    jdbc.update("update ranking_movie_entry set removed_at=now(),removal_token=? where ranking_id=? and entry_id=?",
+        UUID.randomUUID(),rank,entry);
+    assertThat(request(path,owner.token(),Map.of()).status()).isEqualTo(404);
+    assertThat(jdbc.queryForObject("select revealed from ranking_movie_round where ranking_id=? and round_id=?",
+        Boolean.class,rank,round)).isFalse();
+  }
+
+  private UUID seedRevealEntry(UUID rank) {
+    UUID movie=UUID.randomUUID(), entry=UUID.randomUUID();
+    jdbc.update("""
+        insert into movie(id,created_at,description,director,english_title,portuguese_title)
+        values (?,now(),'Synthetic','Synthetic','Synthetic','Synthetic')
+        """,movie);
+    jdbc.update("insert into ranking_movie_entry(ranking_id,entry_id,movie_id,created_at) values (?,?,?,now())",
+        rank,entry,movie);
+    return entry;
+  }
+
+  private UUID seedRound(UUID rank,UUID entry,long number,Boolean revealed,int ageSeconds) {
+    UUID round=UUID.randomUUID();
+    jdbc.update("""
+        insert into ranking_movie_round(ranking_id,entry_id,round_id,round_number,revealed,created_at,updated_at,description)
+        values (?,?,?,?,?,clock_timestamp()-make_interval(secs=>?),now(),'Synthetic round')
+        """,rank,entry,round,number,revealed,ageSeconds);
+    return round;
+  }
+
   private String rotateInvitationAddress(Account actor) throws Exception {
     var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port
         + "/api/monolith/user/ranking-invitation-address/rotate"))
