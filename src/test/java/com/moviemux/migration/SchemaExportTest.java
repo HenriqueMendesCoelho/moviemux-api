@@ -79,6 +79,12 @@ class SchemaExportTest {
         String scalarNote = "create table movie_note (user_id uuid not null, created_at timestamp with time zone not null, note integer, updated_at timestamp with time zone, movie_id uuid not null, primary key (movie_id, user_id))";
         assertThat(expected.remove(originalNote)).isTrue();
         expected.add(scalarNote);
+        // Only the V12 eligibility column is new in the current ORM export. V1 stays immutable.
+        String historicalMovie = expected.stream().filter(sql -> sql.startsWith("create table movie ("))
+            .findFirst().orElseThrow();
+        assertThat(expected.remove(historicalMovie)).isTrue();
+        expected.add(historicalMovie.replace("imdb_id varchar(255) unique, original_title",
+            "imdb_id varchar(255) unique, legacy_eligible boolean not null, original_title"));
         assertThat(statements(SchemaMetadata.exportDdl().replace("alter table if exists ", "alter table ")))
                 .hasSize(22).containsExactlyInAnyOrderElementsOf(expected);
     }

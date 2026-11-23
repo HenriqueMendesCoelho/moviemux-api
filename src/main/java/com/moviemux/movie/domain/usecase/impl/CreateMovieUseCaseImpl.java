@@ -36,7 +36,7 @@ public class CreateMovieUseCaseImpl implements CreateMovieUseCase {
     UUID userId = command.userId();
 
     if (repository.findByTmdbId(movie.getTmdbId()) != null) {
-      throw new DuplicatedMovieException("This tmdb id is already registered");
+      throw new DuplicatedMovieException();
     }
 
     MovieActor user = userRepository.findById(userId).orElse(null);

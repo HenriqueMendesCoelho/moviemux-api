@@ -5,6 +5,7 @@ import com.moviemux.adapter.util.CredentialUtil;
 import com.moviemux.movie.adapter.controller.MovieController;
 import com.moviemux.movie.adapter.controller.dto.*;
 import com.moviemux.movie.domain.exception.DuplicatedMovieException;
+import com.moviemux.movie.domain.exception.MovieWriteConflictException;
 import com.moviemux.movie.domain.exception.DuplicatedMovieNoteException;
 import com.moviemux.movie.domain.exception.MovieNotFoundException;
 import com.moviemux.movie.domain.exception.MovieNoteNotFoundException;
@@ -65,7 +66,7 @@ public class MovieSpringController {
       UserTokenDto user = CredentialUtil.getUserFromToken(token);
       MovieResponseDto response = controller.save(request, user);
       return ResponseEntity.ok(response);
-    } catch (DuplicatedMovieException e) {
+    } catch (DuplicatedMovieException | MovieWriteConflictException e) {
       return ResponseEntity.badRequest()
           .body(Map.of("error", true, "code", 400, "message", e.getMessage()));
     }
@@ -81,7 +82,7 @@ public class MovieSpringController {
       UserTokenDto user = CredentialUtil.getUserFromToken(token);
       MovieResponseDto response = controller.update(request, movieId, user);
       return ResponseEntity.ok(response);
-    } catch (MovieNotFoundException e) {
+    } catch (MovieNotFoundException | MovieWriteConflictException e) {
       return ResponseEntity.badRequest()
           .body(Map.of("error", true, "code", 400, "message", e.getMessage()));
     } catch (UserNotAuthorizedException e) {

@@ -22,10 +22,13 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.annotations.UpdateTimestamp;
 
 @Entity(name = "Movie")
 @Table(name = "movie")
+// This ORM entity is the legacy movie projection; contextual SQL sees the full catalog.
+@SQLRestriction("legacy_eligible = true")
 @Data
 @Builder
 @NoArgsConstructor
@@ -73,6 +76,9 @@ public class MovieEntity {
   private Integer runtime;
 
   @Column private boolean showNotes;
+
+  @Column(name = "legacy_eligible", nullable = false, updatable = false)
+  private boolean legacyEligible;
 
   @OneToMany(mappedBy = "movie", cascade = CascadeType.ALL)
   private List<MovieNoteEntity> notes;

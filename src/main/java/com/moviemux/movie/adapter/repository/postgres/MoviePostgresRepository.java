@@ -1,16 +1,24 @@
 package com.moviemux.movie.adapter.repository.postgres;
 
 import com.moviemux.movie.adapter.repository.postgres.mapper.MovieEntityMapper;
+import com.moviemux.movie.domain.exception.MovieWriteConflictException;
 import com.moviemux.movie.domain.model.*;
 import com.moviemux.movie.domain.repository.MovieRepository;
 import jakarta.persistence.EntityManager;
 import java.util.*;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public class MoviePostgresRepository implements MovieRepository {
+  // Names verified in the V1 fresh schema and the audited pre-Flyway develop schema.
+  private static final Set<String> CATALOG_ID_CONSTRAINTS =
+      Set.of("movie_tmdb_id_key", "movie_imdb_id_key",
+          "ukbgtoou3ammfcnlke2mv6uo522", "ukgk23fo99ijqjqbe7fe75a7nva");
+
   private final com.moviemux.movie.adapter.repository.MovieRepository repository;
   private final EntityManager entities;
   private final com.moviemux.user.domain.repository.UserIdentityLookup identities;
@@ -42,6 +50,7 @@ public class MoviePostgresRepository implements MovieRepository {
             : repository
                 .findById(model.getId())
                 .orElseGet(com.moviemux.movie.adapter.repository.postgres.entity.MovieEntity::new);
+    if (model.getId() == null) entity.setLegacyEligible(true);
     MovieEntityMapper.copyScalars(model, entity);
     entity.setUserId(model.getUser() == null ? null : model.getUser().id());
     if (model.getGenres() != null)
@@ -54,7 +63,17 @@ public class MoviePostgresRepository implements MovieRepository {
                               .class,
                           g.getId()))
               .collect(java.util.stream.Collectors.toCollection(ArrayList::new)));
-    return MovieEntityMapper.movie(repository.saveAndFlush(entity), identities);
+    try {
+      return MovieEntityMapper.movie(repository.saveAndFlush(entity), identities);
+    } catch (DataIntegrityViolationException failure) {
+      if (failure.getCause() instanceof ConstraintViolationException constraint
+          && "23505".equals(constraint.getSQLState())
+          && constraint.getConstraintName() != null
+          && CATALOG_ID_CONSTRAINTS.contains(constraint.getConstraintName())) {
+        throw new MovieWriteConflictException();
+      }
+      throw failure;
+    }
   }
 
   @Transactional

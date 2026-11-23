@@ -53,6 +53,9 @@ class RankingAccessListHttpIT {
   @Autowired private JdbcTemplate jdbc;
   @Autowired private DataSource dataSource;
   @Autowired private JWTUtil jwt;
+  @Autowired private com.moviemux.movie.domain.repository.MovieReadLookup movieReadLookup;
+  @Autowired private com.moviemux.movie.adapter.repository.postgres.MovieActivityJpaReader movieActivityReader;
+  @Autowired private com.moviemux.movie.domain.repository.MovieStatisticsReader movieStatisticsReader;
   private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
       .followRedirects(HttpClient.Redirect.NEVER).build();
 
@@ -494,6 +497,73 @@ class RankingAccessListHttpIT {
     var targetId = remaining.body().at("/items/0/invite_id").asText();
     assertThat(inviteRequest(recipient, "POST", secondRank, "/" + targetId + "/accept", null).statusCode()).isEqualTo(204);
     assertEmpty(request(path, recipient.token(), Map.of()));
+  }
+
+  @Test void canonicalContextMovieDoesNotAppearInLegacyReadsOrWrites() throws Exception {
+    var owner = user(true);
+    var outsider = user(false);
+    var legacy = UUID.randomUUID();
+    var contextual = UUID.randomUUID();
+    long legacyTmdb = 810001L, contextualTmdb = 810002L;
+    for (boolean eligible : List.of(true,false)) {
+      jdbc.update("""
+          insert into movie(id,created_at,description,director,english_title,portuguese_title,user_id,
+            show_notes,tmdb_id,legacy_eligible,runtime)
+          values (?,now(),'Film description','Director',?,?,?,true,?,?,90)
+          """, eligible ? legacy : contextual, eligible ? "Synthetic Legacy" : "Synthetic Context",
+          eligible ? "Synthetic Legacy" : "Synthetic Context", owner.id(), eligible ? legacyTmdb : contextualTmdb, eligible);
+    }
+    jdbc.update("insert into movie_note(movie_id,user_id,note,created_at) values (?,?,8,now())",legacy,owner.id());
+    jdbc.update("insert into movie_genre(id,name,tmdb_id) values (8001,'Only contextual',8001),(8002,'Shared',8002)");
+    jdbc.update("insert into movies_genres(genre_id,movie_id) values (8001,?),(8002,?),(8002,?)",
+        contextual, legacy, contextual);
+    var list = request("/movie", owner.token(), Map.of());
+    assertThat(list.status()).isEqualTo(200);
+    assertThat(list.body().required("total_elements").asInt()).isEqualTo(1);
+    assertThat(list.body().required("content").get(0).required("id").asText()).isEqualTo(legacy.toString());
+    var hidden = request("/movie/" + contextual, owner.token(), Map.of());
+    var missing = request("/movie/" + UUID.randomUUID(), owner.token(), Map.of());
+    assertThat(hidden.status()).isEqualTo(missing.status());
+    assertThat(request("/movie/note/" + contextual, owner.token(), Map.of()).status()).isEqualTo(400);
+    var facets = request("/movie/genres-with-movies", owner.token(), Map.of());
+    assertThat(facets.status()).isEqualTo(200);
+    assertThat(facets.body().size()).isEqualTo(1);
+    assertThat(facets.body().get(0).required("id").asLong()).isEqualTo(8002L);
+    var stats = request("/statistic/movies", owner.token(), Map.of()).body();
+    assertThat(stats.required("total_number_of_movies").asInt()).isEqualTo(1);
+    assertThat(movieReadLookup.listAll().stream().map(entry -> entry.id()).toList()).containsExactly(legacy);
+    assertThat(movieActivityReader.ownedMovies(owner.id())).containsExactly(legacy);
+    assertThat(movieStatisticsReader.genres().stream().map(genre -> genre.numberOfMovies()).sorted().toList())
+        .containsExactly(0,1);
+
+    var legacyCollision = legacyMovieCreate(owner, legacyTmdb);
+    var contextCollision = legacyMovieCreate(owner, contextualTmdb);
+    assertThat(legacyCollision.statusCode()).isEqualTo(400);
+    assertThat(contextCollision.statusCode()).isEqualTo(400);
+    assertThat(JSON.readTree(contextCollision.body())).isEqualTo(JSON.readTree(legacyCollision.body()));
+    assertThat(jdbc.queryForObject("select count(*) from movie", Long.class)).isEqualTo(2L);
+    assertThat(jdbc.queryForObject("select legacy_eligible from movie where id=?",Boolean.class,contextual)).isFalse();
+
+    UUID rank = ranking(owner, "PRIVATE");
+    var add = HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith/rankings/"+rank+"/entries/catalog"))
+        .timeout(Duration.ofSeconds(10)).header("Authorization", "Bearer " + owner.token())
+        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(
+            JSON.createObjectNode().put("movie_id",contextual.toString()).toString())).build();
+    assertThat(http.send(add,HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(201);
+    assertThat(request("/rankings/" + rank + "/entries", owner.token(), Map.of()).body().at("/items/0/movie_id").asText())
+        .isEqualTo(contextual.toString());
+    assertThat(request("/rankings/" + rank + "/entries", outsider.token(), Map.of()).status()).isEqualTo(404);
+  }
+
+  private HttpResponse<String> legacyMovieCreate(Account actor, long tmdb) throws Exception {
+    var json=JSON.createObjectNode().put("portuguese_title","Synthetic").put("english_title","Synthetic")
+        .put("director","Director").put("description","Description").put("runtime",90).put("tmdb_id",tmdb)
+        .put("url_image","https://example.invalid/synthetic");
+    json.putArray("genres");
+    var post=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith/movie"))
+        .timeout(Duration.ofSeconds(10)).header("Authorization","Bearer "+actor.token())
+        .header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.toString())).build();
+    return http.send(post,HttpResponse.BodyHandlers.ofString());
   }
 
   private String rotateInvitationAddress(Account actor) throws Exception {
