@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.moviemux.ranking.domain.exception.DuplicateRankingInvitationException;
 import com.moviemux.ranking.domain.exception.InvalidRankingInvitationException;
 import com.moviemux.ranking.domain.exception.RankingInvitationNotFoundException;
+import com.moviemux.ranking.domain.exception.RankingInvitationAddressUnavailableException;
 import com.moviemux.ranking.domain.model.RankingActor;
 import com.moviemux.ranking.domain.usecase.ManageRankingInvitationsUseCase;
 import java.time.OffsetDateTime;
@@ -32,17 +33,9 @@ public class RankingInvitationController {
       @AuthenticationPrincipal(expression = "userid") UUID actorId,
       @AuthenticationPrincipal UserDetails principal) {
     var actor = actor(actorId, principal);
-    if (body == null || !body.isObject() || body.size() != 1 || !body.path("user_id").isTextual())
+    if (body == null || !body.isObject() || body.size() != 1 || !body.path("recipient_code").isTextual())
       throw new InvalidRankingInvitationException();
-    UUID target;
-    String raw = body.get("user_id").textValue();
-    try {
-      target = UUID.fromString(raw);
-    } catch (IllegalArgumentException invalid) {
-      throw new InvalidRankingInvitationException();
-    }
-    if (!target.toString().equalsIgnoreCase(raw)) throw new InvalidRankingInvitationException();
-    var issued = invitations.issue(actor, rankingId, target);
+    var issued = invitations.issue(actor, rankingId, body.get("recipient_code").textValue());
     return ResponseEntity.status(HttpStatus.CREATED).cacheControl(CacheControl.noStore())
         .body(new IssuedInvitationResponse(issued.inviteId(), issued.expiresAt()));
   }
@@ -87,6 +80,11 @@ public class RankingInvitationController {
   @ExceptionHandler(RankingInvitationNotFoundException.class)
   public ResponseEntity<Map<String, String>> notFound() {
     return error(HttpStatus.NOT_FOUND, "ranking.invitation_not_found");
+  }
+
+  @ExceptionHandler(RankingInvitationAddressUnavailableException.class)
+  public ResponseEntity<Map<String, String>> addressUnavailable() {
+    return error(HttpStatus.SERVICE_UNAVAILABLE, "ranking.invitation_address_unavailable");
   }
 
   private static ResponseEntity<Map<String, String>> error(HttpStatus status, String code) {

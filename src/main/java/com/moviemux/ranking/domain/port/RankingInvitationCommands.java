@@ -10,7 +10,7 @@ import java.util.UUID;
  */
 public interface RankingInvitationCommands {
   /** Create a single live invitation without extending the expiry of an existing one. */
-  RankingInvitationReceipt issue(UUID actor, UUID rankingId, UUID invitee);
+  RankingInvitationReceipt issue(UUID actor, UUID rankingId, String recipientCode);
 
   /** Consume and create membership plus default grants atomically; replay never reactivates. */
   void accept(UUID actor, UUID rankingId, UUID inviteId);

@@ -3,6 +3,7 @@ package com.moviemux.ranking.domain.usecase.impl;
 import com.moviemux.ranking.domain.exception.InvalidRankingInvitationException;
 import com.moviemux.ranking.domain.exception.RankingInvitationNotFoundException;
 import com.moviemux.ranking.domain.model.RankingActor;
+import com.moviemux.ranking.domain.model.RankingInvitationAddress;
 import com.moviemux.ranking.domain.model.RankingInvitationReceipt;
 import com.moviemux.ranking.domain.port.RankingInvitationCommands;
 import com.moviemux.ranking.domain.usecase.ManageRankingInvitationsUseCase;
@@ -22,10 +23,10 @@ public class ManageRankingInvitationsUseCaseImpl implements ManageRankingInvitat
   }
 
   @Override
-  public RankingInvitationReceipt issue(RankingActor actor, UUID rankingId, UUID invitee) {
+  public RankingInvitationReceipt issue(RankingActor actor, UUID rankingId, String recipientCode) {
     UUID actorId = actorId(actor, rankingId);
-    if (invitee == null) throw new InvalidRankingInvitationException();
-    var receipt = commands.issue(actorId, rankingId, invitee);
+    if (!RankingInvitationAddress.isCanonical(recipientCode)) throw new InvalidRankingInvitationException();
+    var receipt = commands.issue(actorId, rankingId, recipientCode);
     if (receipt == null || receipt.inviteId() == null || receipt.expiresAt() == null) {
       throw new RankingInvitationNotFoundException();
     }

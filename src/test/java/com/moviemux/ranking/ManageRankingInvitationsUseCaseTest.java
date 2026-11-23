@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 class ManageRankingInvitationsUseCaseTest {
   private final UUID issuer = new UUID(0, 1);
   private final UUID recipient = new UUID(0, 2);
+  private final String recipientCode = "AAAAAAAAAAAAAAAAAAAAAA";
   private final UUID ranking = new UUID(0, 3);
   private final UUID invite = new UUID(0, 4);
   private final OffsetDateTime expiry = OffsetDateTime.parse("2026-11-30T12:00:00Z");
@@ -27,9 +28,9 @@ class ManageRankingInvitationsUseCaseTest {
   @Test
   void issueReturnsOnlyTheReceiptAndUsesExactlyTheActorAndRank() {
     var expected = new RankingInvitationReceipt(invite, expiry);
-    when(commands.issue(issuer, ranking, recipient)).thenReturn(expected);
-    assertThat(useCase.issue(actor, ranking, recipient)).isSameAs(expected);
-    verify(commands).issue(issuer, ranking, recipient);
+    when(commands.issue(issuer, ranking, recipientCode)).thenReturn(expected);
+    assertThat(useCase.issue(actor, ranking, recipientCode)).isSameAs(expected);
+    verify(commands).issue(issuer, ranking, recipientCode);
     verifyNoMoreInteractions(commands);
   }
 
@@ -64,13 +65,13 @@ class ManageRankingInvitationsUseCaseTest {
 
   @Test
   void incompleteAdapterReceiptFailsClosedWithoutARepeatWrite() {
-    when(commands.issue(issuer, ranking, recipient)).thenReturn(
+    when(commands.issue(issuer, ranking, recipientCode)).thenReturn(
         null, new RankingInvitationReceipt(null, expiry), new RankingInvitationReceipt(invite, null));
     for (int i = 0; i < 3; i++) {
-      assertThatThrownBy(() -> useCase.issue(actor, ranking, recipient))
+      assertThatThrownBy(() -> useCase.issue(actor, ranking, recipientCode))
           .isInstanceOf(RankingInvitationNotFoundException.class);
     }
-    verify(commands, times(3)).issue(issuer, ranking, recipient);
+    verify(commands, times(3)).issue(issuer, ranking, recipientCode);
     verifyNoMoreInteractions(commands);
   }
 
@@ -78,20 +79,20 @@ class ManageRankingInvitationsUseCaseTest {
   void duplicateIsPreservedAndDenialsAreNeverRetriedOrReinterpreted() {
     var duplicate = new DuplicateRankingInvitationException();
     var denied = new RankingInvitationNotFoundException();
-    when(commands.issue(issuer, ranking, recipient)).thenThrow(duplicate);
+    when(commands.issue(issuer, ranking, recipientCode)).thenThrow(duplicate);
     doThrow(denied).when(commands).accept(recipient, ranking, invite);
     doThrow(denied).when(commands).revoke(issuer, ranking, invite);
-    assertThatThrownBy(() -> useCase.issue(actor, ranking, recipient)).isSameAs(duplicate);
+    assertThatThrownBy(() -> useCase.issue(actor, ranking, recipientCode)).isSameAs(duplicate);
     assertThatThrownBy(() -> useCase.accept(new RankingActor(recipient, true), ranking, invite)).isSameAs(denied);
     assertThatThrownBy(() -> useCase.revoke(actor, ranking, invite)).isSameAs(denied);
-    verify(commands).issue(issuer, ranking, recipient);
+    verify(commands).issue(issuer, ranking, recipientCode);
     verify(commands).accept(recipient, ranking, invite);
     verify(commands).revoke(issuer, ranking, invite);
     verifyNoMoreInteractions(commands);
   }
 
   private void assertDenied(RankingActor input, UUID rankingId) {
-    assertThatThrownBy(() -> useCase.issue(input, rankingId, recipient))
+    assertThatThrownBy(() -> useCase.issue(input, rankingId, recipientCode))
         .isInstanceOf(RankingInvitationNotFoundException.class);
     assertThatThrownBy(() -> useCase.accept(input, rankingId, invite))
         .isInstanceOf(RankingInvitationNotFoundException.class);

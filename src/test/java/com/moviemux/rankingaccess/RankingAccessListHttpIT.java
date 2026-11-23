@@ -70,6 +70,10 @@ class RankingAccessListHttpIT {
       statement.execute("create schema " + SCHEMA);
       ownsSchema = true;
     }
+    properties.add("ranking.invitation.address.digest-key",
+        () -> java.util.Base64.getEncoder().encodeToString(new byte[32]));
+    properties.add("ranking.invitation.address.encryption-key",
+        () -> java.util.Base64.getEncoder().encodeToString("01234567890123456789012345678901".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
     properties.add("ranking.creation.max-owned", () -> "1");
     properties.add("ranking.creation.include-archived", () -> "true");
     properties.add("spring.datasource.url", () -> databaseUrl);
@@ -311,7 +315,8 @@ class RankingAccessListHttpIT {
     var outsider = user(true);
     UUID rank = ranking(owner, "PRIVATE");
     UUID anotherRank = ranking(owner, "PRIVATE");
-    var issued = inviteRequest(owner, "POST", rank, "", recipient.id());
+    var code = rotateInvitationAddress(recipient);
+    var issued = inviteRequest(owner, "POST", rank, "", code);
     assertThat(issued.statusCode()).isEqualTo(201);
     assertThat(issued.headers().firstValue("Cache-Control")).hasValueSatisfying(v -> assertThat(v).contains("no-store"));
     var receipt = JSON.readTree(issued.body());
@@ -319,7 +324,7 @@ class RankingAccessListHttpIT {
     var id = UUID.fromString(receipt.required("invite_id").asText());
     assertThat(jdbc.queryForObject("select extract(epoch from expires_at-issued_at)::bigint from ranking_invitation where invite_id=?",
         Long.class, id)).isEqualTo(604800L);
-    assertThat(inviteRequest(owner, "POST", rank, "", recipient.id()).statusCode()).isEqualTo(409);
+    assertThat(inviteRequest(owner, "POST", rank, "", code).statusCode()).isEqualTo(409);
     assertInvitationMissing(inviteRequest(outsider, "POST", rank, "/" + id + "/accept", null));
     assertInvitationMissing(inviteRequest(recipient, "POST", anotherRank, "/" + id + "/accept", null));
     assertEmpty(request("/rankings", recipient.token(), Map.of()));
@@ -330,7 +335,7 @@ class RankingAccessListHttpIT {
     assertInvitationMissing(inviteRequest(owner, "DELETE", rank, "/" + id, null));
     jdbc.update("update ranking_membership set active=false where ranking_id=? and user_id=?", rank, recipient.id());
     assertInvitationMissing(inviteRequest(recipient, "POST", rank, "/" + id + "/accept", null));
-    assertInvitationMissing(inviteRequest(owner, "POST", rank, "", recipient.id()));
+    assertInvitationMissing(inviteRequest(owner, "POST", rank, "", code));
     assertEmpty(request("/rankings", recipient.token(), Map.of()));
   }
 
@@ -342,7 +347,8 @@ class RankingAccessListHttpIT {
     UUID rank = ranking(owner, "PUBLIC");
     membership(rank, inviter, "INVITE_MEMBER");
     membership(rank, otherInviter, "INVITE_MEMBER");
-    var issued = inviteRequest(inviter, "POST", rank, "", recipient.id());
+    var code = rotateInvitationAddress(recipient);
+    var issued = inviteRequest(inviter, "POST", rank, "", code);
     assertThat(issued.statusCode()).isEqualTo(201);
     var id = JSON.readTree(issued.body()).required("invite_id").asText();
     assertInvitationMissing(inviteRequest(otherInviter, "DELETE", rank, "/" + id, null));
@@ -352,7 +358,7 @@ class RankingAccessListHttpIT {
     assertThat(inviteRequest(owner, "DELETE", rank, "/" + id, null).statusCode()).isEqualTo(204);
     assertThat(inviteRequest(owner, "DELETE", rank, "/" + id, null).statusCode()).isEqualTo(204);
     assertInvitationMissing(inviteRequest(recipient, "POST", rank, "/" + id + "/accept", null));
-    var reissued = inviteRequest(owner, "POST", rank, "", recipient.id());
+    var reissued = inviteRequest(owner, "POST", rank, "", code);
     assertThat(reissued.statusCode()).isEqualTo(201);
     assertThat(JSON.readTree(reissued.body()).required("invite_id").asText()).isNotEqualTo(id);
     assertEmpty(request("/rankings", recipient.token(), Map.of()));
@@ -362,7 +368,8 @@ class RankingAccessListHttpIT {
     var owner = user(false);
     var recipient = user(false);
     UUID rank = ranking(owner, "PRIVATE");
-    var firstIssue = inviteRequest(owner, "POST", rank, "", recipient.id());
+    var code = rotateInvitationAddress(recipient);
+    var firstIssue = inviteRequest(owner, "POST", rank, "", code);
     var id = JSON.readTree(firstIssue.body()).required("invite_id").asText();
     try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
       var start = new java.util.concurrent.CountDownLatch(1);
@@ -387,19 +394,61 @@ class RankingAccessListHttpIT {
     }
   }
 
+  @Test void addressIsPrivateAndRotationOnlyInvalidatesFutureIssuance() throws Exception {
+    var host = user(false);
+    var recipient = user(false);
+    var foreign = user(false);
+    UUID rank = ranking(host, "PRIVATE");
+    UUID otherRank = ranking(host, "PRIVATE");
+    String path = "/user/ranking-invitation-address";
+    assertThat(request(path, recipient.token(), Map.of()).body().required("recipient_code").isNull()).isTrue();
+    String firstCode = rotateInvitationAddress(recipient);
+    assertThat(request(path, recipient.token(), Map.of()).body().required("recipient_code").asText()).isEqualTo(firstCode);
+    assertThat(request(path, foreign.token(), Map.of()).body().required("recipient_code").isNull()).isTrue();
+    assertThat(request(path, null, Map.of()).status()).isIn(401, 403);
+    var oldBody = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port
+        + "/api/monolith/rankings/" + rank + "/invitations"))
+        .header("Authorization", "Bearer " + host.token()).header("Content-Type", "application/json")
+        .timeout(Duration.ofSeconds(10)).POST(HttpRequest.BodyPublishers.ofString(
+            JSON.createObjectNode().put("user_id", recipient.id().toString()).toString())).build();
+    assertThat(http.send(oldBody, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(400);
+    var invite = inviteRequest(host, "POST", rank, "", firstCode);
+    assertThat(invite.statusCode()).isEqualTo(201);
+    String newCode = rotateInvitationAddress(recipient);
+    assertThat(newCode).isNotEqualTo(firstCode);
+    assertInvitationMissing(inviteRequest(host, "POST", otherRank, "", firstCode));
+    assertThat(inviteRequest(host, "POST", otherRank, "", newCode).statusCode()).isEqualTo(201);
+    var id = JSON.readTree(invite.body()).required("invite_id").asText();
+    assertThat(inviteRequest(recipient, "POST", rank, "/" + id + "/accept", null).statusCode()).isEqualTo(204);
+  }
+
+  private String rotateInvitationAddress(Account actor) throws Exception {
+    var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port
+        + "/api/monolith/user/ranking-invitation-address/rotate"))
+        .timeout(Duration.ofSeconds(10)).header("Authorization", "Bearer " + actor.token());
+    var response=http.send(builder.POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.ofString());
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(response.headers().firstValue("Cache-Control")).hasValueSatisfying(v -> assertThat(v).contains("no-store"));
+    var result=JSON.readTree(response.body());
+    assertThat(fields(result)).containsExactly("recipient_code");
+    String code=result.required("recipient_code").asText();
+    assertThat(code).matches("[A-Za-z0-9_-]{21}[AQgw]");
+    return code;
+  }
+
   private void assertInvitationMissing(HttpResponse<String> response) throws Exception {
     assertThat(response.statusCode()).isEqualTo(404);
     assertThat(JSON.readTree(response.body()).required("code").asText()).isEqualTo("ranking.invitation_not_found");
   }
 
-  private HttpResponse<String> inviteRequest(Account actor, String method, UUID rank, String suffix, UUID target)
+  private HttpResponse<String> inviteRequest(Account actor, String method, UUID rank, String suffix, String target)
       throws Exception {
     var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port
         + "/api/monolith/rankings/" + rank + "/invitations" + suffix))
         .timeout(Duration.ofSeconds(10)).header("Authorization", "Bearer " + actor.token());
     if (target != null) builder.header("Content-Type", "application/json");
     return http.send(builder.method(method, target == null ? HttpRequest.BodyPublishers.noBody()
-        : HttpRequest.BodyPublishers.ofString(JSON.createObjectNode().put("user_id", target.toString()).toString())).build(),
+        : HttpRequest.BodyPublishers.ofString(JSON.createObjectNode().put("recipient_code", target).toString())).build(),
         HttpResponse.BodyHandlers.ofString());
   }
 

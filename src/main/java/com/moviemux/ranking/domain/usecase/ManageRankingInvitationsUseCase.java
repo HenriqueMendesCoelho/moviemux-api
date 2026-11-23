@@ -5,7 +5,7 @@ import com.moviemux.ranking.domain.model.RankingInvitationReceipt;
 import java.util.UUID;
 
 public interface ManageRankingInvitationsUseCase {
-  RankingInvitationReceipt issue(RankingActor actor, UUID rankingId, UUID invitee);
+  RankingInvitationReceipt issue(RankingActor actor, UUID rankingId, String recipientCode);
 
   void accept(RankingActor actor, UUID rankingId, UUID inviteId);
 

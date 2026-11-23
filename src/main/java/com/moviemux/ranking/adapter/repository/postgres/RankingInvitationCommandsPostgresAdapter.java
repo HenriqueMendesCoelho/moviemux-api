@@ -17,15 +17,25 @@ import org.springframework.transaction.annotation.Transactional;
 public class RankingInvitationCommandsPostgresAdapter implements RankingInvitationCommands {
   private final NamedParameterJdbcTemplate jdbc;
 
-  public RankingInvitationCommandsPostgresAdapter(NamedParameterJdbcTemplate jdbc) {
+  private final RankingInvitationAddressProtection protection;
+
+  public RankingInvitationCommandsPostgresAdapter(NamedParameterJdbcTemplate jdbc,
+      RankingInvitationAddressProtection protection) {
     this.jdbc = jdbc;
+    this.protection = protection;
   }
 
   @Override
-  public RankingInvitationReceipt issue(UUID actor, UUID rankingId, UUID invitee) {
+  public RankingInvitationReceipt issue(UUID actor, UUID rankingId, String recipientCode) {
     var rank = lockRanking(rankingId);
-    if (!rank.invitationMode() || !hasAuthority(actor, rankingId, rank)
-        || hasMembership(rankingId, invitee, false) || !enabled(invitee)) throw missing();
+    if (!rank.invitationMode() || !hasAuthority(actor, rankingId, rank)) throw missing();
+    // Resolve only after authorization, inside the same transaction. Rotation takes a conflicting
+    // row lock so it either precedes issuance (old code fails) or follows a bound invitation.
+    var invitee = jdbc.queryForList("""
+        select account_id from ranking_invitation_address where lookup_digest=:digest for share
+        """, Map.of("digest", protection.digest(recipientCode)), UUID.class).stream().findFirst()
+        .orElseThrow(RankingInvitationCommandsPostgresAdapter::missing);
+    if (hasMembership(rankingId, invitee, false) || !enabled(invitee)) throw missing();
 
     var target = Map.of("rank", rankingId, "target", invitee);
     // An expired, unconsumed slot can be replaced. Mark the terminal time without prolonging validity.
