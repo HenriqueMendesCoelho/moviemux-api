@@ -22,7 +22,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/rankings/{rankingId}/settings/visibility")
+@RequestMapping({"/movies/collections/{rankingId}/settings/visibility", "/rankings/{rankingId}/settings/visibility"})
 public class RankingVisibilitySettingsController {
   private static final int MAX_BODY_BYTES = 1024;
   private static final ObjectReader BODY = new ObjectMapper().readerFor(JsonNode.class)

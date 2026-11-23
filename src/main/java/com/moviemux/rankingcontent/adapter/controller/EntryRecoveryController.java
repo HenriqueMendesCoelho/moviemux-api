@@ -17,7 +17,7 @@ import org.springframework.transaction.TransactionException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 @RestController
-@RequestMapping("/rankings/{rankingId}/entries/{entryId}")
+@RequestMapping({"/movies/collections/{rankingId}/entries/{entryId}", "/rankings/{rankingId}/entries/{entryId}"})
 public class EntryRecoveryController {
   private final EntryRecoveryUseCase useCase;
   public EntryRecoveryController(EntryRecoveryUseCase useCase){this.useCase=useCase;}

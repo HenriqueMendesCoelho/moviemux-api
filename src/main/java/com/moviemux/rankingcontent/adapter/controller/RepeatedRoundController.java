@@ -21,7 +21,7 @@ import org.springframework.transaction.TransactionException;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/rankings/{rankingId}")
+@RequestMapping({"/movies/collections/{rankingId}", "/rankings/{rankingId}"})
 public class RepeatedRoundController {
   private static final int MAX_BODY_BYTES = 4096;
   private static final ObjectReader BODY = new ObjectMapper().readerFor(JsonNode.class)

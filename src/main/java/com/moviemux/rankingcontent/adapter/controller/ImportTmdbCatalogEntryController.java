@@ -20,7 +20,7 @@ import org.springframework.transaction.TransactionException;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/rankings")
+@RequestMapping({"/movies/collections", "/rankings"})
 public class ImportTmdbCatalogEntryController {
   private static final ObjectReader BODY = new ObjectMapper().readerFor(JsonNode.class)
       .with(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY, DeserializationFeature.FAIL_ON_TRAILING_TOKENS);

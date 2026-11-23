@@ -19,7 +19,7 @@ import org.springframework.transaction.TransactionException;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/public/rankings/{rankingId}")
+@RequestMapping({"/public/movies/collections/{rankingId}", "/public/rankings/{rankingId}"})
 public class PublicRankingProjectionController {
   private static final Pattern UUID_PATTERN =
       Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");

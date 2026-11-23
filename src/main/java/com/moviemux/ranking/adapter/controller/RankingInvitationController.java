@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestController
-@RequestMapping("/rankings/{rankingId}/invitations")
+@RequestMapping({"/movies/collections/{rankingId}/invitations", "/rankings/{rankingId}/invitations"})
 public class RankingInvitationController {
   private final ManageRankingInvitationsUseCase invitations;
 

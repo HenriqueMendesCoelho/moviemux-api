@@ -31,6 +31,7 @@ public class SecurityConfig {
 
 	private static final String[] PUBLIC_MATCHERS = { "/public/**" };
 	private static final String[] PUBLIC_RANKING_GET = {
+			"/public/movies/collections/{rankingId}", "/public/movies/collections/{rankingId}/entries",
 			"/public/rankings/{rankingId}", "/public/rankings/{rankingId}/entries"
 	};
 	private final UserDetailsService userDetailsService;
@@ -63,7 +64,8 @@ public class SecurityConfig {
 	@Bean
 	@Order(1)
 	SecurityFilterChain anonymousRankingProjection(HttpSecurity http) throws Exception {
-		http.securityMatcher("/public/rankings", "/public/rankings/**");
+		http.securityMatcher("/public/movies/collections", "/public/movies/collections/**",
+				"/public/rankings", "/public/rankings/**");
 		// These are anonymous regardless of cookies, Authorization or caller headers. Do not
 		// install the account JWT filters or restore / save a user session for this namespace.
 		http.csrf(AbstractHttpConfigurer::disable);

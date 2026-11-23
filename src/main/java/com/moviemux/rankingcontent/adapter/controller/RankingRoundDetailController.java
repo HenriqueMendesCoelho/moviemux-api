@@ -18,7 +18,7 @@ import org.springframework.transaction.TransactionException;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/rankings/{rankingId}/entries/{entryId}/rounds/{roundId}")
+@RequestMapping({"/movies/collections/{rankingId}/entries/{entryId}/rounds/{roundId}", "/rankings/{rankingId}/entries/{entryId}/rounds/{roundId}"})
 public class RankingRoundDetailController {
   private static final Pattern UUID_PATTERN =
       Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");

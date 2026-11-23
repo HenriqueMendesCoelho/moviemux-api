@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestController
-@RequestMapping("/rankings/{rankingId}/rounds/{roundId}/rating/me")
+@RequestMapping({"/movies/collections/{rankingId}/rounds/{roundId}/rating/me", "/rankings/{rankingId}/rounds/{roundId}/rating/me"})
 public class GetOwnRoundRatingController {
   private final GetOwnRoundRatingUseCase useCase;
   public GetOwnRoundRatingController(GetOwnRoundRatingUseCase useCase){this.useCase=useCase;}

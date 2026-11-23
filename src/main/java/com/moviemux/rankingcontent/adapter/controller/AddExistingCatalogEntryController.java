@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestController
-@RequestMapping("/rankings")
+@RequestMapping({"/movies/collections", "/rankings"})
 public class AddExistingCatalogEntryController {
   private final AddExistingCatalogEntryUseCase useCase;
   public AddExistingCatalogEntryController(AddExistingCatalogEntryUseCase useCase){this.useCase=useCase;}

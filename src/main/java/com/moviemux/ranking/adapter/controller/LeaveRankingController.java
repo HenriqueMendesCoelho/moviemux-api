@@ -11,7 +11,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/rankings")
+@RequestMapping({"/movies/collections", "/rankings"})
 public class LeaveRankingController {
   private final LeaveRankingUseCase useCase;
   public LeaveRankingController(LeaveRankingUseCase useCase) { this.useCase = useCase; }

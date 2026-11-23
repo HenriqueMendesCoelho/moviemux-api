@@ -25,7 +25,7 @@ import org.springframework.transaction.TransactionException;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/rankings/{rankingId}/entries/{entryId}/rounds/{roundId}/rating/me/copy-preview")
+@RequestMapping({"/movies/collections/{rankingId}/entries/{entryId}/rounds/{roundId}/rating/me/copy-preview", "/rankings/{rankingId}/entries/{entryId}/rounds/{roundId}/rating/me/copy-preview"})
 public class PreviewOwnRatingCopyController {
   private static final int MAX_BODY_BYTES = 1024;
   private static final ObjectReader BODY = new ObjectMapper().readerFor(JsonNode.class)

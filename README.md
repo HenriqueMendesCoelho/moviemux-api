@@ -134,9 +134,26 @@ concurrent operations through this application, not direct SQL writes or older
 application versions that do not follow the same locking protocol. No schema
 migration or change to historical V1 is required for this correction.
 
+## Movie collection API
+
+All paths below are relative to the configured API context (by default
+`/api/monolith`). The canonical authenticated namespace is `/movies/collections`.
+The existing `/rankings` family remains a direct compatibility alias for the
+same methods and suffixes, including writes. Anonymous reads use
+`/public/movies/collections/{rankingId}` and its `/entries` child; the former
+`/public/rankings` family remains an exact GET-only alias. The private inbox
+`/movies/collections/invitations/incoming` also retains its former
+`/ranking-invitations/incoming` path. The account-level
+`/user/ranking-invitation-address` and its `/rotate` child stay unchanged.
+
+Aliases call the same handlers with no redirects or method changes. Request
+fields, responses, permission checks, no-store policy and effects are the same
+in both families. None of these aliases change the legacy movie catalog or
+introduce a TV collections route.
+
 ## Ranking access
 
-`GET /rankings/{rankingId}/access` (under the configured API context path) returns
+`GET /movies/collections/{rankingId}/access` (under the configured API context path) returns
 only `ranking_id` and the authenticated caller's current local `capabilities`.
 Active membership with read access is required, including for public rankings;
 this endpoint is not the anonymous public ranking view. Active owners receive
@@ -146,7 +163,7 @@ Missing and inaccessible rankings both return `404` with
 The server reads membership and grants together for each request, rather than
 trusting token role claims, request headers or previously cached grants.
 
-`GET /rankings/access` lists only the caller's currently accessible rankings,
+`GET /movies/collections/access` lists only the caller's currently accessible rankings,
 with the same minimal item projection. It accepts an exclusive UUID `after`
 cursor and `limit` from 1 to 100 (default 20). The response contains `items`
 and `next_cursor` (explicitly null at the end), never a global total.
@@ -162,7 +179,7 @@ restrictive, not cascading history deletions. This slice exposes no ranking
 creation, ownership transfer or archive API.
 
 
-`DELETE /rankings/{rankingId}/membership/self` deactivates only the caller's
+`DELETE /movies/collections/{rankingId}/membership/self` deactivates only the caller's
 existing non-owner membership. It does not require READ and returns idempotent
 `204` for an already inactive membership. Missing ranking/membership returns
 generic `404 ranking.not_found`; the current owner receives
@@ -173,7 +190,7 @@ Current access endpoints observe committed departure with the same token.
 This does not implement account deletion, owner exit or realtime session cutover.
 
 
-`PUT /rankings/{rankingId}/members/{memberId}/capabilities` replaces an active
+`PUT /movies/collections/{rankingId}/members/{memberId}/capabilities` replaces an active
 non-owner member's grants as one transaction. Only the current active owner may
 perform it; MANAGE_MEMBERS and instance administrator roles are not delegated
 authority for this endpoint. Body: `{"capabilities":["READ","RATE_OWN"]}`.
@@ -246,8 +263,8 @@ contextual writes. Tests use only synthetic disposable PostgreSQL schemas.
 
 ### Contextual catalog browsing and existing-catalog inclusion
 
-Authenticated readers can use `GET /rankings/{rankingId}/entries?after={entryId}&limit=20`
-and `GET /rankings/{rankingId}/entries/{entryId}/rounds?afterNumber={number}&limit=20`.
+Authenticated readers can use `GET /movies/collections/{rankingId}/entries?after={entryId}&limit=20`
+and `GET /movies/collections/{rankingId}/entries/{entryId}/rounds?afterNumber={number}&limit=20`.
 Both filter authorization before keyset pagination in the same SQL snapshot,
 return `items` plus explicit nullable `next_cursor`, and use `Cache-Control: no-store`.
 Entry metadata has no ratings, authors, vote counts or aggregates. Round listing
@@ -255,7 +272,7 @@ preserves nullable `revealed` as raw historical state and does not reveal votes 
 advance any timer. Invalid pages return400, inaccessible/missing scope404, and
 persistence failures generic500. No public/anonymous route is enabled.
 
-`POST /rankings/{rankingId}/entries/catalog` accepts only an authoritative
+`POST /movies/collections/{rankingId}/entries/catalog` accepts only an authoritative
 `movie_id` referring to an existing global catalog record. Current ADD_ENTRY or
 ownership is revalidated under locks; global ADM is not an override. A new entry
 gets a separate first round with hidden votes and its own creation time. Response
@@ -277,7 +294,7 @@ verified. No fallback is persisted or new catalog insert enabled by these routes
 ### Contextual own-rating writes
 
 Authenticated clients can create (`POST`, 201) or explicitly edit (`PATCH`, 200)
-`/rankings/{rankingId}/rounds/{roundId}/rating/me` with `{"score": 0}` through
+`/movies/collections/{rankingId}/rounds/{roundId}/rating/me` with `{"score": 0}` through
 `{"score": 10}`. The score must be a JSON integer: null, omission, decimal,
 string, boolean and out-of-range values are rejected, not silently coerced.
 The response contains only `round_id` and the authenticated author's `score`.
@@ -302,15 +319,15 @@ checked by these commands as well as by contextual reads and catalog inclusion.
 ### Recoverable ranking-entry removal
 
 Entries have a contextual, recoverable 24-hour lifecycle. `GET
-/rankings/{rankingId}/entries/{entryId}/removal-preview` returns `entry_id`,
+/movies/collections/{rankingId}/entries/{entryId}/removal-preview` returns `entry_id`,
 `version`, nullable `removed_at`, `expires_at`, `removal_token`, the localized-UI
 warning key `ranking.entry_removal_permanent_after_retention`, and
 `recovery_seconds: 86400`. It does not expose rating counts or aggregates.
-`DELETE /rankings/{rankingId}/entries/{entryId}` requires
+`DELETE /movies/collections/{rankingId}/entries/{entryId}` requires
 `{"expected_version": 0, "confirm": true}` and returns the new state. The
 version comes from the preview, not a hardcoded client default. An outdated
 version conflicts instead of extending the window or deleting a restored entry.
-`POST /rankings/{rankingId}/entries/{entryId}/restore` requires the current
+`POST /movies/collections/{rankingId}/entries/{entryId}/restore` requires the current
 `removal_token`. A stale token conflicts, including after successful restoration.
 All responses are no-store. The frontend must show the recovery deadline and
 permanent-loss warning before confirmation, in the selected interface language.
@@ -331,7 +348,7 @@ are closed transactionally, and offline migration replay is blocked thereafter.
 Previously requested removals continue to expire even if their ranking is later archived; active archived history is not purged. Operational scheduling remains disabled pending cutover. Deleting accounts,
 individual ratings or ex-member ratings is not covered by this entry lifecycle.
 
-`GET /rankings/{rankingId}/rounds/{roundId}/rating/me` reads only the current
+`GET /movies/collections/{rankingId}/rounds/{roundId}/rating/me` reads only the current
 member's own rating, requiring active READ membership or ownership. It returns
 `round_id` and `score`, including explicit null or historical out-of-range values
 without normalization. Hidden rounds and archived rankings remain readable to
@@ -339,7 +356,7 @@ the authorized author; removed entries, missing own ratings and inaccessible
 contexts share the same generic 404. This read neither reveals others' votes nor
 updates timestamps, creates author identities or changes revelation.
 
-`GET /rankings/{rankingId}/entries/{entryId}/ratings/aggregate` is an authenticated,
+`GET /movies/collections/{rankingId}/entries/{entryId}/ratings/aggregate` is an authenticated,
 read-only projection for active `READ` members or the active owner. It returns only
 `entry_id`, exact integer `total`, integer `votes`, and `partial`. The total and
 count include numeric scores from rounds whose persisted `revealed` flag is
@@ -377,14 +394,14 @@ is introduced by this foundation.
 
 ### Ranking directory and creation
 
-Authenticated `GET /rankings?after=<ranking UUID>&limit=20` lists only rankings
+Authenticated `GET /movies/collections?after=<ranking UUID>&limit=20` lists only rankings
 where the actor is the active owner or a current active member with `READ`.
 It returns `items` with `ranking_id`, `name`, `visibility`, `admission` and
 `capabilities`, plus nullable `next_cursor`. Unnamed historical rankings return
 an explicit null name; archived rankings are read-only. This no-store endpoint
-does not replace `GET /rankings/access` or expose a public directory.
+does not replace `GET /movies/collections/access` or expose a public directory.
 
-`POST /rankings` accepts only `name`, `visibility` (`PUBLIC` or `PRIVATE`) and
+`POST /movies/collections` accepts only `name`, `visibility` (`PUBLIC` or `PRIVATE`) and
 `admission` (`OPEN`, `APPROVAL` or `INVITATION`). It creates a ranking and
 the authenticated owner's active membership atomically, returns the same summary
 with HTTP 201, and does not perform invitations, public reads, XP or legacy edits.
@@ -400,7 +417,7 @@ include archived collections. Stale explicit `false` or another invalid setting
 makes only creation unavailable (`503 ranking.creation_unavailable`); the app
 can still start. Future ownership operations must preserve this invariant before
 activation. Offline legacy backfill remains separate and creates no artificial
-historical names. The API wire keeps the existing `/rankings` identifiers.
+historical names. Existing DTO field names and error codes are unchanged.
 
 ### Account-bound ranking invitations
 
@@ -410,15 +427,15 @@ A signed-in account can fetch its own nullable recipient code with
 Share it only with someone who should be able to invite this account; there is no
 account directory or general resolver.
 
-`POST /rankings/{rankingId}/invitations` takes only `recipient_code`. A current
+`POST /movies/collections/{rankingId}/invitations` takes only `recipient_code`. A current
 owner or member with `INVITE_MEMBER` may issue one live, single-use invitation
 per eligible account in an active invitation-only ranking. It expires after
 168 hours. Rotating a recipient code affects future issuance, not invitations
 already linked to the account. The recipient must explicitly accept via
-`POST /rankings/{rankingId}/invitations/{inviteId}/accept`; acceptance atomically
+`POST /movies/collections/{rankingId}/invitations/{inviteId}/accept`; acceptance atomically
 creates membership and `READ` / `RATE_OWN` grants. A current owner or the
 still-authorized issuing member can revoke a pending invitation with
-`DELETE /rankings/{rankingId}/invitations/{inviteId}`.
+`DELETE /movies/collections/{rankingId}/invitations/{inviteId}`.
 
 These are private no-store contracts. The invitation ID grants no access by
 itself, and acceptance does not reactivate an inactive membership. No email,
@@ -435,7 +452,7 @@ stable across replicas/restarts. Changing key material after issuance requires a
 separately planned operational rotation.
 
 Signed-in recipients can list their own usable invitations with
-`GET /ranking-invitations/incoming?after=<invite UUID>&limit=20`. Each item
+`GET /movies/collections/invitations/incoming?after=<invite UUID>&limit=20`. Each item
 contains only `invite_id`, `ranking_id`, nullable `ranking_name` and
 `expires_at`, plus `next_cursor` at page level. The current issuer's
 authorization and both accounts' eligibility are checked before pagination.
@@ -455,7 +472,7 @@ to a deleted account.
 ### Explicit OPEN admission
 
 For a known ranking identifier, an authenticated user may explicitly
-`POST /rankings/{rankingId}/join` with no body or query. A live `OPEN` ranking
+`POST /movies/collections/{rankingId}/join` with no body or query. A live `OPEN` ranking
 grants only `READ` and `RATE_OWN` to a new member, atomically. The flow works
 for either visibility, is not a discovery endpoint, and does not read or expose
 private content before membership. Success is empty `204`. An active member
@@ -468,7 +485,7 @@ returns `400 ranking.invalid_join`; authentication still uses the existing
 boundary. There is no automatic join on read, external message, invitation,
 activity or XP. `APPROVAL` and `INVITATION` cannot be bypassed here.
 
-The private contextual summary `GET /rankings/{rankingId}` adds
+The private contextual summary `GET /movies/collections/{rankingId}` adds
 `can_share_open_link`. It is true only for the authenticated, active current
 owner of a live OPEN collection. Full delegated capabilities do not substitute
 for actual ownership. This proof does not appear in creation, directory or
@@ -478,8 +495,8 @@ visiting it does not join or reveal private content.
 ### Collection visibility settings
 
 Only the current enabled, active owner of a live collection can access
-`GET /rankings/{rankingId}/settings/visibility` or change it with
-`PUT /rankings/{rankingId}/settings/visibility`. GET has no body or query; PUT
+`GET /movies/collections/{rankingId}/settings/visibility` or change it with
+`PUT /movies/collections/{rankingId}/settings/visibility`. GET has no body or query; PUT
 accepts only `{"visibility":"PUBLIC"}` or `{"visibility":"PRIVATE"}`.
 Success returns only the current `visibility`. Setting the same value again
 makes no row write. Archived collections remain read-only.
@@ -494,8 +511,8 @@ already seen. No notifications, activity or XP follow this action.
 ### Anonymous disclosed ranking reads
 
 A visitor with the exact ID of a currently live `PUBLIC` ranking may read
-`GET /public/rankings/{rankingId}` (no query) and
-`GET /public/rankings/{rankingId}/entries?after=<entry UUID>&limit=20`.
+`GET /public/movies/collections/{rankingId}` (no query) and
+`GET /public/movies/collections/{rankingId}/entries?after=<entry UUID>&limit=20`.
 Only those two GET patterns are permitted in the ranking's public namespace.
 There is no discovery, participation, membership fallback, or automatic reveal;
 private authenticated ranking routes still check the member's rights.
@@ -517,7 +534,7 @@ grant, invite, image, URL, or internal catalog/provider identity.
 
 ### Read-only own rating copy preview
 
-`POST /rankings/{rankingId}/entries/{entryId}/rounds/{roundId}/rating/me/copy-preview`
+`POST /movies/collections/{rankingId}/entries/{entryId}/rounds/{roundId}/rating/me/copy-preview`
 accepts exactly `{"source":{"ranking_id":"…","entry_id":"…","round_id":"…"}}`.
 It evaluates the same canonical movie in two separate live rankings, with exact
 entry/round IDs. The signed-in actor needs source READ and destination READ
@@ -555,7 +572,7 @@ binary does not have this filter. Do not roll back to an unfiltered binary
 while such rows remain present. Direct production catalog writes, backfill and
 cutover require separate operational verification.
 
-`POST /rankings/{rankingId}/entries/tmdb` is a private provider import, not a
+`POST /movies/collections/{rankingId}/entries/tmdb` is a private provider import, not a
 legacy writer. The body is only `tmdb_id` (positive JSON integer up to
 9,007,199,254,740,991) and success returns only `entry_id` (201 new entry; 200
 existing or restored). Canonical matches are reused without refreshing metadata.
@@ -576,13 +593,13 @@ affects other rankings' scores, or awards XP.
 V14 adds a disabled-by-default setting for each collection; no historical
 round, rating, reveal state or legacy fingerprint is rewritten. Only the
 actual active owner of a live collection can read or set the policy with
-`GET /rankings/{rankingId}/settings/rounds` and
-`PUT /rankings/{rankingId}/settings/rounds`, respectively. The exact settings
+`GET /movies/collections/{rankingId}/settings/rounds` and
+`PUT /movies/collections/{rankingId}/settings/rounds`, respectively. The exact settings
 body/response is `{"repeat_enabled":true}` (or false); non-owner grants do
 not substitute for ownership.
 
 While enabled, the owner may explicitly
-`POST /rankings/{rankingId}/entries/{entryId}/rounds` with a unique
+`POST /movies/collections/{rankingId}/entries/{entryId}/rounds` with a unique
 `command_id` UUID and optional `description` (max 240 Unicode code points
 after trimming). A new round is independently hidden and numbered, with
 its own creation time and no copied votes. Response is `201` with only
@@ -599,7 +616,7 @@ rehearsal and operational release remain separate from this implementation.
 
 ### Default round disclosure on detail
 
-Authenticated `GET /rankings/{rankingId}/entries/{entryId}/rounds/{roundId}`
+Authenticated `GET /movies/collections/{rankingId}/entries/{entryId}/rounds/{roundId}`
 returns only `round_id`, `round_number` and nullable `revealed`. This specific
 detail action can reveal a currently readable, active round whose flag is
 explicitly false once its contextual creation time is at least 30 minutes old.
@@ -609,7 +626,7 @@ legacy flags never change disclosure. HEAD does not trigger the transition.
 Use this detail only when requested; do not prefetch it in SSR, list scans or PWA
 background paths.
 
-Read-only `GET /rankings/{rankingId}/entries/{entryId}/rounds/{roundId}/ratings/aggregate`
+Read-only `GET /movies/collections/{rankingId}/entries/{entryId}/rounds/{roundId}/ratings/aggregate`
 returns `round_id`, `revealed`, `total` and `votes`. A hidden or unknown
 round always has null `total` and `votes`, including for the vote's author.
 Only a disclosed round includes the exact sum and count of its non-null scores;
@@ -622,7 +639,7 @@ Only the established revealed-only aggregate may be refreshed afterward; hidden
 rounds never contribute. The transition does not edit scores or contextual
 timestamps, notify anyone, or reopen after a rating edit.
 
-The contextual picker uses read-only `POST /rankings/{rankingId}/entries/tmdb/search`
+The contextual picker uses read-only `POST /movies/collections/{rankingId}/entries/tmdb/search`
 with exactly `query`, `page` and `language` (`pt-BR` or `en-US`). Supply a trimmed
 2–120-code-point query and page 1–20. The private no-store response contains at
 most 20 items: `tmdb_id`, required localized/fallback `title`, nullable

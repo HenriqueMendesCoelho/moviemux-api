@@ -30,7 +30,7 @@ import org.springframework.transaction.TransactionException;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/rankings/{rankingId}/entries/tmdb/search")
+@RequestMapping({"/movies/collections/{rankingId}/entries/tmdb/search", "/rankings/{rankingId}/entries/tmdb/search"})
 public class SearchTmdbPickerController {
   private static final ObjectReader BODY = new ObjectMapper().readerFor(JsonNode.class)
       .with(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY, DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
