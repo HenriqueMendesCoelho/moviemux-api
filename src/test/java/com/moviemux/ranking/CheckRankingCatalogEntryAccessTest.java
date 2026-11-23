@@ -27,7 +27,7 @@ class CheckRankingCatalogEntryAccessTest {
         assertThat(check.check(actor,RANK)).isEqualTo(archived);
       }
     }
-    verify(access,times(4)).find(RANK,ACTOR);
+    verify(access,times(4)).findForEnabledAccount(RANK,ACTOR);
   }
 
   @Test void invalidActorOrMissingRankNeverGoesToStorage(){
