@@ -115,6 +115,13 @@ class SearchTmdbPickerUseCaseTest {
     }
   }
 
+  @Test void posterPathsAreBoundedRelativeCdnFiles() {
+    assertThat(TmdbPickerMovie.isSafePosterPath(null)).isFalse();
+    assertThat(TmdbPickerMovie.isSafePosterPath("/" + "x".repeat(250) + ".jpg")).isTrue();
+    assertThat(TmdbPickerMovie.isSafePosterPath("/" + "x".repeat(251) + ".jpg")).isFalse();
+    assertThat(TmdbPickerMovie.isSafePosterPath("https://cdn.example/x.jpg")).isFalse();
+  }
+
   @Test void lastPageAndEmptyResultNeverClaimMore() {
     var item=new TmdbPickerMovie(1,"Film",null,null,null);
     when(provider.search("ab",20,"en-US")).thenReturn(new TmdbPickerPage(List.of(item),20,true));
