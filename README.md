@@ -399,3 +399,36 @@ defaults. Quotas apply per owner within the installation, returning
 owner or change quota eligibility in future must coordinate with this quota
 invariant before activation. Offline legacy backfill is a separate, explicitly
 maintained operation and creates no artificial historical names.
+
+### Account-bound ranking invitations
+
+A signed-in account can fetch its own nullable recipient code with
+`GET /user/ranking-invitation-address`, and generate or replace it with
+`POST /user/ranking-invitation-address/rotate`. A code is not a credential.
+Share it only with someone who should be able to invite this account; there is no
+account directory or general resolver.
+
+`POST /rankings/{rankingId}/invitations` takes only `recipient_code`. A current
+owner or member with `INVITE_MEMBER` may issue one live, single-use invitation
+per eligible account in an active invitation-only ranking. It expires after
+168 hours. Rotating a recipient code affects future issuance, not invitations
+already linked to the account. The recipient must explicitly accept via
+`POST /rankings/{rankingId}/invitations/{inviteId}/accept`; acceptance atomically
+creates membership and `READ` / `RATE_OWN` grants. A current owner or the
+still-authorized issuing member can revoke a pending invitation with
+`DELETE /rankings/{rankingId}/invitations/{inviteId}`.
+
+These are private no-store contracts. The invitation ID grants no access by
+itself, and acceptance does not reactivate an inactive membership. No email,
+Discord, or other external notification is sent. Rate limits, private inbox
+integration, and rollout verification are separate release requirements.
+
+Provision different Base64-encoded 32-byte secrets for
+`ranking.invitation.address.digest-key` and
+`ranking.invitation.address.encryption-key` before enabling the flow. The database
+stores an indexed HMAC digest and an account-bound encrypted envelope, never the
+clear code. Unconfigured address reads/rotation and new issuance fail closed
+with `503 ranking.invitation_address_unavailable`; acceptance/revocation of
+already-issued invitations does not depend on these keys. Keep both secrets
+stable across replicas/restarts. Changing key material after issuance requires a
+separately planned operational rotation.
