@@ -86,7 +86,6 @@ class RankingAccessListHttpIT {
     properties.add("ranking.rating-copy.preview-ttl-seconds", () -> "600");
     properties.add("ranking.catalog.tmdb-import-enabled", () -> "true");
     properties.add("ranking.creation.max-owned", () -> "1");
-    properties.add("ranking.creation.include-archived", () -> "true");
     properties.add("spring.datasource.url", () -> databaseUrl);
     properties.add("spring.datasource.hikari.schema", () -> SCHEMA);
     properties.add("spring.flyway.default-schema", () -> SCHEMA);
@@ -355,7 +354,12 @@ class RankingAccessListHttpIT {
     assertThat(mine.body().required("next_cursor").isNull()).isTrue();
     assertEmpty(request("/rankings", other.token(), Map.of()));
     jdbc.update("update ranking set archived_at=now() where id=?", id);
-    assertThat(http.send(createRequest(owner, json), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(409);
+    // An archived collection still counts even when the compatibility flag is entirely absent.
+    var afterArchive=response(http.send(createRequest(owner,json),HttpResponse.BodyHandlers.ofString()));
+    assertThat(afterArchive.status()).isEqualTo(409);
+    assertThat(afterArchive.body().required("code").asText()).isEqualTo("ranking.creation_limit_reached");
+    assertThat(afterArchive.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(jdbc.queryForList("select id from ranking where owner_user_id=?",UUID.class,owner.id())).containsExactly(id);
     assertThat(http.send(createRequest(other, json), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(201);
   }
 

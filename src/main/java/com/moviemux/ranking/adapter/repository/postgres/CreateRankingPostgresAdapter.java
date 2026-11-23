@@ -26,17 +26,16 @@ public class CreateRankingPostgresAdapter implements CreateRanking {
       RankingAdmission admission, RankingCreationQuota quota) {
     // Serialize same-owner creators before a fresh READ COMMITTED quota snapshot.
     // A hash collision only serializes unrelated creators; the count remains scoped to the UUID.
-    var parameters = Map.of("actor", actor, "includeArchived", quota.includeArchived());
+    var parameters = Map.of("actor", actor);
     jdbc.query("select pg_advisory_xact_lock(hashtextextended('moviemux.ranking.create:' || cast(:actor as text), 0))",
         parameters, rows -> { rows.next(); return null; });
     // KEY SHARE is compatible with other account reads and the offline migration's table SHARE lock.
     if (jdbc.queryForList("select id from \"user\" where id=:actor for key share", parameters, UUID.class).isEmpty())
       throw new RankingAccessDeniedException();
 
-    Long owned = jdbc.queryForObject("""
-        select count(*) from ranking
-        where owner_user_id=:actor and (:includeArchived or archived_at is null)
-        """, parameters, Long.class);
+    // Archiving is terminal/read-only, not a way to free an owner's quota slot.
+    Long owned = jdbc.queryForObject("select count(*) from ranking where owner_user_id=:actor",
+        parameters, Long.class);
     if (owned >= quota.maxOwned()) throw new RankingCreationLimitException();
 
     UUID id = UUID.randomUUID();

@@ -1,4 +1,4 @@
 package com.moviemux.ranking.domain.model;
 
-/** Explicit deployment policy, not a product default. */
-public record RankingCreationQuota(int maxOwned, boolean includeArchived) {}
+/** Explicit per-owner cap for all owned collections, including archived, with no numerical default. */
+public record RankingCreationQuota(int maxOwned) {}

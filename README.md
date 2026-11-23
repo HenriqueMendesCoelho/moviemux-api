@@ -391,14 +391,16 @@ with HTTP 201, and does not perform invitations, public reads, XP or legacy edit
 Admission settings are stored independently of visibility; joining is not
 introduced by this slice.
 
-Creation fails closed (`503 ranking.creation_unavailable`) without both
-`ranking.creation.max-owned` (positive integer) and
-`ranking.creation.include-archived` (explicit boolean). There are no production
-defaults. Quotas apply per owner within the installation, returning
-`409 ranking.creation_limit_reached` if exhausted. Commands that introduce a new
-owner or change quota eligibility in future must coordinate with this quota
-invariant before activation. Offline legacy backfill is a separate, explicitly
-maintained operation and creates no artificial historical names.
+Collection creation requires an explicit positive
+`ranking.creation.max-owned` per installation. No numerical default is selected.
+Each owner uses one slot per owned collection, active or archived. Archiving
+does not free a slot; exhausted owners receive `409 ranking.creation_limit_reached`.
+An absent `ranking.creation.include-archived` or the old explicit `true` both
+include archived collections. Stale explicit `false` or another invalid setting
+makes only creation unavailable (`503 ranking.creation_unavailable`); the app
+can still start. Future ownership operations must preserve this invariant before
+activation. Offline legacy backfill remains separate and creates no artificial
+historical names. The API wire keeps the existing `/rankings` identifiers.
 
 ### Account-bound ranking invitations
 

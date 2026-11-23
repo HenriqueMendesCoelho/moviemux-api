@@ -32,7 +32,7 @@ class RankingCreationAndSummaryUseCaseTest {
     verifyNoInteractions(writes,reads,quotas);
   }
   @Test void trimsUnicodeAndCountsCodepointsInsteadOfUtf16Units(){
-    var quota=new RankingCreationQuota(4,true);
+    var quota=new RankingCreationQuota(4);
     when(quotas.find()).thenReturn(Optional.of(quota));
     String name="🎬".repeat(120);
     var expected=summary(rank,name);
@@ -56,15 +56,15 @@ class RankingCreationAndSummaryUseCaseTest {
     when(quotas.find()).thenReturn(Optional.empty());
     assertThatThrownBy(()->create("Name")).isInstanceOf(RankingCreationUnavailableException.class);
     for(int max:new int[]{0,-1}){
-      when(quotas.find()).thenReturn(Optional.of(new RankingCreationQuota(max,false)));
+      when(quotas.find()).thenReturn(Optional.of(new RankingCreationQuota(max)));
       assertThatThrownBy(()->create("Name")).isInstanceOf(RankingCreationUnavailableException.class);
     }
     verifyNoInteractions(writes);
   }
-  @Test void validQuotaFlagsPassUnchangedAndLimitFailureNeverRetries(){
-    for(boolean archived:List.of(false,true)){
+  @Test void explicitCapsPassUnchangedAndLimitFailureNeverRetries(){
+    for(int max:List.of(3,25)){
       reset(writes);
-      var quota=new RankingCreationQuota(3,archived);
+      var quota=new RankingCreationQuota(max);
       when(quotas.find()).thenReturn(Optional.of(quota));
       var failure=new RankingCreationLimitException();
       when(writes.create(user,"Name",RankingVisibility.PRIVATE,RankingAdmission.INVITATION,quota)).thenThrow(failure);
@@ -74,7 +74,7 @@ class RankingCreationAndSummaryUseCaseTest {
     }
   }
   @Test void malformedCreationResultsFailClosed(){
-    when(quotas.find()).thenReturn(Optional.of(new RankingCreationQuota(3,false)));
+    when(quotas.find()).thenReturn(Optional.of(new RankingCreationQuota(3)));
     for(RankingSummary result:Arrays.asList(null,summary(null,"Name"),summary(rank,null),summary(rank,"Other"),
         new RankingSummary(rank,"Name",null,RankingAdmission.INVITATION,Set.of()),
         new RankingSummary(rank,"Name",RankingVisibility.PRIVATE,null,Set.of()),

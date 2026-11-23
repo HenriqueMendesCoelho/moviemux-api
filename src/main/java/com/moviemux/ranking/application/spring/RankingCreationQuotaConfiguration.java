@@ -18,12 +18,13 @@ public class RankingCreationQuotaConfiguration {
   }
 
   private static Optional<RankingCreationQuota> parse(String maxOwned, String includeArchived) {
-    String rule = includeArchived.strip();
-    if (!rule.equalsIgnoreCase("true") && !rule.equalsIgnoreCase("false")) return Optional.empty();
+    String legacyRule = includeArchived.strip();
+    // "true" is still understood by existing installations. An unsafe old override cannot continue creating.
+    if (!legacyRule.isEmpty() && !legacyRule.equalsIgnoreCase("true")) return Optional.empty();
     try {
       int maximum = Integer.parseInt(maxOwned.strip());
       return maximum <= 0 ? Optional.empty()
-          : Optional.of(new RankingCreationQuota(maximum, Boolean.parseBoolean(rule)));
+          : Optional.of(new RankingCreationQuota(maximum));
     } catch (NumberFormatException invalid) {
       return Optional.empty();
     }
