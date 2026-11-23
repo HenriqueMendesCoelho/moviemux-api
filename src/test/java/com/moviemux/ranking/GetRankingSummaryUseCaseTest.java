@@ -28,26 +28,40 @@ class GetRankingSummaryUseCaseTest {
   }
 
   @Test void allowedMetadataIsScopedToActorAndRankAndPreservesLegacyNull() {
-    var allowed = summary(RANK, Set.of(RankingCapability.READ));
+    var allowed = new RankingContextSummary(summary(RANK, Set.of(RankingCapability.READ)), false);
     when(summaries.find(ACCOUNT, RANK)).thenReturn(Optional.of(allowed));
     assertThat(useCase.get(ACTOR, RANK)).isSameAs(allowed);
-    assertThat(allowed.name()).isNull();
+    assertThat(allowed.summary().name()).isNull();
     verify(summaries).find(ACCOUNT, RANK);
     verifyNoMoreInteractions(summaries);
   }
 
   @Test void missingWrongIdAndMalformedProjectionFailClosed() {
     Set<RankingCapability> read = Set.of(RankingCapability.READ);
-    for (Optional<RankingSummary> denied : Arrays.asList(null, Optional.<RankingSummary>empty(),
-        Optional.of(summary(new UUID(0, 3), read)), Optional.of(summary(null, read)),
-        Optional.of(summary(RANK, null)), Optional.of(summary(RANK, Set.of(RankingCapability.ADD_ENTRY))),
-        Optional.of(new RankingSummary(RANK, null, null, RankingAdmission.OPEN, read)),
-        Optional.of(new RankingSummary(RANK, null, RankingVisibility.PRIVATE, null, read)))) {
+    for (Optional<RankingContextSummary> denied : Arrays.asList(null, Optional.<RankingContextSummary>empty(),
+        Optional.of(new RankingContextSummary(null, false)),
+        Optional.of(new RankingContextSummary(summary(new UUID(0, 3), read), false)),
+        Optional.of(new RankingContextSummary(summary(null, read), false)),
+        Optional.of(new RankingContextSummary(summary(RANK, null), false)),
+        Optional.of(new RankingContextSummary(summary(RANK, Set.of(RankingCapability.ADD_ENTRY)), true)),
+        Optional.of(new RankingContextSummary(new RankingSummary(RANK, null, null, RankingAdmission.OPEN, read), true)),
+        Optional.of(new RankingContextSummary(new RankingSummary(RANK, null, RankingVisibility.PRIVATE, null, read), true)))) {
       when(summaries.find(ACCOUNT, RANK)).thenReturn(denied);
       assertThatThrownBy(() -> useCase.get(ACTOR, RANK)).isInstanceOf(RankingAccessDeniedException.class);
     }
-    verify(summaries, times(8)).find(ACCOUNT, RANK);
+    verify(summaries, times(9)).find(ACCOUNT, RANK);
     verifyNoMoreInteractions(summaries);
+  }
+
+  @Test void sharingProofComesOnlyFromTheAuthorizedSnapshotAndIsMaskedForNonOpen() {
+    for (var admission : RankingAdmission.values()) {
+      var summary = new RankingSummary(RANK, null, RankingVisibility.PRIVATE, admission,
+          java.util.EnumSet.allOf(RankingCapability.class));
+      when(summaries.find(ACCOUNT, RANK)).thenReturn(Optional.of(new RankingContextSummary(summary, false)),
+          Optional.of(new RankingContextSummary(summary, true)));
+      assertThat(useCase.get(ACTOR, RANK).canShareOpenLink()).isFalse();
+      assertThat(useCase.get(ACTOR, RANK).canShareOpenLink()).isEqualTo(admission == RankingAdmission.OPEN);
+    }
   }
 
   private static RankingSummary summary(UUID rank, Set<RankingCapability> capabilities) {

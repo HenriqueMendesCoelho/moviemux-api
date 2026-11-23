@@ -1,5 +1,6 @@
 package com.moviemux.ranking;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -53,20 +54,39 @@ class RankingContextSummaryControllerTest {
 
   @AfterEach void clear() { SecurityContextHolder.clearContext(); }
 
-  @Test void contextualResponseExactlyMatchesTheDirectoryItemWithNullName() throws Exception {
+  @Test void contextualResponseAddsOnlySharingProofToTheDirectoryShape() throws Exception {
     var item = new RankingSummary(RANK, null, RankingVisibility.PRIVATE, RankingAdmission.INVITATION, Set.of(RankingCapability.READ));
-    when(summaries.find(ACCOUNT, RANK)).thenReturn(Optional.of(item));
+    when(summaries.find(ACCOUNT, RANK)).thenReturn(Optional.of(new RankingContextSummary(item, false)));
     when(directory.list(new RankingActor(ACCOUNT, true), null, 20)).thenReturn(new RankingSummaryPage(List.of(item), null));
     String listing = mvc.perform(get("/rankings")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-    mvc.perform(get("/rankings/" + RANK.toString().toUpperCase(Locale.ROOT)).header("X-User-Id", UUID.randomUUID()))
+    var response = mvc.perform(get("/rankings/" + RANK.toString().toUpperCase(Locale.ROOT)).header("X-User-Id", UUID.randomUUID()))
         .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
-        .andExpect(content().json(mapper.readTree(listing).path("items").get(0).toString(), true))
         .andExpect(content().json("""
             {"ranking_id":"12345678-1234-1234-1234-123456789abc","name":null,
-            "visibility":"PRIVATE","admission":"INVITATION","capabilities":["READ"]}
-            """, true));
+            "visibility":"PRIVATE","admission":"INVITATION","capabilities":["READ"],"can_share_open_link":false}
+            """, true)).andReturn().getResponse();
+    var directoryItem = mapper.readTree(listing).path("items").get(0);
+    var context = (com.fasterxml.jackson.databind.node.ObjectNode)mapper.readTree(response.getContentAsString());
+    assertThat(context.remove("can_share_open_link").isBoolean()).isTrue();
+    assertThat(directoryItem.has("can_share_open_link")).isFalse();
+    assertThat(context).isEqualTo(directoryItem);
     verify(summaries).find(ACCOUNT, RANK);
     verifyNoMoreInteractions(summaries);
+  }
+
+  @Test void trueAndFalseAreStrictBooleansEvenForIdenticalFullCapabilities() throws Exception {
+    var item = new RankingSummary(RANK, "Open", RankingVisibility.PRIVATE, RankingAdmission.OPEN,
+        java.util.EnumSet.allOf(RankingCapability.class));
+    when(summaries.find(ACCOUNT, RANK)).thenReturn(Optional.of(new RankingContextSummary(item, true)),
+        Optional.of(new RankingContextSummary(item, false)));
+    for (boolean expected : List.of(true, false)) {
+      var response = mvc.perform(get("/rankings/" + RANK).header("X-Can-Share-Open-Link", !expected))
+          .andExpect(status().isOk()).andExpect(header().string("Cache-Control", "no-store"))
+          .andReturn().getResponse();
+      var proof = mapper.readTree(response.getContentAsString()).path("can_share_open_link");
+      assertThat(proof.isBoolean()).isTrue();
+      assertThat(proof.booleanValue()).isEqualTo(expected);
+    }
   }
 
   @Test void malformedPathAndUnavailableRankingReturnTheSameGenericNotFound() throws Exception {

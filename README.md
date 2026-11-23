@@ -468,6 +468,13 @@ returns `400 ranking.invalid_join`; authentication still uses the existing
 boundary. There is no automatic join on read, external message, invitation,
 activity or XP. `APPROVAL` and `INVITATION` cannot be bypassed here.
 
+The private contextual summary `GET /rankings/{rankingId}` adds
+`can_share_open_link`. It is true only for the authenticated, active current
+owner of a live OPEN collection. Full delegated capabilities do not substitute
+for actual ownership. This proof does not appear in creation, directory or
+public summaries. A copied link is only a reference to the neutral join page;
+visiting it does not join or reveal private content.
+
 ### Anonymous disclosed ranking reads
 
 A visitor with the exact ID of a currently live `PUBLIC` ranking may read

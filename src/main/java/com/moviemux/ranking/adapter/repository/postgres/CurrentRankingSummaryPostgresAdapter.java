@@ -2,6 +2,7 @@ package com.moviemux.ranking.adapter.repository.postgres;
 
 import com.moviemux.ranking.domain.model.RankingAdmission;
 import com.moviemux.ranking.domain.model.RankingCapability;
+import com.moviemux.ranking.domain.model.RankingContextSummary;
 import com.moviemux.ranking.domain.model.RankingSummary;
 import com.moviemux.ranking.domain.model.RankingVisibility;
 import com.moviemux.ranking.domain.port.CurrentRankingSummary;
@@ -21,7 +22,7 @@ public class CurrentRankingSummaryPostgresAdapter implements CurrentRankingSumma
   }
 
   @Override
-  public Optional<RankingSummary> find(UUID actor, UUID rankingId) {
+  public Optional<RankingContextSummary> find(UUID actor, UUID rankingId) {
     return jdbc.query("""
         select r.id,r.name,r.visibility,r.admission,r.archived_at is not null as archived,
           r.owner_user_id=:actor as owned,g.capability
@@ -39,10 +40,12 @@ public class CurrentRankingSummaryPostgresAdapter implements CurrentRankingSumma
       String name = rows.getString("name");
       var visibility = RankingVisibility.valueOf(rows.getString("visibility"));
       var admission = RankingAdmission.valueOf(rows.getString("admission"));
+      boolean archived=rows.getBoolean("archived");
+      boolean owned=rows.getBoolean("owned");
       final EnumSet<RankingCapability> capabilities;
-      if (rows.getBoolean("archived")) {
+      if (archived) {
         capabilities = EnumSet.of(RankingCapability.READ);
-      } else if (rows.getBoolean("owned")) {
+      } else if (owned) {
         capabilities = EnumSet.allOf(RankingCapability.class);
       } else {
         capabilities = EnumSet.noneOf(RankingCapability.class);
@@ -51,7 +54,9 @@ public class CurrentRankingSummaryPostgresAdapter implements CurrentRankingSumma
           if (grant != null) capabilities.add(RankingCapability.valueOf(grant));
         } while (rows.next());
       }
-      return Optional.of(new RankingSummary(id, name, visibility, admission, capabilities));
+      // Never treat complete grants as ownership. The query requires live account and membership state.
+      var summary=new RankingSummary(id,name,visibility,admission,capabilities);
+      return Optional.of(new RankingContextSummary(summary,owned && !archived && admission==RankingAdmission.OPEN));
     });
   }
 }

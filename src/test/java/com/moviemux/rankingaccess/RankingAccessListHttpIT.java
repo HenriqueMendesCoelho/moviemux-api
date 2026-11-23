@@ -403,7 +403,11 @@ class RankingAccessListHttpIT {
     var endpoint = "/rankings/" + rank;
     var detail = request(endpoint, member.token(), Map.of());
     assertThat(detail.status()).isEqualTo(200);
-    assertThat(detail.body()).isEqualTo(request("/rankings", member.token(), Map.of()).body().required("items").get(0));
+    var common=(com.fasterxml.jackson.databind.node.ObjectNode)detail.body().deepCopy();
+    var proof=common.remove("can_share_open_link");
+    assertThat(proof.isBoolean()).isTrue();
+    assertThat(proof.asBoolean()).isFalse();
+    assertThat(common).isEqualTo(request("/rankings", member.token(), Map.of()).body().required("items").get(0));
     assertThat(detail.body().required("name").isNull()).isTrue();
     jdbc.update("update ranking set name='Artes e filmes',archived_at=now() where id=?", rank);
     detail = request(endpoint, member.token(), Map.of());
@@ -417,6 +421,47 @@ class RankingAccessListHttpIT {
     assertThat(request("/rankings/wrong", outsider.token(), Map.of()).body()).isEqualTo(denied.body());
     jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='READ'", rank, member.id());
     assertThat(request(endpoint, member.token(), Map.of()).body()).isEqualTo(denied.body());
+  }
+
+  @Test void openLinkProofIsOnlyForCurrentLiveOwnerEvenWithFullyDelegatedGrants() throws Exception {
+    var owner=user(false);
+    var delegated=user(false);
+    var admin=user(true);
+    UUID rank=ranking(owner,"PUBLIC");
+    membership(rank,delegated,java.util.Arrays.stream(RankingCapability.values()).map(Enum::name).toArray(String[]::new));
+    grant(rank,owner,"READ");
+    String path="/rankings/"+rank;
+
+    assertThat(request(path,owner.token(),Map.of()).body().required("can_share_open_link").asBoolean()).isFalse();
+    jdbc.update("update ranking set admission='OPEN' where id=?",rank);
+    var eligible=request(path,owner.token(),Map.of());
+    assertThat(eligible.status()).isEqualTo(200);
+    assertThat(eligible.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(fields(eligible.body())).containsExactlyInAnyOrder("ranking_id","name","visibility","admission",
+        "capabilities","can_share_open_link");
+    assertThat(eligible.body().required("can_share_open_link").isBoolean()).isTrue();
+    assertThat(eligible.body().required("can_share_open_link").asBoolean()).isTrue();
+
+    var delegatedScope=request(path,delegated.token(),Map.of());
+    assertThat(delegatedScope.body().required("capabilities").size()).isEqualTo(RankingCapability.values().length);
+    assertThat(delegatedScope.body().required("can_share_open_link").asBoolean()).isFalse();
+    assertThat(request(path,admin.token(),Map.of()).status()).isEqualTo(404);
+    assertThat(request("/rankings",owner.token(),Map.of()).body().required("items").get(0).has("can_share_open_link")).isFalse();
+    assertThat(request("/public/rankings/"+rank,null,Map.of()).body().has("can_share_open_link")).isFalse();
+
+    jdbc.update("update ranking_membership set active=false where ranking_id=? and user_id=?",rank,delegated.id());
+    assertThat(request(path,delegated.token(),Map.of()).status()).isEqualTo(404);
+    jdbc.update("update ranking_membership set active=true where ranking_id=? and user_id=?",rank,delegated.id());
+    // Apply a synthetic owner-state change directly to show that the next read uses current ownership.
+    // No ownership-transfer API or product transition is introduced by this fixture.
+    jdbc.update("update ranking set owner_user_id=? where id=?",delegated.id(),rank);
+    assertThat(request(path,owner.token(),Map.of()).body().required("can_share_open_link").asBoolean()).isFalse();
+    assertThat(request(path,delegated.token(),Map.of()).body().required("can_share_open_link").asBoolean()).isTrue();
+    jdbc.update("update ranking set archived_at=now() where id=?",rank);
+    var archived=request(path,delegated.token(),Map.of()).body();
+    assertThat(archived.required("can_share_open_link").asBoolean()).isFalse();
+    assertThat(archived.required("capabilities").size()).isEqualTo(1);
+    assertThat(archived.at("/capabilities/0").asText()).isEqualTo("READ");
   }
 
   @Test void privateInvitationIsBoundToRecipientAndOnlyAddsDefaultGrantsOnce() throws Exception {

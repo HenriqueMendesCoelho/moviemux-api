@@ -1,10 +1,14 @@
 package com.moviemux.ranking.adapter.controller;
 
-import com.moviemux.ranking.adapter.controller.RankingDirectoryController.SummaryResponse;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.moviemux.ranking.domain.exception.RankingAccessDeniedException;
 import com.moviemux.ranking.domain.model.RankingActor;
+import com.moviemux.ranking.domain.model.RankingAdmission;
+import com.moviemux.ranking.domain.model.RankingCapability;
+import com.moviemux.ranking.domain.model.RankingVisibility;
 import com.moviemux.ranking.domain.usecase.GetRankingSummaryUseCase;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.http.CacheControl;
@@ -26,7 +30,7 @@ public class RankingContextSummaryController {
   }
 
   @GetMapping("/{rankingId}")
-  public ResponseEntity<SummaryResponse> get(@PathVariable String rankingId,
+  public ResponseEntity<ContextResponse> get(@PathVariable String rankingId,
       @AuthenticationPrincipal(expression = "userid") UUID actorId,
       @AuthenticationPrincipal UserDetails principal) {
     if (actorId == null || principal == null || rankingId == null || !UUID_PATTERN.matcher(rankingId).matches())
@@ -34,8 +38,15 @@ public class RankingContextSummaryController {
     var actor = new RankingActor(actorId, principal.isEnabled() && principal.isAccountNonLocked()
         && principal.isAccountNonExpired() && principal.isCredentialsNonExpired());
     var result = summaries.get(actor, UUID.fromString(rankingId));
-    return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(SummaryResponse.from(result));
+    var summary = result.summary();
+    return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+        .body(new ContextResponse(summary.rankingId(), summary.name(), summary.visibility(),
+            summary.admission(), summary.capabilities(), result.canShareOpenLink()));
   }
+
+  public record ContextResponse(UUID rankingId, @JsonInclude(JsonInclude.Include.ALWAYS) String name,
+      RankingVisibility visibility, RankingAdmission admission, Set<RankingCapability> capabilities,
+      @JsonInclude(JsonInclude.Include.ALWAYS) boolean canShareOpenLink) {}
 
   @ExceptionHandler(RankingAccessDeniedException.class)
   public ResponseEntity<Map<String, String>> notFound() {
