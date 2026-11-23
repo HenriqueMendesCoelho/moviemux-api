@@ -138,10 +138,11 @@ public final class OfflineLegacyRankingMigration {
 
   private void requireSchema() {
     var versions = jdbc.queryForList("select version from flyway_schema_history where success order by installed_rank", String.class);
-    // V9 ranking names and V10 invitation storage do not change the offline copy contract.
+    // V9 ranking names and V10/V11 invitation storage do not change the offline copy contract.
     if (!versions.equals(List.of("1","2","3","4","5","6","7","8"))
         && !versions.equals(List.of("1","2","3","4","5","6","7","8","9"))
-        && !versions.equals(List.of("1","2","3","4","5","6","7","8","9","10")))
+        && !versions.equals(List.of("1","2","3","4","5","6","7","8","9","10"))
+        && !versions.equals(List.of("1","2","3","4","5","6","7","8","9","10","11")))
       throw new IllegalStateException("migration.schema_version_mismatch");
     if (count("select count(*) from flyway_schema_history where not success") != 0)
       throw new IllegalStateException("migration.schema_history_failed");
