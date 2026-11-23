@@ -134,6 +134,79 @@ class LegacyMovieEligibilityMigrationIT {
     });
   }
 
+  @Test void v12UpgradeAllowsMissingContextualMetadataButPreservesAllLegacyRequirements() {
+    assertThat(flyway("12").migrate().migrationsExecuted).isEqualTo(12);
+    UUID inherited = legacyMovie(), contextual = UUID.randomUUID();
+    jdbc.update("""
+        insert into movie(id,created_at,description,director,english_title,portuguese_title,legacy_eligible)
+        values (?,now(),'Synthetic','Synthetic','Synthetic','Synthetic',false)
+        """, contextual);
+    var oldRows = rows("movie");
+    var oldCatalog = catalog();
+
+    var v13 = flyway("13");
+    assertThat(v13.migrate().migrationsExecuted).isEqualTo(1);
+    assertThat(v13.info().current().getVersion().getVersion()).isEqualTo("13");
+    assertThat(rows("movie")).isEqualTo(oldRows);
+    assertThat(isLegacyEligible(inherited)).isTrue();
+    assertThat(isLegacyEligible(contextual)).isFalse();
+    String checkPrefix = "movie:movie_legacy_required_metadata_ck:";
+    var newCatalog = catalog();
+    assertThat(newCatalog.stream().filter(definition -> definition.startsWith(checkPrefix)).toList())
+        .singleElement().satisfies(definition -> assertThat(definition).startsWith(checkPrefix + "CHECK "));
+    var allowedCatalog = new ArrayList<>(oldCatalog);
+    for (String old : List.of("movie:description:text:NO:", "movie:director:character varying:NO:",
+        "movie:english_title:character varying:NO:", "movie:portuguese_title:character varying:NO:")) {
+      assertThat(allowedCatalog.remove(old)).isTrue();
+      allowedCatalog.add(old.replace(":NO:", ":YES:"));
+    }
+    assertThat(newCatalog.stream().filter(definition -> !definition.startsWith(checkPrefix)).toList())
+        .containsExactlyInAnyOrderElementsOf(allowedCatalog);
+    assertThat(jdbc.queryForList("""
+        select column_name||':'||data_type||':'||coalesce(character_maximum_length::text,'')||':'||is_nullable
+        from information_schema.columns where table_schema=? and table_name='movie'
+        and column_name in ('description','director','english_title','portuguese_title') order by column_name
+        """, String.class, schema)).containsExactly("description:text::YES", "director:character varying:150:YES",
+            "english_title:character varying:150:YES", "portuguese_title:character varying:150:YES");
+
+    for (String missing : List.of("description", "director", "english_title", "portuguese_title")) {
+      expectMetadataConstraint(() -> jdbc.update("update movie set " + missing + "=null where id=?", inherited));
+      expectMetadataConstraint(() -> jdbc.update("""
+          insert into movie(id,created_at,description,director,english_title,portuguese_title)
+          values (?,now(),?,?,?,?)
+          """, UUID.randomUUID(), legacyValueExcept("description", missing), legacyValueExcept("director", missing),
+          legacyValueExcept("english_title", missing), legacyValueExcept("portuguese_title", missing)));
+    }
+    assertThat(rows("movie")).isEqualTo(oldRows);
+
+    UUID partialMovie = UUID.randomUUID();
+    assertThat(jdbc.update("""
+        insert into movie(id,created_at,english_title,legacy_eligible)
+        values (?,now(),'Verified provider title',false)
+        """, partialMovie)).isEqualTo(1);
+    assertThat(jdbc.queryForMap("select description,director,english_title,portuguese_title from movie where id=?",
+        partialMovie)).containsEntry("description", null).containsEntry("director", null)
+        .containsEntry("english_title", "Verified provider title").containsEntry("portuguese_title", null);
+    assertThat(jdbc.update("update movie set english_title=null where id=?", partialMovie)).isEqualTo(1);
+    assertThat(isLegacyEligible(partialMovie)).isFalse();
+    assertThat(isLegacyEligible(legacyMovie())).isTrue();
+    assertThat(v13.migrate().migrationsExecuted).isZero();
+    assertThat(catalog()).isEqualTo(newCatalog);
+  }
+
+  private String legacyValueExcept(String field, String missing) {
+    return field.equals(missing) ? null : "Synthetic";
+  }
+
+  private void expectMetadataConstraint(Runnable statement) {
+    assertThatThrownBy(statement::run).hasRootCauseInstanceOf(PSQLException.class)
+        .satisfies(error -> {
+          var postgres = (PSQLException) error.getCause();
+          assertThat(postgres.getSQLState()).isEqualTo("23514");
+          assertThat(postgres.getServerErrorMessage().getConstraint()).isEqualTo("movie_legacy_required_metadata_ck");
+        });
+  }
+
   private Flyway flyway(String target) {
     return Flyway.configure().dataSource(url, user, password).schemas(schema).defaultSchema(schema)
         .createSchemas(false).baselineOnMigrate(false).cleanDisabled(true).target(target).load();

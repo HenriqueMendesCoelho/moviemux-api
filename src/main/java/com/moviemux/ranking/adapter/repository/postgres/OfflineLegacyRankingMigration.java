@@ -139,7 +139,7 @@ public final class OfflineLegacyRankingMigration {
   private LegacySource legacySource() {
     var versions = jdbc.queryForList("select version from flyway_schema_history where success order by installed_rank", String.class);
     int latest = versions.size();
-    if (latest < 8 || latest > 12 || !versions.equals(java.util.stream.IntStream.rangeClosed(1, latest)
+    if (latest < 8 || latest > 13 || !versions.equals(java.util.stream.IntStream.rangeClosed(1, latest)
         .mapToObj(Integer::toString).toList()))
       throw new IllegalStateException("migration.schema_version_mismatch");
     if (count("select count(*) from flyway_schema_history where not success") != 0)
