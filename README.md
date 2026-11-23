@@ -489,3 +489,18 @@ The response contains no vote, author, timing or statistics data and is no-store
 Only the established revealed-only aggregate may be refreshed afterward; hidden
 rounds never contribute. The transition does not edit scores or contextual
 timestamps, notify anyone, or reopen after a rating edit.
+
+The contextual picker uses read-only `POST /rankings/{rankingId}/entries/tmdb/search`
+with exactly `query`, `page` and `language` (`pt-BR` or `en-US`). Supply a trimmed
+2–120-code-point query and page 1–20. The private no-store response contains at
+most 20 items: `tmdb_id`, required localized/fallback `title`, nullable
+`original_title`, `release_date` and safe relative `poster_path`. There are no
+rating values, popularity, membership hints or upstream totals. The page
+envelope returns `page` and `has_more`; an empty page is a successful empty array.
+
+Picker and import share the default-off operator toggle. Current account and
+ranking eligibility are checked both before calling the bounded KIT client and
+before returning its result or failure. The term is in the JSON body, sent to
+KIT as its own encoded parameter without account or ranking IDs. Picker never
+links or creates catalog records. Configure operational throttling and
+log/trace redaction before public rollout; provider timeouts are not rate limits.
