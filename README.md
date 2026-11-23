@@ -440,3 +440,19 @@ authorization and both accounts' eligibility are checked before pagination.
 Once expired, revoked, consumed or unusable, the invitation stops contributing
 a name or an item. Seeing an invitation never authorizes reading the ranking
 before acceptance. Missing historical names remain null.
+
+### Canonical movie catalog versus legacy board
+
+The shared `movie` table retains canonical movie identity. V12 adds immutable
+`legacy_eligible`: existing rows and old writers remain eligible by default;
+an explicitly ineligible row cannot enter the old movie board, notes, genre or
+stats projections, wishlist rated lookup or Discord history. Contextual ranking
+entries may still reference it through authorized ranked reads. Identity
+collisions do not auto-promote or overwrite a context-only movie. Offline
+backfill uses only eligible rows and preserves the original fingerprint format.
+
+This boundary does not activate contextual provider import. Upgrade all legacy
+readers/replicas before introducing any context-only catalog row; an older
+binary does not have this filter. Do not roll back to an unfiltered binary
+while such rows remain present. Direct production catalog writes, backfill and
+cutover require separate operational verification.
