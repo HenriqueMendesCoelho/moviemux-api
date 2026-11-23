@@ -65,7 +65,7 @@ class FlywayMigrationIT {
     @Test
     void emptyDatabaseMigratesBeforeJpaValidationAndRestartDoesNotReapply() throws Exception {
         Flyway flyway = latestFlyway();
-        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(15);
+        assertThat(flyway.migrate().migrationsExecuted).isEqualTo(16);
         assertThat(count("select count(*) from information_schema.tables where table_schema='" + schema + "'" )).isEqualTo(26);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='1' and success")).isEqualTo(1);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='2' and success")).isEqualTo(1);
@@ -82,6 +82,7 @@ class FlywayMigrationIT {
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='13' and success")).isEqualTo(1);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='14' and success")).isEqualTo(1);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='15' and success")).isEqualTo(1);
+        assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='16' and success")).isEqualTo(1);
         validateJpa();
         List<String> before = catalog();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
@@ -169,7 +170,7 @@ class FlywayMigrationIT {
         assertThat(historicalFlyway().migrate().migrationsExecuted).isZero();
         assertThat(catalog()).isEqualTo(before);
         assertThatThrownBy(this::validateJpa).hasMessageContaining("legacy_eligible");
-        assertThat(latestFlyway().migrate().migrationsExecuted).isEqualTo(14);
+        assertThat(latestFlyway().migrate().migrationsExecuted).isEqualTo(15);
         validateJpa();
         var upgraded = catalog();
 
@@ -254,7 +255,7 @@ class FlywayMigrationIT {
         Files.writeString(v1, migration.replace("varchar(100)", "varchar(101)"));
         Flyway changed = configuration().locations("filesystem:" + changedMigrations).load();
         assertThatThrownBy(changed::migrate).isInstanceOf(FlywayException.class).hasMessageContaining("checksum mismatch");
-        assertThat(count("select count(*) from " + schema + ".flyway_schema_history where success")).isEqualTo(15);
+        assertThat(count("select count(*) from " + schema + ".flyway_schema_history where success")).isEqualTo(16);
     }
 
     @Test
@@ -326,7 +327,7 @@ class FlywayMigrationIT {
         var first = CompletableFuture.supplyAsync(() -> migrateAfter(start));
         var second = CompletableFuture.supplyAsync(() -> migrateAfter(start));
         start.countDown();
-        assertThat(first.get(30, TimeUnit.SECONDS) + second.get(30, TimeUnit.SECONDS)).isEqualTo(15);
+        assertThat(first.get(30, TimeUnit.SECONDS) + second.get(30, TimeUnit.SECONDS)).isEqualTo(16);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='1' and success")).isEqualTo(1);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='2' and success")).isEqualTo(1);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='3' and success")).isEqualTo(1);
@@ -342,6 +343,7 @@ class FlywayMigrationIT {
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='13' and success")).isEqualTo(1);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='14' and success")).isEqualTo(1);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='15' and success")).isEqualTo(1);
+        assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='16' and success")).isEqualTo(1);
     }
 
     @Test
