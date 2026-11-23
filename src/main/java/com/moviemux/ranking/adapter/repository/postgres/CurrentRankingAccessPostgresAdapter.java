@@ -2,6 +2,7 @@ package com.moviemux.ranking.adapter.repository.postgres;
 
 import com.moviemux.ranking.domain.model.*;
 import com.moviemux.ranking.domain.port.CurrentRankingAccess;
+import com.moviemux.ranking.domain.port.CurrentEnabledRankingAccess;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Objects;
@@ -12,7 +13,7 @@ import org.springframework.stereotype.Repository;
 
 /** One statement observes ranking, current membership and grants consistently; no JWT/cache grants. */
 @Repository
-public class CurrentRankingAccessPostgresAdapter implements CurrentRankingAccess {
+public class CurrentRankingAccessPostgresAdapter implements CurrentRankingAccess, CurrentEnabledRankingAccess {
   private final NamedParameterJdbcTemplate jdbc;
 
   public CurrentRankingAccessPostgresAdapter(NamedParameterJdbcTemplate jdbc) {
@@ -21,6 +22,15 @@ public class CurrentRankingAccessPostgresAdapter implements CurrentRankingAccess
 
   @Override
   public Optional<RankingAccessSnapshot> find(UUID rankingId, UUID actorUserId) {
+    return find(rankingId, actorUserId, false);
+  }
+
+  @Override
+  public Optional<RankingAccessSnapshot> findForEnabledAccount(UUID rankingId, UUID actorUserId) {
+    return find(rankingId, actorUserId, true);
+  }
+
+  private Optional<RankingAccessSnapshot> find(UUID rankingId, UUID actorUserId, boolean requireEnabled) {
     Objects.requireNonNull(rankingId, "rankingId");
     Objects.requireNonNull(actorUserId, "actorUserId");
     return jdbc.query("""
@@ -29,9 +39,10 @@ public class CurrentRankingAccessPostgresAdapter implements CurrentRankingAccess
         from ranking r
         left join ranking_membership m on m.ranking_id = r.id and m.user_id = :actor
         left join ranking_membership_grant g on g.ranking_id = m.ranking_id and g.user_id = m.user_id
-        where r.id = :ranking
+        where r.id = :ranking and (not :requireEnabled or exists (
+          select 1 from user_statistics s where s.user_id=:actor and s.consecutive_failed_login_attempts<10))
         order by g.capability
-        """, Map.of("ranking", rankingId, "actor", actorUserId), rows -> {
+        """, Map.of("ranking", rankingId, "actor", actorUserId, "requireEnabled", requireEnabled), rows -> {
       if (!rows.next()) return Optional.empty();
       var ranking = new RankingIdentity(rows.getObject("id", UUID.class),
           rows.getObject("owner_user_id", UUID.class),

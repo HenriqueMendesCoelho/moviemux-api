@@ -5,7 +5,7 @@ import static org.mockito.Mockito.*;
 
 import com.moviemux.ranking.domain.exception.RankingAccessDeniedException;
 import com.moviemux.ranking.domain.model.*;
-import com.moviemux.ranking.domain.port.CurrentRankingAccess;
+import com.moviemux.ranking.domain.port.CurrentEnabledRankingAccess;
 import com.moviemux.ranking.domain.usecase.impl.CheckRankingCatalogEntryAccessImpl;
 import java.util.Arrays;
 import java.util.Optional;
@@ -16,14 +16,14 @@ import org.junit.jupiter.api.Test;
 class CheckRankingCatalogEntryAccessTest {
   private static final UUID ACTOR=new UUID(0,1), RANK=new UUID(0,2), OTHER=new UUID(0,3);
   private final RankingActor actor=new RankingActor(ACTOR,true);
-  private final CurrentRankingAccess access=mock(CurrentRankingAccess.class);
+  private final CurrentEnabledRankingAccess access=mock(CurrentEnabledRankingAccess.class);
   private final CheckRankingCatalogEntryAccessImpl check=new CheckRankingCatalogEntryAccessImpl(access);
 
   @Test void archiveStateVisibleOnlyToOtherwiseEligibleOwnerOrAddEntryMember(){
     for(boolean archived:new boolean[]{false,true}){
       for(var owner:new UUID[]{ACTOR,OTHER}){
         var grants=owner.equals(ACTOR)?Set.<RankingCapability>of():Set.of(RankingCapability.ADD_ENTRY);
-        when(access.find(RANK,ACTOR)).thenReturn(Optional.of(snapshot(RANK,owner,ACTOR,true,grants,archived)));
+        when(access.findForEnabledAccount(RANK,ACTOR)).thenReturn(Optional.of(snapshot(RANK,owner,ACTOR,true,grants,archived)));
         assertThat(check.check(actor,RANK)).isEqualTo(archived);
       }
     }
@@ -44,7 +44,7 @@ class CheckRankingCatalogEntryAccessTest {
         Optional.of(snapshot(RANK,ACTOR,OTHER,true,Set.of(),true)),
         Optional.of(snapshot(RANK,ACTOR,ACTOR,false,Set.of(),true)),
         Optional.of(snapshot(RANK,OTHER,ACTOR,true,Set.of(RankingCapability.READ),true)))){
-      when(access.find(RANK,ACTOR)).thenReturn(result);
+      when(access.findForEnabledAccount(RANK,ACTOR)).thenReturn(result);
       assertThatThrownBy(()->check.check(actor,RANK)).isInstanceOf(RankingAccessDeniedException.class);
     }
   }

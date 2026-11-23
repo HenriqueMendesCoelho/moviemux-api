@@ -33,7 +33,12 @@ public class AddExistingCatalogEntryPostgresAdapter implements AddExistingCatalo
     var ranks=jdbc.query("select owner_user_id,archived_at from ranking where id=:ranking for update",params,
         (row,n)->new LockedRanking(row.getObject("owner_user_id",UUID.class),row.getObject("archived_at")!=null));
     if(ranks.isEmpty())throw new RankingEntriesDeniedException();
-    var members=jdbc.query("select active from ranking_membership where ranking_id=:ranking and user_id=:actor for update",params,(row,n)->row.getBoolean("active"));
+    var members=jdbc.query("""
+        select m.active from ranking_membership m
+        join user_statistics s on s.user_id=m.user_id and s.consecutive_failed_login_attempts<10
+        where m.ranking_id=:ranking and m.user_id=:actor
+        for update of m for share of s
+        """,params,(row,n)->row.getBoolean("active"));
     if(members.isEmpty() || !members.get(0))throw new RankingEntriesDeniedException();
     var rank=ranks.get(0);
     if(!rank.owner().equals(actorUserId) && !Boolean.TRUE.equals(jdbc.queryForObject("""

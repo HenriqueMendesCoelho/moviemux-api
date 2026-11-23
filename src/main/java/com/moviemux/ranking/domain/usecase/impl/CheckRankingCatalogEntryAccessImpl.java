@@ -3,7 +3,7 @@ package com.moviemux.ranking.domain.usecase.impl;
 import com.moviemux.ranking.domain.exception.RankingAccessDeniedException;
 import com.moviemux.ranking.domain.model.RankingActor;
 import com.moviemux.ranking.domain.model.RankingCapability;
-import com.moviemux.ranking.domain.port.CurrentRankingAccess;
+import com.moviemux.ranking.domain.port.CurrentEnabledRankingAccess;
 import com.moviemux.ranking.domain.repository.CheckRankingCatalogEntryAccess;
 import java.util.Objects;
 import java.util.UUID;
@@ -11,16 +11,16 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class CheckRankingCatalogEntryAccessImpl implements CheckRankingCatalogEntryAccess {
-  private final CurrentRankingAccess access;
+  private final CurrentEnabledRankingAccess access;
 
-  public CheckRankingCatalogEntryAccessImpl(CurrentRankingAccess access) {
+  public CheckRankingCatalogEntryAccessImpl(CurrentEnabledRankingAccess access) {
     this.access = Objects.requireNonNull(access, "access");
   }
 
   @Override
   public boolean check(RankingActor actor, UUID rankingId) {
     if (actor == null || !actor.accountEnabled() || rankingId == null) throw new RankingAccessDeniedException();
-    var found = access.find(rankingId, actor.userId());
+    var found = access.findForEnabledAccount(rankingId, actor.userId());
     if (found == null) throw new RankingAccessDeniedException();
     var snapshot = found.orElseThrow(RankingAccessDeniedException::new);
     var member = snapshot.membership().orElseThrow(RankingAccessDeniedException::new);
