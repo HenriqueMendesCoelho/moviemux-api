@@ -204,6 +204,22 @@ Ranking/member locks revalidate ownership and active state. Insert failure rolls
 back the entire replacement. Global roles, membership status, historical ratings
 and XP are unchanged; no outbound event or newly delegated authority is created.
 
+For the collection owner UI, `GET /movies/collections/{rankingId}/members`
+lists current active non-owner members with `membership_id`, nullable
+`display_name` and the full local capability set. Use `limit` (default 20,
+maximum 50) and an optional exclusive membership UUID `after`. The matching
+`/rankings` alias uses the same private, no-store handler. V16 assigns an
+independent random handle to each membership, not a global account or rating
+author identifier. Only an actual current owner of a live collection can read
+the roster; a delegate or instance admin has no override.
+
+Use `PUT /movies/collections/{rankingId}/members/by-membership/{membershipId}/capabilities`
+to explicitly replace that member's capability set with the same body and
+empty 204 result. The `/rankings` alias works identically, and the original
+raw account UUID PUT above remains unchanged. The new handler resolves the
+handle in the scoped transaction and repeats authorization after acquiring the
+ranking lock. It never reveals email, login state, or historical ratings.
+
 Ranking persistence/transaction failures return only `500 ranking.operation_failed`
 with no-store, without exposing SQL or exception details. This error boundary is
 scoped to ranking controllers and does not change unrelated legacy APIs.
@@ -233,6 +249,9 @@ it rejects a still-linked account. Clients localize the semantic label without
 changing the code. No identity endpoint or account lifecycle is exposed.
 
 ### Legacy ranking rehearsal (not a rollout command)
+
+See the [operator preparation checklist](docs/legacy-collections-cutover-checklist.md)
+for input review, snapshot protection and independent release gates.
 
 V5 expands the separate `REMOVE_OWN_ENTRY` capability without broadening existing
 `REMOVE_ENTRY` grants. V6 adds empty contextual movie entries, rounds and ratings;
