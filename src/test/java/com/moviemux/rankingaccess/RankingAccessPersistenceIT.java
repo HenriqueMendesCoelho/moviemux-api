@@ -140,7 +140,7 @@ class RankingAccessPersistenceIT {
     var beforeRows = tableRows(oldTables);
     assertThat(beforeRows.values()).allSatisfy(rows -> assertThat(rows).hasSize(1));
 
-    // Intentionally no target: this proves the real latest startup path, currently V11.
+    // Intentionally no target: this proves the real latest startup path, currently V12.
     var adopted = Flyway.configure().dataSource(url, user, password).schemas(schema).defaultSchema(schema)
         .createSchemas(false).baselineOnMigrate(false).cleanDisabled(true).baselineVersion("1")
         .baselineDescription("Synthetic audited V1 schema").locations("classpath:db/migration").load();
@@ -150,30 +150,36 @@ class RankingAccessPersistenceIT {
     assertThat(catalog(oldTables)).containsExactlyElementsOf(beforeCatalog);
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
     adopted.baseline(); // Explicit baseline only in this isolated disposable synthetic schema.
-    assertThat(adopted.migrate().migrationsExecuted).isEqualTo(10);
-    assertThat(adopted.info().current().getVersion().getVersion()).isEqualTo("11");
+    assertThat(adopted.migrate().migrationsExecuted).isEqualTo(11);
+    assertThat(adopted.info().current().getVersion().getVersion()).isEqualTo("12");
+    var expectedV12Catalog = new ArrayList<>(beforeCatalog);
+    expectedV12Catalog.add("movie:legacy_eligible:boolean:bool::NO:true:NO:");
     var newTables = Set.of("ranking", "ranking_membership", "ranking_membership_grant", "ranking_author_identity",
         "ranking_movie_entry", "ranking_movie_round", "ranking_movie_rating",
         "legacy_ranking_migration", "legacy_ranking_movie_map", "ranking_invitation", "ranking_invitation_address");
     assertThat(tables()).containsExactlyInAnyOrderElementsOf(union(oldTables, newTables));
     assertThat(tableRows(newTables).values()).allSatisfy(rows -> assertThat(rows).isEmpty());
-    assertThat(catalog(oldTables)).containsExactlyElementsOf(beforeCatalog);
+    assertThat(catalog(oldTables)).containsExactlyInAnyOrderElementsOf(expectedV12Catalog);
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
+    assertThat(jdbc.queryForList("select legacy_eligible from movie", Boolean.class)).containsExactly(true);
     assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
-        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true");
+        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true", "12:SQL:true");
     assertThat(adopted.migrate().migrationsExecuted).isZero();
-    assertThat(catalog(oldTables)).containsExactlyElementsOf(beforeCatalog);
+    assertThat(catalog(oldTables)).containsExactlyInAnyOrderElementsOf(expectedV12Catalog);
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
+    assertThat(jdbc.queryForList("select legacy_eligible from movie", Boolean.class)).containsExactly(true);
     assertThat(tableRows(newTables).values()).allSatisfy(rows -> assertThat(rows).isEmpty());
     assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
-        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true");
+        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true", "12:SQL:true");
   }
 
   private Map<String, List<String>> tableRows(Set<String> tableNames) {
     var result = new TreeMap<String, List<String>>();
     // Identifiers originate only from this isolated schema's catalog or fixed test table names.
     for (String table : tableNames) {
-      result.put(table, jdbc.queryForList("select row_to_json(t)::text from \"" + table + "\" t order by row_to_json(t)::text", String.class));
+      // Compare every V1 field. Eligibility is asserted separately as the sole V12 column.
+      String row = table.equals("movie") ? "(to_jsonb(t) - 'legacy_eligible')::text" : "row_to_json(t)::text";
+      result.put(table, jdbc.queryForList("select " + row + " from \"" + table + "\" t order by 1", String.class));
     }
     return result;
   }
