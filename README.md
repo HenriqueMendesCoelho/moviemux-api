@@ -555,6 +555,32 @@ Turning the toggle off does not change already imported catalog data or make
 an older unfiltered binary safe. Neither import nor reuse emits legacy alerts,
 affects other rankings' scores, or awards XP.
 
+### Explicit repeated movie rounds
+
+V14 adds a disabled-by-default setting for each collection; no historical
+round, rating, reveal state or legacy fingerprint is rewritten. Only the
+actual active owner of a live collection can read or set the policy with
+`GET /rankings/{rankingId}/settings/rounds` and
+`PUT /rankings/{rankingId}/settings/rounds`, respectively. The exact settings
+body/response is `{"repeat_enabled":true}` (or false); non-owner grants do
+not substitute for ownership.
+
+While enabled, the owner may explicitly
+`POST /rankings/{rankingId}/entries/{entryId}/rounds` with a unique
+`command_id` UUID and optional `description` (max 240 Unicode code points
+after trimming). A new round is independently hidden and numbered, with
+its own creation time and no copied votes. Response is `201` with only
+`round_id` and `round_number`. Exact retry with the same scoped command,
+current owner and normalized reason returns `200` with the same identifiers,
+even after switch-off, without adding another round. A used command from
+a different owner or with a different canonical reason returns a generic
+conflict. Import and import retries never append rounds.
+
+Switch-off only prevents new explicit commands; it does not renumber, erase,
+reset or reopen rounds. Archived or removed resources cannot be mutated.
+No notifications, activity or XP are emitted. V14 is additive; migration
+rehearsal and operational release remain separate from this implementation.
+
 ### Default round disclosure on detail
 
 Authenticated `GET /rankings/{rankingId}/entries/{entryId}/rounds/{roundId}`
