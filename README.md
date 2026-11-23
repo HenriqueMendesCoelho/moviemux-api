@@ -485,6 +485,14 @@ legacy flags never change disclosure. HEAD does not trigger the transition.
 Use this detail only when requested; do not prefetch it in SSR, list scans or PWA
 background paths.
 
+Read-only `GET /rankings/{rankingId}/entries/{entryId}/rounds/{roundId}/ratings/aggregate`
+returns `round_id`, `revealed`, `total` and `votes`. A hidden or unknown
+round always has null `total` and `votes`, including for the vote's author.
+Only a disclosed round includes the exact sum and count of its non-null scores;
+zero is counted and a disclosed empty round returns zero for both. This route
+does not reveal a round or change the pooled entry aggregate. A removed or
+out-of-scope round returns the same private no-store 404 as a missing round.
+
 The response contains no vote, author, timing or statistics data and is no-store.
 Only the established revealed-only aggregate may be refreshed afterward; hidden
 rounds never contribute. The transition does not edit scores or contextual
