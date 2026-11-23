@@ -4,14 +4,20 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.HandlerMapping;
 
 import com.moviemux.adapter.util.exception.TokenInvalidException;
+import com.moviemux.legacyboard.application.spring.LegacyBoardEndpoint;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -57,6 +63,17 @@ public class SpringControllerAdviceHandler {
 		response.put("path", request.getRequestURI());
 
 		return response;
+	}
+
+	@ExceptionHandler(CannotCreateTransactionException.class)
+	public ResponseEntity<Map<String, Object>> handleTransactionStartFailure(
+			HttpServletRequest request, CannotCreateTransactionException failure) {
+		Object handler = request.getAttribute(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE);
+		if (handler instanceof HandlerMethod method && method.hasMethodAnnotation(LegacyBoardEndpoint.class)) {
+			return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).cacheControl(CacheControl.noStore())
+					.body(Map.of("code", "movie.legacy_board_unavailable"));
+		}
+		return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(handleError(request, failure));
 	}
 
 	@ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)

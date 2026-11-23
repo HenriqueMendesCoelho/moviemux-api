@@ -1,5 +1,6 @@
 package com.moviemux.statistic.application.spring.controller;
 
+import com.moviemux.legacyboard.application.spring.LegacyBoardEndpoint;
 import com.moviemux.statistic.adapter.controller.StatisticController;
 import com.moviemux.statistic.adapter.controller.dto.MovieStatisticResponseDto;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ public class StatisticSpringController {
 
   private final StatisticController controller;
 
+  @LegacyBoardEndpoint
   @GetMapping("/movies")
   public ResponseEntity<MovieStatisticResponseDto> sendMovieMessageDiscord() {
     MovieStatisticResponseDto response = controller.charts();

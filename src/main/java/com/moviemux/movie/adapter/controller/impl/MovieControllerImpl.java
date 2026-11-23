@@ -1,6 +1,7 @@
 package com.moviemux.movie.adapter.controller.impl;
 
 import com.moviemux.adapter.core.controller.dto.UserTokenDto;
+import com.moviemux.legacyboard.domain.repository.LegacyBoardInterlock;
 import com.moviemux.movie.adapter.controller.MovieController;
 import com.moviemux.movie.adapter.controller.dto.MovieGenreResponseDto;
 import com.moviemux.movie.adapter.controller.dto.MovieNoteRequestDto;
@@ -35,10 +36,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 
 @Controller
 @RequiredArgsConstructor
 public class MovieControllerImpl implements MovieController {
+
+  private final LegacyBoardInterlock legacyBoard;
 
   private final CreateMovieUseCase createMovieUseCase;
 
@@ -61,8 +65,10 @@ public class MovieControllerImpl implements MovieController {
   private final SearchMovieGenreUseCase searchMovieGenreUseCase;
 
   @Override
+  @Transactional
   public Page<MovieResponseDto> listAllMovies(
       String title, String genre, String sortJoin, Pageable pageable, UserTokenDto user) {
+    legacyBoard.requireLegacy();
     var response =
         searchMovieUseCase.execute(
             MovieHttpMapper.query(title, genre, sortJoin, pageable), user.getId());
@@ -70,42 +76,54 @@ public class MovieControllerImpl implements MovieController {
   }
 
   @Override
+  @Transactional(rollbackFor = Exception.class)
   public MovieResponseDto getById(UUID id, UserTokenDto user) throws MovieNoteNotFoundException {
+    legacyBoard.requireLegacy();
     Movie response = getMovieUseCase.execute(id, user.getId());
     return MovieHttpMapper.movie(response);
   }
 
   @Override
+  @Transactional(rollbackFor = Exception.class)
   public MovieResponseDto save(MovieRequestDto movie, UserTokenDto user)
       throws DuplicatedMovieException {
+    legacyBoard.requireLegacy();
     Movie response = createMovieUseCase.execute(MovieHttpMapper.create(movie, user.getId()));
     return MovieHttpMapper.movie(response);
   }
 
   @Override
+  @Transactional(rollbackFor = Exception.class)
   public MovieResponseDto update(MovieRequestDto movie, UUID movieId, UserTokenDto user)
       throws MovieNotFoundException, UserNotAuthorizedException {
+    legacyBoard.requireLegacy();
     Movie response =
         updateMovieUseCase.execute(MovieHttpMapper.update(movie, movieId, user.getLogin()));
     return MovieHttpMapper.movie(response);
   }
 
   @Override
+  @Transactional(rollbackFor = Exception.class)
   public void delete(UUID id, UserTokenDto user) throws UserNotAuthorizedException {
+    legacyBoard.requireLegacy();
     deleteMovieUseCase.execute(new DeleteMovieCommand(id, user.getId()));
   }
 
   @Override
+  @Transactional
   public List<MovieNoteResponseDto> listMovieNotes(UUID movieId, UserTokenDto user)
       throws MovieNotFoundException {
+    legacyBoard.requireLegacy();
     return searchMovieNoteUseCase.execute(movieId, user.getId()).stream()
         .map(MovieHttpMapper::note)
         .collect(Collectors.toList());
   }
 
   @Override
+  @Transactional(rollbackFor = Exception.class)
   public MovieNoteResponseDto createMovieNote(MovieNoteRequestDto request, UserTokenDto user)
       throws MovieNotFoundException, DuplicatedMovieNoteException {
+    legacyBoard.requireLegacy();
     MovieNote response =
         createMovieNoteUseCase.execute(
             new CreateMovieNoteCommand(request.getMovieId(), request.getNote(), user.getLogin()));
@@ -113,9 +131,11 @@ public class MovieControllerImpl implements MovieController {
   }
 
   @Override
+  @Transactional(rollbackFor = Exception.class)
   public MovieNoteResponseDto updateMovieNote(
       UUID movieId, MovieNoteRequestDto request, UserTokenDto user)
       throws MovieNoteNotFoundException {
+    legacyBoard.requireLegacy();
     MovieNote response =
         updateMovieNoteUseCase.execute(
             new UpdateMovieNoteCommand(user.getId(), movieId, request.getNote()));
@@ -123,7 +143,9 @@ public class MovieControllerImpl implements MovieController {
   }
 
   @Override
+  @Transactional(rollbackFor = Exception.class)
   public void deleteMovieNote(UUID movieId, UserTokenDto user) {
+    legacyBoard.requireLegacy();
     deleteMovieNoteUseCase.execute(new DeleteMovieNoteCommand(user.getId(), movieId));
   }
 
@@ -134,7 +156,9 @@ public class MovieControllerImpl implements MovieController {
   }
 
   @Override
+  @Transactional
   public List<MovieGenreResponseDto> listAllGenresWithMovies() {
+    legacyBoard.requireLegacy();
     List<MovieGenre> genres = genresWithMovies.execute();
     return genres.stream().map(MovieHttpMapper::genre).collect(Collectors.toList());
   }

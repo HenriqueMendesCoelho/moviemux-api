@@ -1,5 +1,6 @@
 package com.moviemux.discord.application.spring.controller;
 
+import com.moviemux.legacyboard.application.spring.LegacyBoardEndpoint;
 import com.moviemux.discord.adapter.controller.DiscordController;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,7 @@ public class DiscordRestrictedSpringController {
 
 	private final DiscordController controller;
 
+	@LegacyBoardEndpoint
 	@PostMapping("/{movieId}")
 	@PreAuthorize("hasRole('ADM')")
 	public ResponseEntity<?> sendMovieMessageDiscord(@PathVariable UUID movieId) {
@@ -23,6 +25,7 @@ public class DiscordRestrictedSpringController {
 		return ResponseEntity.ok().build();
 	}
 
+	@LegacyBoardEndpoint
 	@PatchMapping("/{movieId}")
 	@PreAuthorize("hasRole('ADM')")
 	public ResponseEntity<?> updateMovieMessageDiscord(@PathVariable UUID movieId) {

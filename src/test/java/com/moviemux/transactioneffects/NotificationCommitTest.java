@@ -4,6 +4,9 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import com.moviemux.adapter.core.effects.AfterCommitEffects;
+import com.moviemux.legacyboard.application.spring.TransactionalLegacyBoardDispatch;
+import com.moviemux.legacyboard.domain.exception.LegacyBoardRetiredException;
+import com.moviemux.legacyboard.domain.repository.LegacyBoardInterlock;
 import com.moviemux.movie.adapter.notification.AfterCommitMovieNotifications;
 import com.moviemux.movie.application.spring.MovieStatisticsCache;
 import com.moviemux.movie.domain.model.NotificationNote;
@@ -32,7 +35,7 @@ class NotificationCommitTest {
   void socketSnapshotWaitsForCommitAndPreservesEmitterSpellingAtBoundary() {
     begin();
     var gateway = mock(MovieNotificationRepository.class);
-    var notifications = new AfterCommitMovieNotifications(gateway, new AfterCommitEffects());
+    var notifications = new AfterCommitMovieNotifications(gateway, new AfterCommitEffects(), Runnable::run);
     UUID movie = UUID.randomUUID();
     NotificationNote payload = new NotificationNote(8, null, null, UUID.randomUUID(), "Synthetic");
     assertThat(notifications.notifyMovie(movie, "create-note", payload, "emitter"))
@@ -44,10 +47,29 @@ class NotificationCommitTest {
   }
 
   @Test
+  void aFenceBetweenRegistrationAndDeliverySuppressesBothDeferredSocketEffects() {
+    begin();
+    var gateway = mock(MovieNotificationRepository.class);
+    var gate = mock(LegacyBoardInterlock.class);
+    var notifications = new AfterCommitMovieNotifications(
+        gateway, new AfterCommitEffects(), new TransactionalLegacyBoardDispatch(gate));
+    UUID movie = UUID.randomUUID();
+    notifications.notifyAllMovies("update");
+    assertThat(notifications.notifyMovie(movie, "update-note", null, "emitter"))
+        .isEqualTo(MovieNotificationRepository.Delivery.DEFERRED);
+    verifyNoInteractions(gate, gateway);
+    doThrow(new LegacyBoardRetiredException()).when(gate).requireLegacy();
+    TransactionSynchronizationManager.getSynchronizations()
+        .forEach(TransactionSynchronization::afterCommit);
+    verify(gate, times(2)).requireLegacy();
+    verifyNoInteractions(gateway);
+  }
+
+  @Test
   void skippedNotificationsDoNotRegisterCallbacks() {
     begin();
     var gateway = mock(MovieNotificationRepository.class);
-    var notifications = new AfterCommitMovieNotifications(gateway, new AfterCommitEffects());
+    var notifications = new AfterCommitMovieNotifications(gateway, new AfterCommitEffects(), Runnable::run);
     assertThat(notifications.notifyMovie(null, "event", null, null))
         .isEqualTo(MovieNotificationRepository.Delivery.SKIPPED);
     assertThat(notifications.notifyMovie(UUID.randomUUID(), "  ", null, null))
@@ -61,7 +83,7 @@ class NotificationCommitTest {
     var gateway = mock(MovieNotificationRepository.class);
     when(gateway.notifyMovie(any(), any(), any(), any()))
         .thenThrow(new IllegalStateException("synthetic"));
-    var notifications = new AfterCommitMovieNotifications(gateway, new AfterCommitEffects());
+    var notifications = new AfterCommitMovieNotifications(gateway, new AfterCommitEffects(), Runnable::run);
     assertThat(notifications.notifyMovie(UUID.randomUUID(), "event", null, null))
         .isEqualTo(MovieNotificationRepository.Delivery.FAILED);
     verify(gateway, times(1)).notifyMovie(any(), any(), any(), any());

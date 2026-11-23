@@ -1,5 +1,6 @@
 package com.moviemux.movie.application.spring.controller;
 
+import com.moviemux.legacyboard.application.spring.LegacyBoardEndpoint;
 import com.moviemux.adapter.core.controller.dto.UserTokenDto;
 import com.moviemux.adapter.util.CredentialUtil;
 import com.moviemux.movie.adapter.controller.MovieController;
@@ -27,6 +28,7 @@ public class MovieSpringController {
 
   private final MovieController controller;
 
+  @LegacyBoardEndpoint
   @GetMapping
   public ResponseEntity<?> getAllMoviesTest(
       @RequestParam(required = false) String title,
@@ -45,6 +47,7 @@ public class MovieSpringController {
     return ResponseEntity.ok(response);
   }
 
+  @LegacyBoardEndpoint
   @GetMapping("/{movieId}")
   public ResponseEntity<?> getMovieById(
       @PathVariable UUID movieId, @RequestHeader("Authorization") String token) {
@@ -59,6 +62,7 @@ public class MovieSpringController {
     return ResponseEntity.ok(response);
   }
 
+  @LegacyBoardEndpoint
   @PostMapping
   public ResponseEntity<?> createMovie(
       @RequestBody @Valid MovieRequestDto request, @RequestHeader("Authorization") String token) {
@@ -72,6 +76,7 @@ public class MovieSpringController {
     }
   }
 
+  @LegacyBoardEndpoint
   @PutMapping("/{movieId}/update")
   public ResponseEntity<?> updateMovie(
       @RequestBody @Valid MovieRequestDto request,
@@ -91,6 +96,7 @@ public class MovieSpringController {
     }
   }
 
+  @LegacyBoardEndpoint
   @DeleteMapping("/{movieId}/delete")
   public ResponseEntity<?> updateMovie(
       @PathVariable UUID movieId, @RequestHeader("Authorization") String token) {
@@ -116,6 +122,7 @@ public class MovieSpringController {
     return ResponseEntity.ok(response);
   }
 
+  @LegacyBoardEndpoint
   @GetMapping("/genres-with-movies")
   public ResponseEntity<?> listMovieGenresWithMovies() {
 
@@ -128,6 +135,7 @@ public class MovieSpringController {
     return ResponseEntity.ok(response);
   }
 
+  @LegacyBoardEndpoint
   @GetMapping("/note/{movieId}")
   public ResponseEntity<?> getMovieNote(
       @PathVariable UUID movieId, @RequestHeader("Authorization") String token) {
@@ -141,6 +149,7 @@ public class MovieSpringController {
     }
   }
 
+  @LegacyBoardEndpoint
   @PostMapping("/note")
   public ResponseEntity<?> createMovieNote(
       @RequestBody @Valid MovieNoteRequestDto request,
@@ -155,6 +164,7 @@ public class MovieSpringController {
     }
   }
 
+  @LegacyBoardEndpoint
   @PatchMapping("note/{movieId}/update")
   public ResponseEntity<?> updateMovieNote(
       @RequestBody @Valid MovieNoteRequestDto request,
@@ -170,6 +180,7 @@ public class MovieSpringController {
     }
   }
 
+  @LegacyBoardEndpoint
   @DeleteMapping("/note/{movieId}/delete")
   public ResponseEntity<?> deleteMovieNote(
       @PathVariable UUID movieId, @RequestHeader("Authorization") String token) {

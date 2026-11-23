@@ -1,6 +1,7 @@
 package com.moviemux.movie.adapter.notification;
 
 import com.moviemux.adapter.core.effects.AfterCommitEffects;
+import com.moviemux.legacyboard.domain.repository.LegacyBoardDispatch;
 import com.moviemux.movie.domain.model.NotificationNote;
 import com.moviemux.movie.domain.repository.MovieNotificationRepository;
 import java.util.UUID;
@@ -14,17 +15,19 @@ import org.springframework.stereotype.Component;
 public class AfterCommitMovieNotifications implements MovieNotificationRepository {
   private final MovieNotificationRepository delegate;
   private final AfterCommitEffects effects;
+  private final LegacyBoardDispatch dispatch;
 
   public AfterCommitMovieNotifications(
       @Qualifier("movieSocketRestRespositoryImpl") MovieNotificationRepository delegate,
-      AfterCommitEffects effects) {
+      AfterCommitEffects effects, LegacyBoardDispatch dispatch) {
     this.delegate = delegate;
     this.effects = effects;
+    this.dispatch = dispatch;
   }
 
   @Override
   public void notifyAllMovies(String event) {
-    effects.submit("movie socket notification", () -> delegate.notifyAllMovies(event));
+    effects.submit("movie socket notification", () -> dispatch.run(() -> delegate.notifyAllMovies(event)));
   }
 
   @Override
@@ -39,7 +42,7 @@ public class AfterCommitMovieNotifications implements MovieNotificationRepositor
     boolean deferred =
         effects.submit(
             "movie socket notification",
-            () -> immediateResult.set(delegate.notifyMovie(movieId, event, note, emittedByUserId)));
+            () -> dispatch.run(() -> immediateResult.set(delegate.notifyMovie(movieId, event, note, emittedByUserId))));
     return deferred ? Delivery.DEFERRED : immediateResult.get();
   }
 }
