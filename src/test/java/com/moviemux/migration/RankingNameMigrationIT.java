@@ -97,6 +97,61 @@ class RankingNameMigrationIT {
     assertThat(v9.migrate().migrationsExecuted).isZero();
   }
 
+  @Test void v11HistoricalLedgerStillReplaysAndIgnoresContextOnlyCatalogAfterV12() throws Exception {
+    assertThat(flyway("11").migrate().migrationsExecuted).isEqualTo(11);
+    UUID owner=UUID.randomUUID(), ranking=UUID.randomUUID(), legacy=UUID.randomUUID(), context=UUID.randomUUID();
+    jdbc.update("""
+        insert into "user"(id,created_at,email,name,password)
+        values (?,'2026-01-01 01:00:00+00',?,'Synthetic','synthetic')
+        """, owner, owner+"@example.invalid");
+    jdbc.update("""
+        insert into movie(id,created_at,description,director,english_title,portuguese_title,user_id,show_notes)
+        values (?,'2026-01-02 01:00:00+00','Description','Direction','Title','Título',?,null)
+        """, legacy, owner);
+    jdbc.update("""
+        insert into movie_note(movie_id,user_id,created_at,note)
+        values (?,?,'2026-01-03 01:00:00+00',null)
+        """, legacy, owner);
+    var offline = new OfflineLegacyRankingMigration(source,100);
+    var prior = offline.preview(owner, ranking);
+    assertThat(prior.fingerprint()).isEqualTo(v11Fingerprint(owner, ranking));
+    assertThat(offline.apply(prior,true)).isEqualTo(new OfflineLegacyRankingMigration.Result(false,1,1,1));
+    var ledger = jdbc.queryForMap("select * from legacy_ranking_migration");
+    assertThat(flyway("12").migrate().migrationsExecuted).isEqualTo(1);
+    jdbc.update("""
+        insert into movie(id,created_at,description,director,english_title,portuguese_title,legacy_eligible)
+        values (?,now(),'Synthetic B','Synthetic B','Synthetic B','Synthetic B',false)
+        """, context);
+    assertThat(offline.preview(owner,ranking)).isEqualTo(prior);
+    assertThat(offline.apply(prior,true)).isEqualTo(new OfflineLegacyRankingMigration.Result(true,1,1,1));
+    assertThat(jdbc.queryForMap("select * from legacy_ranking_migration")).isEqualTo(ledger);
+    assertThat(jdbc.queryForList("select movie_id from ranking_movie_entry where ranking_id=?",UUID.class,ranking))
+        .containsExactly(legacy);
+  }
+
+  private String v11Fingerprint(UUID owner, UUID ranking) throws Exception {
+    var expected=java.security.MessageDigest.getInstance("SHA-256");
+    java.util.function.Consumer<String> feed=value -> {
+      byte[] bytes=value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      expected.update(java.nio.ByteBuffer.allocate(4).putInt(bytes.length).array()); expected.update(bytes);
+    };
+    try (var connection=source.getConnection(); var stmt=connection.createStatement()) {
+      stmt.execute("set timezone='UTC'");
+      feed.accept("legacy-movies-v1");
+      feed.accept(owner.toString()); feed.accept(ranking.toString());
+      String[][] groups={
+        {"users","select row_to_json(s)::text from (select id,created_at from \"user\" order by id) s"},
+        {"movies","select row_to_json(s)::text from (select * from movie order by id) s"},
+        {"ratings","select row_to_json(s)::text from (select * from movie_note order by movie_id,user_id) s"}
+      };
+      for(var group:groups) {
+        feed.accept(group[0]);
+        try(var rows=stmt.executeQuery(group[1])) { while(rows.next()) feed.accept(rows.getString(1)); }
+      }
+    }
+    return java.util.HexFormat.of().formatHex(expected.digest());
+  }
+
   private Flyway flyway(String target) {
     return Flyway.configure().dataSource(url, user, password).schemas(schema).defaultSchema(schema)
         .createSchemas(false).baselineOnMigrate(false).cleanDisabled(true).target(target).load();
