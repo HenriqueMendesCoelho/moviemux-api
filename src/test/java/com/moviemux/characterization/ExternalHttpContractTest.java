@@ -69,7 +69,7 @@ class ExternalHttpContractTest {
   }
 
   private KronusIntegrationToolRepositoryImpl kit() {
-    var repository = new KronusIntegrationToolRepositoryImpl(client);
+    var repository = new KronusIntegrationToolRepositoryImpl(client, client);
     return repository;
   }
 

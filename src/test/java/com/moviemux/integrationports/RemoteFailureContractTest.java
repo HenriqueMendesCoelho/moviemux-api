@@ -29,7 +29,8 @@ class RemoteFailureContractTest {
         return RestClient.builder().baseUrl("http://127.0.0.1:1").requestFactory(requests).build();
     }
     private KronusIntegrationToolRepositoryImpl kit(ClientHttpRequestFactory requests) {
-        return new KronusIntegrationToolRepositoryImpl(client(requests));
+        var kit = client(requests);
+        return new KronusIntegrationToolRepositoryImpl(kit, kit);
     }
     private ClientHttpRequestFactory response(int status, String body) {
         return (uri, method) -> {

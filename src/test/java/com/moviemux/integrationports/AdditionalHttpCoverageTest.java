@@ -56,7 +56,7 @@ class AdditionalHttpCoverageTest {
     }
 
     private KronusIntegrationToolRepositoryImpl catalog() {
-        var adapter = new KronusIntegrationToolRepositoryImpl(client);
+        var adapter = new KronusIntegrationToolRepositoryImpl(client, client);
         return adapter;
     }
 

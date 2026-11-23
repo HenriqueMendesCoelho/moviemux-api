@@ -1,12 +1,16 @@
 package com.moviemux.kronusintegrationtool.application.spring.configuration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.http.HttpClient;
+import java.time.Duration;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @Configuration
@@ -23,5 +27,14 @@ public class KronusIntegrationToolRestClientConfig {
           converters.add(new MappingJackson2HttpMessageConverter(mapper));
         })
         .build();
+  }
+
+  /** Keep catalog summary time bounded without changing other KIT client policies. */
+  @Bean
+  public RestClient restClientKitSummary(@Qualifier("restClientKit") RestClient kit) {
+    var client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+    var requests = new JdkClientHttpRequestFactory(client);
+    requests.setReadTimeout(Duration.ofSeconds(10));
+    return kit.mutate().requestFactory(requests).build();
   }
 }

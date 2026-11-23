@@ -22,16 +22,19 @@ import java.util.stream.Collectors;
 public class KronusIntegrationToolRepositoryImpl implements KronusCatalogRepository {
 
 	private final RestClient restClientKit;
+	private final RestClient restClientKitSummary;
 
-	public KronusIntegrationToolRepositoryImpl(@Qualifier("restClientKit") RestClient restClientKit) {
+	public KronusIntegrationToolRepositoryImpl(@Qualifier("restClientKit") RestClient restClientKit,
+			@Qualifier("restClientKitSummary") RestClient restClientKitSummary) {
 		this.restClientKit = restClientKit;
+		this.restClientKitSummary = restClientKitSummary;
 	}
 
 	@Override
 	public MovieSummary movieSummary(Long tmdbId) {
 		final String uri = "/api/v1/tmdb/movie/%s/summary".formatted(tmdbId);
 		try {
-			MovieSummaryResponseDto response = restClientKit.get()
+			MovieSummaryResponseDto response = restClientKitSummary.get()
 					.uri(uri)
 					.retrieve()
 					.body(MovieSummaryResponseDto.class);
@@ -39,8 +42,9 @@ public class KronusIntegrationToolRepositoryImpl implements KronusCatalogReposit
 			java.util.Objects.requireNonNull(response, "Missing integration response");
 			return CatalogResponseMapper.summary(response);
 		} catch (Exception e) {
-			log.error("Error with KIT API request at %s".formatted(uri), e);
-			throw IntegrationFailureMapper.map(e);
+			var failure = IntegrationFailureMapper.map(e);
+			log.warn("KIT movie summary unavailable ({})", failure.getKind());
+			throw failure;
 		}
 
 	}
