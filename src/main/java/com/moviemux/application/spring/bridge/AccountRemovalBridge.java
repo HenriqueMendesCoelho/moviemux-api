@@ -17,6 +17,7 @@ public class AccountRemovalBridge implements AccountRemoval {
 
   private final com.moviemux.movie.domain.repository.MovieAccountHistory movieHistory;
   private final com.moviemux.ranking.domain.repository.RankingAccountHistory rankingHistory;
+  private final com.moviemux.ranking.domain.repository.RankingAccountInvitationCleanup rankingInvitations;
 
   @Override
   @Transactional(rollbackFor = Exception.class)
@@ -26,6 +27,7 @@ public class AccountRemovalBridge implements AccountRemoval {
     // prepare holds the user row lock; reference inserts must finish before these checks or wait.
     if (movieHistory.hasProtectedHistory(target.userId()) || rankingHistory.hasProtectedHistory(target.userId()))
       throw new com.moviemux.user.domain.exception.AccountDeletionRequiresHistoryMigrationException();
+    rankingInvitations.removeReferencesTo(target.userId());
     movies.detach(target.userId());
     wishlists.removeOwnedBy(target.userId());
     target.deleteAfterMoviesDetached();

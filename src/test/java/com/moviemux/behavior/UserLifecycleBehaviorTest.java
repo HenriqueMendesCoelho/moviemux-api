@@ -18,6 +18,7 @@ class UserLifecycleBehaviorTest {
   @Mock UserRepository repository;
   @Mock com.moviemux.movie.domain.repository.MovieAccountHistory movieHistory;
   @Mock com.moviemux.ranking.domain.repository.RankingAccountHistory rankingHistory;
+  @Mock com.moviemux.ranking.domain.repository.RankingAccountInvitationCleanup rankingInvitations;
   @Mock com.moviemux.movie.domain.repository.MovieOwnershipRemoval movieRemoval;
   @Mock com.moviemux.wishlist.domain.repository.WishlistOwnershipRemoval wishlistRemoval;
   @Mock com.moviemux.user.domain.repository.InviteRepository invites;
@@ -41,7 +42,7 @@ class UserLifecycleBehaviorTest {
               };
             },
             movieRemoval,
-            wishlistRemoval, movieHistory, rankingHistory);
+            wishlistRemoval, movieHistory, rankingHistory, rankingInvitations);
   }
 
   @InjectMocks CreateInviteUseCaseImpl createInvite;
@@ -53,8 +54,11 @@ class UserLifecycleBehaviorTest {
     UserEntity user = UserEntity.builder().id(id).build();
     when(repository.getReferenceById(id)).thenReturn(user);
     deleteUser.remove(id);
-    InOrder order = inOrder(repository, movieRemoval, wishlistRemoval);
+    InOrder order = inOrder(repository, movieHistory, rankingHistory, rankingInvitations, movieRemoval, wishlistRemoval);
     order.verify(repository).getReferenceById(id);
+    order.verify(movieHistory).hasProtectedHistory(id);
+    order.verify(rankingHistory).hasProtectedHistory(id);
+    order.verify(rankingInvitations).removeReferencesTo(id);
     order.verify(movieRemoval).detach(id);
     order.verify(wishlistRemoval).removeOwnedBy(id);
     order.verify(repository).delete(user);
@@ -75,7 +79,7 @@ class UserLifecycleBehaviorTest {
     UUID id=UUID.randomUUID();when(repository.getReferenceById(id)).thenReturn(UserEntity.builder().id(id).build());
     when(movieHistory.hasProtectedHistory(id)).thenReturn(true);
     assertThatThrownBy(()->deleteUser.remove(id)).isInstanceOf(com.moviemux.user.domain.exception.AccountDeletionRequiresHistoryMigrationException.class);
-    verifyNoInteractions(movieRemoval,wishlistRemoval,rankingHistory);
+    verifyNoInteractions(movieRemoval,wishlistRemoval,rankingHistory,rankingInvitations);
     verify(repository,never()).delete(any(UserEntity.class));
   }
 
@@ -83,7 +87,7 @@ class UserLifecycleBehaviorTest {
     UUID id=UUID.randomUUID();when(repository.getReferenceById(id)).thenReturn(UserEntity.builder().id(id).build());
     when(rankingHistory.hasProtectedHistory(id)).thenReturn(true);
     assertThatThrownBy(()->deleteUser.remove(id)).isInstanceOf(com.moviemux.user.domain.exception.AccountDeletionRequiresHistoryMigrationException.class);
-    verifyNoInteractions(movieRemoval,wishlistRemoval);
+    verifyNoInteractions(movieRemoval,wishlistRemoval,rankingInvitations);
     verify(repository,never()).delete(any(UserEntity.class));
   }
 
