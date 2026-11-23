@@ -147,7 +147,8 @@ class FlywayMigrationIT {
         assertThat(count("select id from " + schema + ".user_invites where code='synthetic-invite'")).isEqualTo(1);
         assertThat(count("insert into " + schema + ".user_invites(code) values ('second-synthetic-invite') returning id")).isEqualTo(2);
         assertThat(count("select count(*) from " + schema + ".migration_probe")).isEqualTo(1);
-        validateJpa();
+        // That synthetic history pins the historical V1 layout and cannot start the current ORM.
+        assertThatThrownBy(this::validateJpa).hasMessageContaining("legacy_eligible");
     }
 
     @Test
@@ -163,15 +164,17 @@ class FlywayMigrationIT {
         assertThatThrownBy(() -> historicalFlyway().migrate()).isInstanceOf(FlywayException.class).hasMessageContaining("non-empty");
         historicalFlyway().baseline(); // Explicit adoption is permitted only for this inspected, disposable fixture.
         assertThat(historicalFlyway().migrate().migrationsExecuted).isZero();
-        validateJpa();
         assertThat(catalog()).isEqualTo(before);
+        assertThatThrownBy(this::validateJpa).hasMessageContaining("legacy_eligible");
+        assertThat(latestFlyway().migrate().migrationsExecuted).isEqualTo(11);
+        validateJpa();
+        var upgraded = catalog();
 
         var app = new org.springframework.boot.SpringApplication(com.moviemux.MovieMuxApplication.class);
         try (var context = app.run("--spring.profiles.active=test", "--server.address=127.0.0.1", "--server.port=0",
                 "--spring.datasource.url=" + url, "--spring.datasource.username=" + user,
                 "--spring.datasource.password=" + password, "--spring.datasource.hikari.schema=" + schema,
                 "--spring.flyway.default-schema=" + schema, "--spring.flyway.schemas=" + schema,
-                "--spring.flyway.locations=" + historicalLocation, "--spring.flyway.target=1",
                 "--spring.jpa.properties.hibernate.default_schema=" + schema)) {
             var users = context.getBean(com.moviemux.user.adapter.repository.UserRepository.class);
             var wishlists = context.getBean(com.moviemux.wishlist.domain.repository.WishlistRepository.class);
@@ -199,7 +202,7 @@ class FlywayMigrationIT {
             assertThat(wishlists.findByUserIdOrderByCreatedAtDesc(owner.getId()))
                     .extracting(com.moviemux.wishlist.domain.model.Wishlist::getId).containsExactly(original.getId());
         }
-        assertThat(catalog()).isEqualTo(before);
+        assertThat(catalog()).isEqualTo(upgraded);
         assertThat(count("select id from " + schema + ".user_invites where code='synthetic-develop-invite'")).isEqualTo(1);
         assertThat(count("select count(*) from " + schema + ".flyway_schema_history where version='1' and type='BASELINE' and success")).isEqualTo(1);
     }
