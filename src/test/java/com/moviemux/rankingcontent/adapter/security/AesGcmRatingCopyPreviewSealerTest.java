@@ -87,6 +87,30 @@ class AesGcmRatingCopyPreviewSealerTest {
     }
   }
 
+  @Test void authenticatesExactExistingPreviewAndRejectsAlterationWithoutDetails() {
+    var sealer=new AesGcmRatingCopyPreviewSealer(CONFIGURED_KEY,"600",CLOCK);
+    for(var version:java.util.List.of(new RatingCopySourceVersion(0,SOURCE_CREATED,null),
+        new RatingCopySourceVersion(10,SOURCE_CREATED,SOURCE_UPDATED))) {
+      var token=sealer.seal(ACTOR,PAIR,version);
+      var opened=sealer.open(token.token());
+      assertThat(opened.actorId()).isEqualTo(ACTOR);
+      assertThat(opened.pair()).isEqualTo(PAIR);
+      assertThat(opened.source()).isEqualTo(version);
+      assertThat(opened.expiresAt()).isEqualTo(token.expiresAt());
+      assertThat(opened.toString()).isEqualTo("OpenedRatingCopyPreview[redacted]");
+      var bytes=Base64.getUrlDecoder().decode(token.token());
+      bytes[bytes.length-1]^=1;
+      assertThatThrownBy(()->sealer.open(Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)))
+          .isInstanceOf(com.moviemux.rankingcontent.domain.exception.InvalidRatingCopyException.class).hasNoCause();
+      var disabled=new AesGcmRatingCopyPreviewSealer("","600",CLOCK);
+      assertThatThrownBy(()->disabled.open(token.token())).isInstanceOf(RatingCopyUnavailableException.class);
+    }
+    for(String malformed:java.util.Arrays.asList(null,"","!".repeat(264),"A".repeat(264))) {
+      assertThatThrownBy(()->sealer.open(malformed))
+          .isInstanceOf(com.moviemux.rankingcontent.domain.exception.InvalidRatingCopyException.class).hasNoCause();
+    }
+  }
+
   private static ByteBuffer decrypt(byte[] envelope,String label) throws Exception {
     var cipher=Cipher.getInstance("AES/GCM/NoPadding");
     cipher.init(Cipher.DECRYPT_MODE,new SecretKeySpec(KEY,"AES"),new GCMParameterSpec(128,Arrays.copyOfRange(envelope,1,13)));

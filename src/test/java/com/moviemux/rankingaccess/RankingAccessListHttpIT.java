@@ -97,6 +97,9 @@ class RankingAccessListHttpIT {
     properties.add("ranking.rating-copy.preview-key",
         () -> java.util.Base64.getEncoder().encodeToString("A synthetic key for preview test".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
     properties.add("ranking.rating-copy.preview-ttl-seconds", () -> "600");
+    properties.add("ranking.rating-copy.apply-enabled", () -> "true");
+    properties.add("ranking.rating-copy.cleanup-batch-size", () -> "10");
+    properties.add("ranking.rating-copy.cleanup-interval-seconds", () -> "3600");
     properties.add("ranking.catalog.tmdb-import-enabled", () -> "true");
     properties.add("ranking.creation.max-owned", () -> "1");
     properties.add("spring.datasource.url", () -> databaseUrl);
@@ -1271,9 +1274,10 @@ class RankingAccessListHttpIT {
     assertThat(token).matches("[A-Za-z0-9_-]+");
     assertThat(java.time.Instant.parse(result.body().required("expires_at").asText())).isAfter(java.time.Instant.now());
     assertThat(copyPreview(actor,path,body).body().required("preview_token").asText()).isNotEqualTo(token);
-    // The repository's application-wide unmatched-path handler may map framework 404 to 500.
-    // No secret is sent to the intentionally unmapped route; the controller test proves no mapping.
-    assertThat(copyPreview(actor,base+"/copy-apply",JSON.createObjectNode()).status()).isGreaterThanOrEqualTo(400);
+    // Preview cannot implicitly apply; the explicit write rejects any request without the sealed token.
+    var missingToken=copyPreview(actor,base+"/copy-apply",JSON.createObjectNode());
+    assertThat(missingToken.status()).isEqualTo(400);
+    assertThat(missingToken.body().required("code").asText()).isEqualTo("ranking.invalid_rating_copy");
     assertThat(copyAffectedRows()).isEqualTo(before);
 
     String code=copyPreview(outsider,path,body).body().required("code").asText();
@@ -1313,6 +1317,156 @@ class RankingAccessListHttpIT {
         Boolean.class,sourceRank,sourceRound)).isFalse();
     assertThat(TMDB_CALLS.get()).isZero();
     assertThat(PICKER_CALLS.get()).isZero();
+  }
+
+  @Test void copyApplyConcurrentAliasesCommitOnceAndReplayOriginalAfterOwnEdits() throws Exception {
+    var c=seedCopyApply();
+    var outsider=user(true);
+    String canonical=COLLECTIONS+c.targetPath(),legacy=LEGACY_COLLECTIONS+c.targetPath();
+    String token=issueCopyToken(c,canonical), rival=issueCopyToken(c,canonical);
+    var payload=JSON.createObjectNode().put("preview_token",token);
+    var wrongActor=copyPreview(outsider,canonical+"/copy-apply",payload);
+    assertThat(wrongActor.status()).isEqualTo(404);
+    assertThat(copyPreview(c.owner(),canonical.replace(c.targetRound().toString(),UUID.randomUUID().toString())+"/copy-apply",
+        payload).body()).isEqualTo(wrongActor.body());
+    var tampered=(token.charAt(40)=='A'?'B':'A');
+    var bad=copyPreview(c.owner(),canonical+"/copy-apply",
+        JSON.createObjectNode().put("preview_token",token.substring(0,40)+tampered+token.substring(41)));
+    assertThat(bad.status()).isEqualTo(400);
+    assertThat(bad.body().required("code").asText()).isEqualTo("ranking.invalid_rating_copy");
+
+    var writes=List.of(http.sendAsync(rankingJsonRequest(c.owner(),"POST",canonical+"/copy-apply",payload),
+        HttpResponse.BodyHandlers.ofString()),http.sendAsync(rankingJsonRequest(c.owner(),"POST",legacy+"/copy-apply",payload),
+        HttpResponse.BodyHandlers.ofString()));
+    for(var call:writes) {
+      var applied=response(call.get(12,java.util.concurrent.TimeUnit.SECONDS));
+      assertThat(applied.status()).isEqualTo(201);
+      assertThat(applied.headers().firstValue("Cache-Control")).hasValue("no-store");
+      assertThat(fields(applied.body())).containsExactlyInAnyOrder("round_id","score");
+      assertThat(applied.body().required("round_id").asText()).isEqualTo(c.targetRound().toString());
+      assertThat(applied.body().required("score").asInt()).isZero();
+    }
+    assertThat(jdbc.queryForObject("select count(*) from ranking_rating_copy_receipt",Long.class)).isEqualTo(1);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_rating",Long.class)).isEqualTo(2);
+    var occupied=copyPreview(c.owner(),canonical+"/copy-apply",JSON.createObjectNode().put("preview_token",rival));
+    assertThat(occupied.status()).isEqualTo(409);
+    assertThat(occupied.body().required("code").asText()).isEqualTo("ranking.rating_exists");
+
+    jdbc.update("update ranking_movie_rating set score=9,updated_at=clock_timestamp() where ranking_id=? and round_id=?",
+        c.sourceRank(),c.sourceRound());
+    jdbc.update("update ranking_movie_rating set score=10,updated_at=clock_timestamp() where ranking_id=? and round_id=?",
+        c.targetRank(),c.targetRound());
+    var replay=copyPreview(c.owner(),legacy+"/copy-apply",payload);
+    assertThat(replay.status()).isEqualTo(201);
+    assertThat(replay.body().required("score").asInt()).isZero();
+    assertThat(jdbc.queryForObject("select score from ranking_movie_rating where round_id=?",Integer.class,c.targetRound())).isEqualTo(10);
+    jdbc.update("update ranking_movie_entry set removed_at=now(),removal_token=? where ranking_id=? and entry_id=?",
+        UUID.randomUUID(),c.sourceRank(),c.sourceEntry());
+    assertThat(copyPreview(c.owner(),legacy+"/copy-apply",payload).body()).isEqualTo(wrongActor.body());
+    assertThat(jdbc.queryForObject("select revealed from ranking_movie_round where round_id=?",Boolean.class,c.sourceRound())).isFalse();
+  }
+
+  @Test void copyApplyRejectsExpiredOrChangedSourceBeforeWritingAndRollsBackOnReceiptFailure() throws Exception {
+    var c=seedCopyApply();
+    String target=COLLECTIONS+c.targetPath();
+    String stale=issueCopyToken(c,target);
+    jdbc.update("update ranking_movie_rating set updated_at=clock_timestamp() where round_id=?",c.sourceRound());
+    var changed=copyPreview(c.owner(),target+"/copy-apply",JSON.createObjectNode().put("preview_token",stale));
+    assertThat(changed.status()).isEqualTo(409);
+    assertThat(changed.body().required("code").asText()).isEqualTo("ranking.rating_copy_stale");
+    var source=new com.moviemux.rankingcontent.domain.model.RatingCopyContext(c.sourceRank(),c.sourceEntry(),c.sourceRound());
+    var destination=new com.moviemux.rankingcontent.domain.model.RatingCopyContext(c.targetRank(),c.targetEntry(),c.targetRound());
+    var outdated=new com.moviemux.rankingcontent.adapter.security.AesGcmRatingCopyPreviewSealer(
+        java.util.Base64.getEncoder().encodeToString("A synthetic key for preview test".getBytes(java.nio.charset.StandardCharsets.US_ASCII)),
+        "1",java.time.Clock.fixed(java.time.Instant.now().minusSeconds(15),java.time.ZoneOffset.UTC));
+    var expired=outdated.seal(c.owner().id(),new com.moviemux.rankingcontent.domain.model.RatingCopyPair(source,destination),
+        new com.moviemux.rankingcontent.domain.model.RatingCopySourceVersion(0,java.time.Instant.now(),null)).token();
+    assertThat(copyPreview(c.owner(),target+"/copy-apply",JSON.createObjectNode().put("preview_token",expired)).body())
+        .isEqualTo(changed.body());
+
+    String fresh=issueCopyToken(c,target);
+    var payload=JSON.createObjectNode().put("preview_token",fresh);
+    jdbc.execute("""
+        create function deny_synthetic_receipt() returns trigger language plpgsql as $$
+        begin raise exception 'synthetic receipt failure' using errcode='23514'; end;
+        $$
+        """);
+    jdbc.execute("""
+        create trigger deny_synthetic_receipt before insert on ranking_rating_copy_receipt
+        for each row execute function deny_synthetic_receipt()
+        """);
+    try {
+      var failed=copyPreview(c.owner(),target+"/copy-apply",payload);
+      assertThat(failed.status()).isEqualTo(500);
+      assertThat(failed.body().required("code").asText()).isEqualTo("ranking.operation_failed");
+      assertThat(jdbc.queryForObject("select count(*) from ranking_movie_rating where ranking_id=?",Long.class,c.targetRank())).isZero();
+      assertThat(jdbc.queryForObject("select count(*) from ranking_author_identity where ranking_id=?",Long.class,c.targetRank())).isZero();
+      assertThat(jdbc.queryForObject("select count(*) from ranking_rating_copy_receipt",Long.class)).isZero();
+    } finally {
+      jdbc.execute("drop trigger deny_synthetic_receipt on ranking_rating_copy_receipt");
+      jdbc.execute("drop function deny_synthetic_receipt()");
+    }
+    assertThat(copyPreview(c.owner(),target+"/copy-apply",payload).status()).isEqualTo(201);
+    var worker=new com.moviemux.rankingcontent.adapter.repository.postgres.RatingCopyReceiptSweeper(dataSource);
+    assertThat(worker.sweep(1).removed()).isZero();
+    jdbc.update("update ranking_rating_copy_receipt set expires_at=clock_timestamp()-interval '5 seconds'");
+    assertThat(worker.sweep(1).removed()).isEqualTo(1);
+    assertThat(worker.sweep(1).removed()).isZero();
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_rating",Long.class)).isEqualTo(2);
+  }
+
+  @Test void copyApplyRechecksBothCollectionsCurrentMembershipAndDistinctGrants() throws Exception {
+    var c=seedCopyApply();
+    var nextOwner=user(false);
+    membership(c.targetRank(),nextOwner,"READ");
+    membership(c.sourceRank(),nextOwner,"READ");
+    String path=COLLECTIONS+c.targetPath();
+    String token=issueCopyToken(c,path);
+    var payload=JSON.createObjectNode().put("preview_token",token);
+    jdbc.update("update ranking set owner_user_id=? where id=?",nextOwner.id(),c.targetRank());
+    grant(c.targetRank(),c.owner(),"READ");
+    var denied=copyPreview(c.owner(),path+"/copy-apply",payload);
+    assertThat(denied.status()).isEqualTo(404);
+    assertThat(denied.body().required("code").asText()).isEqualTo("ranking.not_found");
+    assertThat(jdbc.queryForObject("select count(*) from ranking_rating_copy_receipt",Long.class)).isZero();
+
+    grant(c.targetRank(),c.owner(),"RATE_OWN");
+    assertThat(copyPreview(c.owner(),path+"/copy-apply",payload).status()).isEqualTo(201);
+    jdbc.update("update ranking set owner_user_id=? where id=?",nextOwner.id(),c.sourceRank());
+    assertThat(copyPreview(c.owner(),path+"/copy-apply",payload).body()).isEqualTo(denied.body());
+    grant(c.sourceRank(),c.owner(),"READ");
+    assertThat(copyPreview(c.owner(),path+"/copy-apply",payload).status()).isEqualTo(201);
+    jdbc.update("update ranking_membership set active=false where ranking_id=? and user_id=?",c.targetRank(),c.owner().id());
+    assertThat(copyPreview(c.owner(),path+"/copy-apply",payload).body()).isEqualTo(denied.body());
+    assertThat(jdbc.queryForObject("select count(*) from ranking_rating_copy_receipt",Long.class)).isEqualTo(1);
+  }
+
+  private record ApplyCopyFixture(Account owner,UUID sourceRank,UUID sourceEntry,UUID sourceRound,UUID targetRank,
+      UUID targetEntry,UUID targetRound) {
+    String targetPath(){return "/"+targetRank+"/entries/"+targetEntry+"/rounds/"+targetRound+"/rating/me";}
+  }
+
+  private ApplyCopyFixture seedCopyApply() throws Exception {
+    var owner=user(false);
+    UUID source=ranking(owner,"PRIVATE"),target=ranking(owner,"PRIVATE"),from=seedRevealEntry(source),to=UUID.randomUUID();
+    jdbc.update("""
+        insert into ranking_movie_entry(ranking_id,entry_id,movie_id,created_at)
+        select ?,?,movie_id,now() from ranking_movie_entry where ranking_id=? and entry_id=?
+        """,target,to,source,from);
+    UUID fromRound=seedRound(source,from,1,false,4000),toRound=seedRound(target,to,1,false,4000);
+    var fromAuthor=seedAuthor(source,owner.id());
+    jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",
+        source,fromRound,fromAuthor,0);
+    return new ApplyCopyFixture(owner,source,from,fromRound,target,to,toRound);
+  }
+
+  private String issueCopyToken(ApplyCopyFixture c,String target) throws Exception {
+    var source=JSON.createObjectNode().put("ranking_id",c.sourceRank().toString()).put("entry_id",c.sourceEntry().toString())
+        .put("round_id",c.sourceRound().toString());
+    var preview=copyPreview(c.owner(),target+"/copy-preview",JSON.createObjectNode().set("source",source));
+    assertThat(preview.status()).isEqualTo(200);
+    assertThat(preview.body().required("status").asText()).isEqualTo("READY");
+    return preview.body().required("preview_token").asText();
   }
 
   private List<String> copyAffectedRows() {

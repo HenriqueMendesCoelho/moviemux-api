@@ -1,27 +1,32 @@
 package com.moviemux.rankingcontent.adapter.security;
 
+import com.moviemux.rankingcontent.domain.exception.InvalidRatingCopyException;
 import com.moviemux.rankingcontent.domain.exception.RatingCopyUnavailableException;
 import com.moviemux.rankingcontent.domain.model.IssuedRatingCopyPreview;
+import com.moviemux.rankingcontent.domain.model.OpenedRatingCopyPreview;
 import com.moviemux.rankingcontent.domain.model.RatingCopyContext;
 import com.moviemux.rankingcontent.domain.model.RatingCopyPair;
 import com.moviemux.rankingcontent.domain.model.RatingCopySourceVersion;
+import com.moviemux.rankingcontent.domain.port.OpenOwnRatingCopyPreview;
 import com.moviemux.rankingcontent.domain.port.SealOwnRatingCopyPreview;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Objects;
 import java.util.UUID;
+import javax.crypto.AEADBadTagException;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-/** Issues confidential V1 previews only. No apply or replay decoding is exposed by this checkpoint. */
-public final class AesGcmRatingCopyPreviewSealer implements SealOwnRatingCopyPreview {
+/** Seals and authenticates confidential V1 previews. A decrypted token is not storage authorization. */
+public final class AesGcmRatingCopyPreviewSealer implements SealOwnRatingCopyPreview, OpenOwnRatingCopyPreview {
   private static final byte VERSION = 1;
   private static final byte[] PURPOSE = "moviemux:own-ranking-rating-copy-preview".getBytes(StandardCharsets.US_ASCII);
   private static final int NONCE_BYTES = 12;
@@ -72,6 +77,53 @@ public final class AesGcmRatingCopyPreviewSealer implements SealOwnRatingCopyPre
     } finally {
       Arrays.fill(payload.array(),(byte)0);
     }
+  }
+
+  @Override public OpenedRatingCopyPreview open(String token) {
+    if (token==null || !token.matches("[A-Za-z0-9_-]{264}")) throw new InvalidRatingCopyException();
+    byte[] envelope=Base64.getUrlDecoder().decode(token);
+    if (envelope.length!=1+NONCE_BYTES+PAYLOAD_BYTES+16 || envelope[0]!=VERSION) throw new InvalidRatingCopyException();
+    requireConfigured();
+    byte[] raw=null;
+    try {
+      Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
+      cipher.init(Cipher.DECRYPT_MODE,key,new GCMParameterSpec(128,envelope,1,NONCE_BYTES));
+      cipher.updateAAD(PURPOSE);
+      cipher.updateAAD(new byte[]{VERSION});
+      raw=cipher.doFinal(envelope,1+NONCE_BYTES,envelope.length-1-NONCE_BYTES);
+      if (raw.length!=PAYLOAD_BYTES) throw new InvalidRatingCopyException();
+      var payload=ByteBuffer.wrap(raw);
+      UUID operation=readId(payload),actor=readId(payload);
+      var pair=new RatingCopyPair(readContext(payload),readContext(payload));
+      Instant expires=readTime(payload);
+      int score=payload.getInt();
+      Instant created=readTime(payload);
+      byte updatedTag=payload.get();
+      Instant updated=readTime(payload);
+      if (score<0 || score>10 || (updatedTag!=0 && updatedTag!=1)
+          || (updatedTag==0 && !Instant.EPOCH.equals(updated))) throw new InvalidRatingCopyException();
+      return new OpenedRatingCopyPreview(operation,actor,pair,expires,
+          new RatingCopySourceVersion(score,created,updatedTag==0?null:updated));
+    } catch (AEADBadTagException | DateTimeException invalid) {
+      throw new InvalidRatingCopyException();
+    } catch (GeneralSecurityException unavailable) {
+      throw new RatingCopyUnavailableException();
+    } finally {
+      if(raw!=null) Arrays.fill(raw,(byte)0);
+    }
+  }
+
+  private static UUID readId(ByteBuffer source) { return new UUID(source.getLong(),source.getLong()); }
+
+  private static RatingCopyContext readContext(ByteBuffer source) {
+    return new RatingCopyContext(readId(source),readId(source),readId(source));
+  }
+
+  private static Instant readTime(ByteBuffer source) {
+    long seconds=source.getLong();
+    int nanos=source.getInt();
+    if(nanos<0 || nanos>=1_000_000_000) throw new InvalidRatingCopyException();
+    return Instant.ofEpochSecond(seconds,nanos);
   }
 
   private static void putContext(ByteBuffer target, RatingCopyContext context) {
