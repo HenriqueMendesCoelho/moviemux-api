@@ -492,6 +492,26 @@ for actual ownership. This proof does not appear in creation, directory or
 public summaries. A copied link is only a reference to the neutral join page;
 visiting it does not join or reveal private content.
 
+### Reload-safe recovery for removed entries
+
+Use `GET /movies/collections/{rankingId}/entries/recovery?limit=20` with an
+optional exclusive `after` entry UUID (maximum page size 50). The matching
+`/rankings` alias uses the same handler. It lists only currently recoverable
+rows for a member with the actual restore right: owner, remove-any, or remove-own
+for that entry's original contextual author. Rows include `entry_id`, nullable
+`title`, UTC `removed_at` and `expires_at`, and the opaque decimal-string
+`version`; no removal token, author, rounds or votes. A title is visible only
+with current READ or ownership. At or after the 24-hour deadline, the row
+does not appear in this read-only page.
+
+After reload, explicitly `POST /movies/collections/{rankingId}/entries/{entryId}/restore-current`
+with only `{"expected_version":"…"}` from this exact pending removal. Success
+returns `entry_id` and the new string `version`. A concurrent restore or
+re-removal makes the old version stale. Restore rechecks current authorization
+and the exact deadline under lock, and preserves history. The original
+`/restore` token endpoint and response remain unchanged. These routes are
+private and no-store; archive stays read-only, with no purge or rollout.
+
 ### Collection visibility settings
 
 Only the current enabled, active owner of a live collection can access
