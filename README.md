@@ -280,6 +280,31 @@ rows remain untouched. There is no consumer cutover, account deletion/recovery
 flow, production authorization or guarantee of lossless rollback after new
 contextual writes. Tests use only synthetic disposable PostgreSQL schemas.
 
+V17 installs a durable instance-specific legacy-board interlock in `LEGACY`
+mode. Installing or starting the app does not fence traffic or copy history.
+The existing offline Java primitive also accepts the verified runtime database
+login inventory. A separately authorized operator uses `fence(ownerId, rankingId,
+maintenanceAcknowledged)`, then the final `preview` and `apply` of that exact
+plan. V17 `apply` revalidates the reservation, privileges and fingerprint before
+copying the initial private collection. The copied data, mapping, audited ledger
+and transition to `ACTIVE` commit atomically. Failed apply remains `FENCED`; it
+does not reopen the old board. Prior-version operator fixtures still use an
+explicit pre-V17 target, and an unreviewed preexisting ledger is not adopted.
+
+In either `FENCED` or `ACTIVE`, authenticated old board endpoints return
+`410 movie.legacy_board_retired` without serving frozen history or dispatching
+old actions. An unavailable authority fails closed with
+`503 movie.legacy_board_unavailable`; both are no-store. The independent genre
+reference, wishlist and Collection aliases are not retired by prefix. Database
+protection is additional to draining old pods, direct writers and queued
+effects. Runtime logins must not be owners or have credentials that can change
+phase or bypass guards; check the operator checklist before planning rollout.
+
+For old links, `GET /movies/collections/legacy-film-links/{legacyMovieId}` (or
+its `/rankings` alias) is an authenticated, pure lookup only in `ACTIVE` mode.
+It returns the exact current allowed `{ranking_id,entry_id}` or the same generic
+404, with no-store and no scores, reveal, fallback or automatic navigation.
+
 ### Contextual catalog browsing and existing-catalog inclusion
 
 Authenticated readers can use `GET /movies/collections/{rankingId}/entries?after={entryId}&limit=20`
@@ -290,6 +315,15 @@ Entry metadata has no ratings, authors, vote counts or aggregates. Round listing
 preserves nullable `revealed` as raw historical state and does not reveal votes or
 advance any timer. Invalid pages return400, inaccessible/missing scope404, and
 persistence failures generic500. No public/anonymous route is enabled.
+
+First use `POST /movies/collections/{rankingId}/entries/catalog/search`
+(or the exact `/rankings` alias) with `{query,page,language}` to search the
+instance's canonical catalog, including manual entries. It returns up to 20
+`{movie_id,title,release_date}` rows and `page,has_more`, no-store, after a
+current scoped ADD_ENTRY or ownership check. It uses literal matching and
+localized title fallback, without a provider call, visibility data or any
+mutation. TMDB search stays an explicit separate fallback, not an automatic
+import. Manual administration is separate from adding to a Collection.
 
 `POST /movies/collections/{rankingId}/entries/catalog` accepts only an authoritative
 `movie_id` referring to an existing global catalog record. Current ADD_ENTRY or

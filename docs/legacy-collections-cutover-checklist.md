@@ -13,6 +13,7 @@ and CI. Keep production snapshots in the owner's controlled infrastructure.
 | --- | --- |
 | Target | Confirm the expected environment, database, schema, PostgreSQL version and exact backend/gateway/frontend revisions out of band. Verify the runner is pointed only at that target, not the Coolify management database or another tenant. |
 | Credentials | Use controlled configuration/secret storage for the approved target. Do not put a JDBC password, connection string with credentials, dump, email list, or account roster in Git, command history, a chat message or the verification report. |
+| Runtime roles | In V17, inventory every prospective app/runtime PostgreSQL login, including jobs and direct writers. Use separate login identities for the application and Flyway/authorized operator. No runtime schema creation, ownership of the gated relations, phase/binding edits, role escalation or trigger bypass. Verify grants and actual effective credentials with a disposable topology; do not weaken privilege verification to use the owner as runtime. |
 | Owner | Confirm the intended existing MovieMux account inside the approved environment and supply its exact account UUID to the runner. Instance administrator status and display names are not substitutes. |
 | Destination | Generate one unused collection UUID and carry that exact value through preview, review and apply. Do not overwrite an existing collection or switch owners across attempts. |
 | Row bound | Set an explicit positive ceiling, at most 100,000 combined source users, eligible movies and ratings. If the snapshot exceeds the bound, design and rehearse a separate migration; do not bypass it. |
@@ -30,7 +31,11 @@ sensitive identifiers.
    or provider effects. Do not let a rehearsal share a live database, DNS route,
    session cookie, secret, or worker. Capture only the relevant version,
    validation and result codes.
-2. Preview with the approved owner, new collection UUID and row bound. The plan
+2. Rehearse the explicit offline V17 fence first, only after confirming every
+   incompatible writer and queued effect was drained. Verify legacy-board HTTP
+   returns no-store 410, runtime credentials cannot edit the phase or bypass it,
+   and the reserved UUID cannot appear before activation. Then preview with the
+   approved owner, new collection UUID and row bound. The plan
    records those identifiers, the users/movies/ratings counts and an
    algorithm-versioned source fingerprint; it does not emit the data rows.
    Confirm that contextual-only catalog movies do not enter the legacy source.
