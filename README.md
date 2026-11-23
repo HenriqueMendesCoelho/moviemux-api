@@ -374,3 +374,28 @@ historical backfill. Integration remains gated on those policies and current
 account authorization. Progression never grants ranking permissions or changes
 movie rating averages. No public visibility or cross-installation account link
 is introduced by this foundation.
+
+### Ranking directory and creation
+
+Authenticated `GET /rankings?after=<ranking UUID>&limit=20` lists only rankings
+where the actor is the active owner or a current active member with `READ`.
+It returns `items` with `ranking_id`, `name`, `visibility`, `admission` and
+`capabilities`, plus nullable `next_cursor`. Unnamed historical rankings return
+an explicit null name; archived rankings are read-only. This no-store endpoint
+does not replace `GET /rankings/access` or expose a public directory.
+
+`POST /rankings` accepts only `name`, `visibility` (`PUBLIC` or `PRIVATE`) and
+`admission` (`OPEN`, `APPROVAL` or `INVITATION`). It creates a ranking and
+the authenticated owner's active membership atomically, returns the same summary
+with HTTP 201, and does not perform invitations, public reads, XP or legacy edits.
+Admission settings are stored independently of visibility; joining is not
+introduced by this slice.
+
+Creation fails closed (`503 ranking.creation_unavailable`) without both
+`ranking.creation.max-owned` (positive integer) and
+`ranking.creation.include-archived` (explicit boolean). There are no production
+defaults. Quotas apply per owner within the installation, returning
+`409 ranking.creation_limit_reached` if exhausted. Commands that introduce a new
+owner or change quota eligibility in future must coordinate with this quota
+invariant before activation. Offline legacy backfill is a separate, explicitly
+maintained operation and creates no artificial historical names.
