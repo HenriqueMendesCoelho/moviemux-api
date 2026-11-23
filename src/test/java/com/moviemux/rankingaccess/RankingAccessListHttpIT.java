@@ -70,6 +70,8 @@ class RankingAccessListHttpIT {
       statement.execute("create schema " + SCHEMA);
       ownsSchema = true;
     }
+    properties.add("ranking.creation.max-owned", () -> "1");
+    properties.add("ranking.creation.include-archived", () -> "true");
     properties.add("spring.datasource.url", () -> databaseUrl);
     properties.add("spring.datasource.hikari.schema", () -> SCHEMA);
     properties.add("spring.flyway.default-schema", () -> SCHEMA);
@@ -235,6 +237,72 @@ class RankingAccessListHttpIT {
     assertThat(list(owner, "?limit=100").body().required("items").size()).isEqualTo(1);
     assertEmpty(list(owner, "?after=" + id));
     assertThat(request("/rankings/access", null, Map.of()).status()).isIn(401, 403);
+  }
+
+  @Test void directoryCreatesAtomicallyAndEnforcesConcurrentOwnerQuota() throws Exception {
+    var owner = user(false);
+    var other = user(true);
+    var json = """
+        {"name":"  Cinema com amigos  ","visibility":"PRIVATE","admission":"INVITATION"}
+        """;
+    var first = http.sendAsync(createRequest(owner, json), HttpResponse.BodyHandlers.ofString());
+    var second = http.sendAsync(createRequest(owner, json), HttpResponse.BodyHandlers.ofString());
+    var responses = List.of(first.get(15, java.util.concurrent.TimeUnit.SECONDS),
+        second.get(15, java.util.concurrent.TimeUnit.SECONDS));
+    assertThat(responses.stream().map(HttpResponse::statusCode).toList()).containsExactlyInAnyOrder(201, 409);
+    var created = JSON.readTree(responses.stream().filter(r -> r.statusCode() == 201).findFirst().orElseThrow().body());
+    var conflict = JSON.readTree(responses.stream().filter(r -> r.statusCode() == 409).findFirst().orElseThrow().body());
+    assertThat(conflict.required("code").asText()).isEqualTo("ranking.creation_limit_reached");
+    assertThat(fields(created)).containsExactlyInAnyOrder("ranking_id", "name", "visibility", "admission", "capabilities");
+    assertThat(created.required("name").asText()).isEqualTo("Cinema com amigos");
+    assertThat(created.required("capabilities").size()).isEqualTo(RankingCapability.values().length);
+    UUID id = UUID.fromString(created.required("ranking_id").asText());
+    assertThat(jdbc.queryForObject("select count(*) from ranking where id=? and owner_user_id=?", Long.class, id, owner.id())).isEqualTo(1L);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_membership where ranking_id=? and user_id=? and active",
+        Long.class, id, owner.id())).isEqualTo(1L);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_membership_grant where ranking_id=?",
+        Long.class, id)).isZero();
+
+    var mine = request("/rankings", owner.token(), Map.of());
+    assertThat(mine.status()).isEqualTo(200);
+    assertThat(mine.headers().firstValue("Cache-Control")).hasValueSatisfying(v -> assertThat(v).contains("no-store"));
+    assertThat(mine.body().required("items").get(0)).isEqualTo(created);
+    assertThat(mine.body().required("next_cursor").isNull()).isTrue();
+    assertEmpty(request("/rankings", other.token(), Map.of()));
+    jdbc.update("update ranking set archived_at=now() where id=?", id);
+    assertThat(http.send(createRequest(owner, json), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(409);
+    assertThat(http.send(createRequest(other, json), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(201);
+  }
+
+  @Test void directoryRejectsForgedFieldsAndDoesNotDiscloseRevokedNames() throws Exception {
+    var owner = user(false);
+    var member = user(false);
+    var id = ranking(owner, "PUBLIC");
+    membership(id, member, "READ", "ADD_ENTRY");
+    var read = request("/rankings", member.token(), Map.of());
+    assertThat(read.body().at("/items/0").required("name").isNull()).isTrue();
+    jdbc.update("update ranking set name='Private context for members',archived_at=now() where id=?", id);
+    read = request("/rankings", member.token(), Map.of());
+    assertThat(read.body().at("/items/0/name").asText()).isEqualTo("Private context for members");
+    assertThat(read.body().at("/items/0/capabilities/0").asText()).isEqualTo("READ");
+    assertThat(read.body().at("/items/0/capabilities").size()).isEqualTo(1);
+    jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='READ'", id, member.id());
+    assertEmpty(request("/rankings", member.token(), Map.of()));
+    assertThat(request("/rankings", null, Map.of()).status()).isIn(401, 403);
+    assertThat(request("/rankings?after=wrong", owner.token(), Map.of()).body().required("code").asText())
+        .isEqualTo("ranking.invalid_page");
+
+    var bad = http.send(createRequest(owner, """
+        {"name":"ignored","visibility":"PRIVATE","admission":"INVITATION","owner_user_id":"forged"}
+        """), HttpResponse.BodyHandlers.ofString());
+    assertThat(bad.statusCode()).isEqualTo(400);
+    assertThat(JSON.readTree(bad.body()).required("code").asText()).isEqualTo("ranking.invalid_creation");
+  }
+
+  private HttpRequest createRequest(Account actor, String json) {
+    return HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/monolith/rankings"))
+        .timeout(Duration.ofSeconds(10)).header("Authorization", "Bearer " + actor.token())
+        .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json)).build();
   }
 
   private ApiResponse list(Account actor, String query) throws Exception {
