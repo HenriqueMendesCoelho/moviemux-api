@@ -457,6 +457,30 @@ returns `400 ranking.invalid_join`; authentication still uses the existing
 boundary. There is no automatic join on read, external message, invitation,
 activity or XP. `APPROVAL` and `INVITATION` cannot be bypassed here.
 
+### Read-only own rating copy preview
+
+`POST /rankings/{rankingId}/entries/{entryId}/rounds/{roundId}/rating/me/copy-preview`
+accepts exactly `{"source":{"ranking_id":"…","entry_id":"…","round_id":"…"}}`.
+It evaluates the same canonical movie in two separate live rankings, with exact
+entry/round IDs. The signed-in actor needs source READ and destination READ
+plus RATE_OWN (active ownership also qualifies). The preview can read only the
+actor's own source vote, never peer ratings, even when that source round is
+unrevealed.
+
+The no-store response has `status`, `source_score`, `preview_token` and
+`expires_at`. Only `READY` includes score, opaque token and expiry.
+`SOURCE_INELIGIBLE` and `DESTINATION_EXISTS` leave those fields null.
+Missing/unavailable scopes and mismatched canonical films use the same
+generic 404. Historical null/out-of-range sources are not copied, and even a
+historical null destination record blocks copy. Preview changes nothing.
+
+Set the dedicated `ranking.rating-copy.preview-key` to a Base64 encoding of a
+32-byte key distinct from auth/invitation keys and explicitly set
+`ranking.rating-copy.preview-ttl-seconds` between 1 and 3600 (e.g. 600 in
+disposable QA). Without both settings the configured operation fails closed
+after scope authorization. No apply route, copy writes, history/XP effects,
+or release activation are included in this checkpoint.
+
 ### Canonical movie catalog versus legacy board
 
 The shared `movie` table retains canonical movie identity. V12 adds immutable
