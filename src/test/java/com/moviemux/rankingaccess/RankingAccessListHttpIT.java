@@ -1358,20 +1358,20 @@ class RankingAccessListHttpIT {
     UUID command=UUID.randomUUID();
     var payload=roundCommand(command,"  Reassistindo com o pessoal\u2003");
     var recorded=roundCommand(command,"Reassistindo com o pessoal");
-    var disabled=roundAction(owner,"POST",rounds,payload);
+    var disabled=rankingJsonAction(owner,"POST",rounds,payload);
     assertThat(disabled.status()).isEqualTo(409);
     assertThat(disabled.body().required("code").asText()).isEqualTo("ranking.repeat_rounds_disabled");
     assertThat(request(settings,delegate.token(),Map.of()).status()).isEqualTo(404);
-    assertThat(roundAction(delegate,"PUT",settings,JSON.createObjectNode().put("repeat_enabled",true)).status()).isEqualTo(404);
-    assertThat(roundAction(owner,"PUT",settings,JSON.createObjectNode().put("repeat_enabled","on")).status()).isEqualTo(400);
-    assertThat(roundAction(owner,"PUT",settings,JSON.createObjectNode().put("repeat_enabled",true)).body()
+    assertThat(rankingJsonAction(delegate,"PUT",settings,JSON.createObjectNode().put("repeat_enabled",true)).status()).isEqualTo(404);
+    assertThat(rankingJsonAction(owner,"PUT",settings,JSON.createObjectNode().put("repeat_enabled","on")).status()).isEqualTo(400);
+    assertThat(rankingJsonAction(owner,"PUT",settings,JSON.createObjectNode().put("repeat_enabled",true)).body()
         .required("repeat_enabled").asBoolean()).isTrue();
-    assertThat(roundAction(delegate,"POST",rounds,payload).status()).isEqualTo(404);
-    assertThat(roundAction(owner,"POST","/rankings/"+rank+"/entries/"+foreign+"/rounds",payload).status()).isEqualTo(404);
-    assertThat(roundAction(owner,"POST",rounds,roundCommand(command,"🎬".repeat(241))).status()).isEqualTo(400);
-    assertThat(roundAction(owner,"POST",rounds+"?simulate=1",payload).status()).isEqualTo(400);
+    assertThat(rankingJsonAction(delegate,"POST",rounds,payload).status()).isEqualTo(404);
+    assertThat(rankingJsonAction(owner,"POST","/rankings/"+rank+"/entries/"+foreign+"/rounds",payload).status()).isEqualTo(404);
+    assertThat(rankingJsonAction(owner,"POST",rounds,roundCommand(command,"🎬".repeat(241))).status()).isEqualTo(400);
+    assertThat(rankingJsonAction(owner,"POST",rounds+"?simulate=1",payload).status()).isEqualTo(400);
 
-    var created=roundAction(owner,"POST",rounds,payload);
+    var created=rankingJsonAction(owner,"POST",rounds,payload);
     assertThat(created.status()).isEqualTo(201);
     assertThat(created.headers().firstValue("Cache-Control")).hasValue("no-store");
     assertThat(fields(created.body())).containsExactlyInAnyOrder("round_id","round_number");
@@ -1385,10 +1385,10 @@ class RankingAccessListHttpIT {
         .containsEntry("revealed",false).containsEntry("fresh",true).containsEntry("creation_author_id",author);
     assertThat(jdbc.queryForObject("select count(*) from ranking_movie_rating where ranking_id=? and round_id=?",
         Long.class,rank,second)).isZero();
-    var replay=roundAction(owner,"POST",rounds,recorded);
+    var replay=rankingJsonAction(owner,"POST",rounds,recorded);
     assertThat(replay.status()).isEqualTo(200);
     assertThat(replay.body()).isEqualTo(created.body());
-    var conflict=roundAction(owner,"POST",rounds,roundCommand(command,"Different"));
+    var conflict=rankingJsonAction(owner,"POST",rounds,roundCommand(command,"Different"));
     assertThat(conflict.status()).isEqualTo(409);
     assertThat(conflict.body().required("code").asText()).isEqualTo("ranking.round_command_conflict");
 
@@ -1396,20 +1396,20 @@ class RankingAccessListHttpIT {
     assertThat(TMDB_CALLS.get()).isZero();
     assertThat(jdbc.queryForList("select round_number from ranking_movie_round where ranking_id=? and entry_id=? order by round_number",
         Long.class,rank,entry)).containsExactly(1L,2L);
-    assertThat(roundAction(owner,"PUT",settings,JSON.createObjectNode().put("repeat_enabled",false)).body()
+    assertThat(rankingJsonAction(owner,"PUT",settings,JSON.createObjectNode().put("repeat_enabled",false)).body()
         .required("repeat_enabled").asBoolean()).isFalse();
-    assertThat(roundAction(owner,"POST",rounds,recorded).body()).isEqualTo(created.body());
-    assertThat(roundAction(owner,"POST",rounds,roundCommand(UUID.randomUUID(),null)).body().required("code").asText())
+    assertThat(rankingJsonAction(owner,"POST",rounds,recorded).body()).isEqualTo(created.body());
+    assertThat(rankingJsonAction(owner,"POST",rounds,roundCommand(UUID.randomUUID(),null)).body().required("code").asText())
         .isEqualTo("ranking.repeat_rounds_disabled");
 
     // Direct fixture ownership mutation only; this patch has no transfer endpoint.
     jdbc.update("update ranking set owner_user_id=? where id=?",delegate.id(),rank);
-    assertThat(roundAction(owner,"POST",rounds,recorded).status()).isEqualTo(404);
-    assertThat(roundAction(delegate,"POST",rounds,recorded).body().required("code").asText())
+    assertThat(rankingJsonAction(owner,"POST",rounds,recorded).status()).isEqualTo(404);
+    assertThat(rankingJsonAction(delegate,"POST",rounds,recorded).body().required("code").asText())
         .isEqualTo("ranking.round_command_conflict");
     jdbc.update("update ranking_movie_entry set removed_at=now(),removal_token=? where ranking_id=? and entry_id=?",
         UUID.randomUUID(),rank,entry);
-    assertThat(roundAction(delegate,"POST",rounds,recorded).status()).isEqualTo(404);
+    assertThat(rankingJsonAction(delegate,"POST",rounds,recorded).status()).isEqualTo(404);
     jdbc.update("update ranking set archived_at=now() where id=?",rank);
     assertThat(request(settings,delegate.token(),Map.of()).status()).isEqualTo(404);
     assertThat(jdbc.queryForObject("select row_to_json(t)::text from ranking_movie_round t where ranking_id=? and round_id=?",
@@ -1424,17 +1424,17 @@ class RankingAccessListHttpIT {
     seedRound(rank,entry,1,false,3000);
     String settings="/rankings/"+rank+"/settings/rounds";
     String path="/rankings/"+rank+"/entries/"+entry+"/rounds";
-    assertThat(roundAction(owner,"PUT",settings,JSON.createObjectNode().put("repeat_enabled",true)).status()).isEqualTo(200);
+    assertThat(rankingJsonAction(owner,"PUT",settings,JSON.createObjectNode().put("repeat_enabled",true)).status()).isEqualTo(200);
     var body=roundCommand(UUID.randomUUID(),null);
-    var first=http.sendAsync(roundHttp(owner,"POST",path,body),HttpResponse.BodyHandlers.ofString());
-    var second=http.sendAsync(roundHttp(owner,"POST",path,body),HttpResponse.BodyHandlers.ofString());
+    var first=http.sendAsync(rankingJsonRequest(owner,"POST",path,body),HttpResponse.BodyHandlers.ofString());
+    var second=http.sendAsync(rankingJsonRequest(owner,"POST",path,body),HttpResponse.BodyHandlers.ofString());
     var repeated=List.of(response(first.get(15,java.util.concurrent.TimeUnit.SECONDS)),
         response(second.get(15,java.util.concurrent.TimeUnit.SECONDS)));
     assertThat(repeated.stream().map(ApiResponse::status).toList()).containsExactlyInAnyOrder(201,200);
     assertThat(repeated.get(0).body()).isEqualTo(repeated.get(1).body());
 
     var commands=new ArrayList<java.util.concurrent.CompletableFuture<HttpResponse<String>>>();
-    for(int i=0;i<4;i++) commands.add(http.sendAsync(roundHttp(owner,"POST",path,roundCommand(UUID.randomUUID(),null)),
+    for(int i=0;i<4;i++) commands.add(http.sendAsync(rankingJsonRequest(owner,"POST",path,roundCommand(UUID.randomUUID(),null)),
         HttpResponse.BodyHandlers.ofString()));
     var assigned=new ArrayList<Long>();
     for(var call:commands) {
@@ -1454,18 +1454,9 @@ class RankingAccessListHttpIT {
       try(var update=holder.prepareStatement("update "+table("ranking")+" set repeat_rounds_enabled=false where id=?")) {
         update.setObject(1,rank); assertThat(update.executeUpdate()).isEqualTo(1);
       }
-      late=http.sendAsync(roundHttp(owner,"POST",path,roundCommand(UUID.randomUUID(),null)),
+      late=http.sendAsync(rankingJsonRequest(owner,"POST",path,roundCommand(UUID.randomUUID(),null)),
           HttpResponse.BodyHandlers.ofString());
-      boolean waiting=false;
-      long deadline=System.nanoTime()+Duration.ofSeconds(5).toNanos();
-      while(System.nanoTime()<deadline) {
-        waiting=Boolean.TRUE.equals(jdbc.queryForObject("""
-            select exists(select 1 from pg_stat_activity a where ?=any(pg_blocking_pids(a.pid)))
-            """,Boolean.class,pid));
-        if(waiting) break;
-        Thread.sleep(20);
-      }
-      assertThat(waiting).isTrue();
+      awaitDatabaseWaitOn(pid);
       holder.commit();
     }
     var denied=response(late.get(15,java.util.concurrent.TimeUnit.SECONDS));
@@ -1483,7 +1474,7 @@ class RankingAccessListHttpIT {
     seedRound(rank,entry,1,false,3000);
     String settings="/rankings/"+rank+"/settings/rounds";
     String path="/rankings/"+rank+"/entries/"+entry+"/rounds";
-    assertThat(roundAction(owner,"PUT",settings,JSON.createObjectNode().put("repeat_enabled",true)).status()).isEqualTo(200);
+    assertThat(rankingJsonAction(owner,"PUT",settings,JSON.createObjectNode().put("repeat_enabled",true)).status()).isEqualTo(200);
     UUID command=UUID.randomUUID();
     jdbc.execute("""
         create function reject_synthetic_repeat() returns trigger language plpgsql as $$
@@ -1495,7 +1486,7 @@ class RankingAccessListHttpIT {
         for each row when (new.creation_command_id is not null) execute function reject_synthetic_repeat()
         """);
     try {
-      var failed=roundAction(owner,"POST",path,roundCommand(command,null));
+      var failed=rankingJsonAction(owner,"POST",path,roundCommand(command,null));
       assertThat(failed.status()).isEqualTo(500);
       assertThat(failed.headers().firstValue("Cache-Control")).hasValue("no-store");
       assertThat(failed.body().required("code").asText()).isEqualTo("ranking.operation_failed");
@@ -1507,7 +1498,7 @@ class RankingAccessListHttpIT {
       jdbc.execute("drop trigger reject_synthetic_repeat on ranking_movie_round");
       jdbc.execute("drop function reject_synthetic_repeat()");
     }
-    assertThat(roundAction(owner,"POST",path,roundCommand(command,null)).status()).isEqualTo(201);
+    assertThat(rankingJsonAction(owner,"POST",path,roundCommand(command,null)).status()).isEqualTo(201);
   }
 
   private JsonNode roundCommand(UUID command,String description) {
@@ -1516,14 +1507,165 @@ class RankingAccessListHttpIT {
     return json;
   }
 
-  private HttpRequest roundHttp(Account actor,String method,String path,JsonNode body) {
+  private HttpRequest rankingJsonRequest(Account actor,String method,String path,JsonNode body) {
     return HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith"+path))
         .timeout(Duration.ofSeconds(10)).header("Authorization","Bearer "+actor.token())
         .header("Content-Type","application/json").method(method,HttpRequest.BodyPublishers.ofString(body.toString())).build();
   }
 
-  private ApiResponse roundAction(Account actor,String method,String path,JsonNode body) throws Exception {
-    return response(http.send(roundHttp(actor,method,path,body),HttpResponse.BodyHandlers.ofString()));
+  private ApiResponse rankingJsonAction(Account actor,String method,String path,JsonNode body) throws Exception {
+    return response(http.send(rankingJsonRequest(actor,method,path,body),HttpResponse.BodyHandlers.ofString()));
+  }
+
+  @Test void ownerVisibilityChangeIsExplicitAndRevokesOnlyThePublicProjection() throws Exception {
+    var owner=user(false);
+    var delegate=user(false);
+    var outsider=user(true);
+    UUID rank=ranking(owner,"PRIVATE");
+    membership(rank,delegate,java.util.Arrays.stream(RankingCapability.values()).map(Enum::name).toArray(String[]::new));
+    UUID entry=seedRevealEntry(rank),shown=seedRound(rank,entry,1,true,5000),
+        hidden=seedRound(rank,entry,2,false,5000),author=seedAuthor(rank,owner.id());
+    jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",
+        rank,shown,author,7);
+    jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",
+        rank,hidden,author,9);
+    String recipient=rotateInvitationAddress(outsider);
+    assertThat(inviteRequest(owner,"POST",rank,"",recipient).statusCode()).isEqualTo(201);
+    var invites=jdbc.queryForList("select row_to_json(t)::text from ranking_invitation t where ranking_id=?",
+        String.class,rank);
+    var before=copyAffectedRows();
+    String path="/rankings/"+rank+"/settings/visibility";
+    String shared="/public/rankings/"+rank;
+    var publicValue=JSON.createObjectNode().put("visibility","PUBLIC");
+    var privateValue=JSON.createObjectNode().put("visibility","PRIVATE");
+    var hiddenView=request(shared,null,Map.of());
+    assertThat(hiddenView.status()).isEqualTo(404);
+    assertThat(request(path,owner.token(),Map.of()).body()).isEqualTo(privateValue);
+    for (Account withNoOwnership:List.of(delegate,outsider)) {
+      assertThat(request(path,withNoOwnership.token(),Map.of()).body()).isEqualTo(hiddenView.body());
+      assertThat(rankingJsonAction(withNoOwnership,"PUT",path,publicValue).body()).isEqualTo(hiddenView.body());
+    }
+    var invalid=rankingJsonAction(owner,"PUT",path,publicValue.deepCopy().put("admission","OPEN"));
+    assertThat(invalid.status()).isEqualTo(400);
+    assertThat(invalid.body().required("code").asText()).isEqualTo("ranking.invalid_visibility_settings");
+    assertThat(copyAffectedRows()).isEqualTo(before);
+
+    var madePublic=rankingJsonAction(owner,"PUT",path,publicValue);
+    assertThat(madePublic.status()).isEqualTo(200);
+    assertThat(madePublic.body()).isEqualTo(publicValue);
+    assertThat(madePublic.headers().firstValue("Cache-Control")).hasValue("no-store");
+    var exposed=request(shared+"/entries",null,Map.of());
+    assertThat(exposed.status()).isEqualTo(200);
+    assertThat(exposed.body().at("/items/0/total").asInt()).isEqualTo(7);
+    assertThat(exposed.body().at("/items/0/votes").asInt()).isEqualTo(1);
+    assertThat(request("/rankings/"+rank,delegate.token(),Map.of()).body().required("admission").asText())
+        .isEqualTo("INVITATION");
+    String version=jdbc.queryForObject("select xmin::text from ranking where id=?",String.class,rank);
+    assertThat(rankingJsonAction(owner,"PUT",path,publicValue).body()).isEqualTo(publicValue);
+    assertThat(jdbc.queryForObject("select xmin::text from ranking where id=?",String.class,rank)).isEqualTo(version);
+
+    assertThat(rankingJsonAction(owner,"PUT",path,privateValue).status()).isEqualTo(200);
+    for (String endpoint:List.of(shared,shared+"/entries")) {
+      var revoked=request(endpoint,null,Map.of());
+      assertThat(revoked.status()).isEqualTo(404);
+      assertThat(revoked.body()).isEqualTo(hiddenView.body());
+      assertThat(revoked.headers().firstValue("Cache-Control")).hasValue("no-store");
+    }
+    assertThat(copyAffectedRows()).isEqualTo(before);
+    assertThat(jdbc.queryForList("select row_to_json(t)::text from ranking_invitation t where ranking_id=?",
+        String.class,rank)).isEqualTo(invites);
+    jdbc.update("update ranking set archived_at=now() where id=?",rank);
+    assertThat(request(path,owner.token(),Map.of()).status()).isEqualTo(404);
+    assertThat(rankingJsonAction(owner,"PUT",path,publicValue).status()).isEqualTo(404);
+  }
+
+  @Test void visibilityWriteWaitingOnOwnershipChangeRechecksAuthorityBeforeMutation() throws Exception {
+    var oldOwner=user(false);
+    var newOwner=user(false);
+    UUID rank=ranking(oldOwner,"PRIVATE");
+    membership(rank,newOwner,"READ","RATE_OWN");
+    String path="/rankings/"+rank+"/settings/visibility";
+    var publicValue=JSON.createObjectNode().put("visibility","PUBLIC");
+    java.util.concurrent.CompletableFuture<HttpResponse<String>> late;
+    try(var holder=dataSource.getConnection()) {
+      holder.setAutoCommit(false);
+      int pid;
+      try(var sql=holder.createStatement();var row=sql.executeQuery("select pg_backend_pid()")) {
+        row.next(); pid=row.getInt(1);
+      }
+      try(var change=holder.prepareStatement("update "+table("ranking")+" set owner_user_id=? where id=?")) {
+        change.setObject(1,newOwner.id()); change.setObject(2,rank);
+        assertThat(change.executeUpdate()).isEqualTo(1);
+      }
+      late=http.sendAsync(rankingJsonRequest(oldOwner,"PUT",path,publicValue),HttpResponse.BodyHandlers.ofString());
+      awaitDatabaseWaitOn(pid);
+      holder.commit();
+    }
+    assertThat(response(late.get(15,java.util.concurrent.TimeUnit.SECONDS)).status()).isEqualTo(404);
+    assertThat(request("/public/rankings/"+rank,null,Map.of()).status()).isEqualTo(404);
+    assertThat(rankingJsonAction(newOwner,"PUT",path,publicValue).status()).isEqualTo(200);
+    assertThat(request("/public/rankings/"+rank,null,Map.of()).status()).isEqualTo(200);
+  }
+
+  @Test void publicVisibilityReadsUseCommittedStateAndFailedPrivatizationRollsBack() throws Exception {
+    var owner=user(false);
+    UUID rank=ranking(owner,"PUBLIC");
+    String shared="/public/rankings/"+rank;
+    String settings="/rankings/"+rank+"/settings/visibility";
+    var privateValue=JSON.createObjectNode().put("visibility","PRIVATE");
+    var original=request(shared,null,Map.of());
+    assertThat(original.status()).isEqualTo(200);
+    try(var held=dataSource.getConnection()) {
+      held.setAutoCommit(false);
+      try(var update=held.prepareStatement("update "+table("ranking")+" set visibility='PRIVATE' where id=?")) {
+        update.setObject(1,rank);
+        assertThat(update.executeUpdate()).isEqualTo(1);
+      }
+      // Anonymous read while the separate writer lock is held sees the last committed row.
+      var duringUncommitted=request(shared,null,Map.of());
+      assertThat(duringUncommitted.status()).isEqualTo(200);
+      assertThat(duringUncommitted.body()).isEqualTo(original.body());
+      held.rollback();
+    }
+
+    jdbc.execute("""
+        create function reject_synthetic_visibility() returns trigger language plpgsql as $$
+        begin
+          if old.visibility='PUBLIC' and new.visibility='PRIVATE' then
+            raise exception 'synthetic publication commit failed' using errcode='23514';
+          end if;
+          return new;
+        end;
+        $$
+        """);
+    jdbc.execute("""
+        create constraint trigger reject_synthetic_visibility after update on ranking
+        deferrable initially deferred for each row execute function reject_synthetic_visibility()
+        """);
+    try {
+      var failed=rankingJsonAction(owner,"PUT",settings,privateValue);
+      assertThat(failed.status()).isEqualTo(500);
+      assertThat(failed.headers().firstValue("Cache-Control")).hasValue("no-store");
+      assertThat(failed.body().required("code").asText()).isEqualTo("ranking.operation_failed");
+      assertThat(request(settings,owner.token(),Map.of()).body().required("visibility").asText()).isEqualTo("PUBLIC");
+      assertThat(request(shared,null,Map.of()).body()).isEqualTo(original.body());
+    } finally {
+      jdbc.execute("drop trigger reject_synthetic_visibility on ranking");
+      jdbc.execute("drop function reject_synthetic_visibility()");
+    }
+    assertThat(rankingJsonAction(owner,"PUT",settings,privateValue).status()).isEqualTo(200);
+    assertThat(request(shared,null,Map.of()).status()).isEqualTo(404);
+  }
+
+  private void awaitDatabaseWaitOn(int blocker) throws Exception {
+    long deadline=System.nanoTime()+Duration.ofSeconds(5).toNanos();
+    while (System.nanoTime()<deadline) {
+      if(Boolean.TRUE.equals(jdbc.queryForObject("""
+          select exists(select 1 from pg_stat_activity a where ?=any(pg_blocking_pids(a.pid)))
+          """,Boolean.class,blocker))) return;
+      Thread.sleep(20);
+    }
+    throw new AssertionError("The expected contender did not reach the database lock");
   }
 
   private UUID seedAuthor(UUID rank,UUID account) {
