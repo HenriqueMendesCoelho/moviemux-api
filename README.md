@@ -456,3 +456,19 @@ readers/replicas before introducing any context-only catalog row; an older
 binary does not have this filter. Do not roll back to an unfiltered binary
 while such rows remain present. Direct production catalog writes, backfill and
 cutover require separate operational verification.
+
+`POST /rankings/{rankingId}/entries/tmdb` is a private provider import, not a
+legacy writer. The body is only `tmdb_id` (positive JSON integer up to
+9,007,199,254,740,991) and success returns only `entry_id` (201 new entry; 200
+existing or restored). Canonical matches are reused without refreshing metadata.
+If absent, KIT is resolved outside write locks; ranking authority and deduplication
+are rechecked in the write transaction. New movies are contextual-only, and
+missing metadata may remain null. Existing legacy metadata requirements remain
+checked by the database.
+
+This operation is **disabled by default**, including the reuse path. Set
+`ranking.catalog.tmdb-import-enabled=true` only after all readers, writers,
+replicas and jobs are verified V12+ compatible and any old queues are drained.
+Turning the toggle off does not change already imported catalog data or make
+an older unfiltered binary safe. Neither import nor reuse emits legacy alerts,
+affects other rankings' scores, or awards XP.
