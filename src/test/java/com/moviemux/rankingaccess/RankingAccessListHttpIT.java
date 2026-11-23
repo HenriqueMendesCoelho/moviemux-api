@@ -1964,6 +1964,145 @@ class RankingAccessListHttpIT {
     throw new AssertionError("The expected contender did not reach the database lock");
   }
 
+  @Test void recoveryDirectoryFiltersOwnUnexpiredEntriesAndRedactsTitleWithoutRead() throws Exception {
+    var owner=user(false);
+    var original=user(false);
+    var delegated=user(false);
+    var reader=user(false);
+    var outsider=user(true);
+    UUID rank=ranking(owner,"PRIVATE"),foreignRank=ranking(owner,"PUBLIC");
+    membership(rank,original,"REMOVE_OWN_ENTRY");
+    membership(rank,delegated,"REMOVE_ENTRY");
+    membership(rank,reader,"READ");
+    UUID own=seedRevealEntry(rank),other=seedRevealEntry(rank),expired=seedRevealEntry(rank),
+        foreign=seedRevealEntry(foreignRank);
+    UUID author=seedAuthor(rank,original.id());
+    markRemoved(rank,own,author,41,10);
+    markRemoved(rank,other,null,17,20);
+    markRemoved(rank,expired,author,2,1440);
+    markRemoved(foreignRank,foreign,null,1,10);
+    jdbc.update("""
+        update movie set original_title='Original removed title',english_title='English fallback'
+        where id=(select movie_id from ranking_movie_entry where ranking_id=? and entry_id=?)
+        """,rank,own);
+    String canonical=COLLECTIONS+"/"+rank+"/entries",legacy=LEGACY_COLLECTIONS+"/"+rank+"/entries";
+    String directory=canonical+"/recovery";
+    var noRead=request(directory,original.token(),Map.of());
+    assertThat(noRead.status()).isEqualTo(200);
+    assertThat(noRead.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(fields(noRead.body())).containsExactlyInAnyOrder("items","next_cursor");
+    assertThat(noRead.body().required("items").size()).isEqualTo(1);
+    var ownRow=noRead.body().at("/items/0");
+    assertThat(fields(ownRow)).containsExactlyInAnyOrder("entry_id","title","removed_at","expires_at","version");
+    assertThat(ownRow.required("entry_id").asText()).isEqualTo(own.toString());
+    assertThat(ownRow.required("title").isNull()).isTrue();
+    assertThat(ownRow.required("version").asText()).isEqualTo("41");
+    assertThat(ownRow.required("version").isTextual()).isTrue();
+    var removed=java.time.Instant.parse(ownRow.required("removed_at").asText());
+    assertThat(java.time.Instant.parse(ownRow.required("expires_at").asText())).isEqualTo(removed.plusSeconds(86400));
+    assertSameNoStoreResponse(request(directory,delegated.token(),Map.of()),
+        request(legacy+"/recovery",delegated.token(),Map.of()),200);
+    var any=request(directory,delegated.token(),Map.of()).body().required("items");
+    assertThat(any.size()).isEqualTo(2);
+    assertThat(java.util.stream.StreamSupport.stream(any.spliterator(),false).allMatch(x->x.required("title").isNull())).isTrue();
+
+    grant(rank,original,"READ");
+    assertThat(request(directory,original.token(),Map.of()).body().at("/items/0/title").asText()).isEqualTo("Original removed title");
+    var ownerPage=request(directory+"?limit=1",owner.token(),Map.of()).body();
+    String cursor=ownerPage.required("next_cursor").asText();
+    assertThat(cursor).isEqualTo(ownerPage.at("/items/0/entry_id").asText());
+    var tail=request(directory+"?limit=1&after="+cursor,owner.token(),Map.of()).body();
+    assertThat(tail.required("items").size()).isEqualTo(1);
+    assertThat(tail.at("/items/0/entry_id").asText()).isNotEqualTo(cursor);
+    assertThat(tail.required("next_cursor").isNull()).isTrue();
+    var denied=request(directory,outsider.token(),Map.of());
+    assertThat(denied.status()).isEqualTo(404);
+    assertSameNoStoreResponse(request(directory,reader.token(),Map.of()),denied,404);
+    assertThat(request(directory,null,Map.of()).status()).isIn(401,403);
+    assertThat(request(directory+"?limit=51",owner.token(),Map.of()).status()).isEqualTo(400);
+
+    var wrong=rankingJsonAction(owner,"POST",canonical+"/"+foreign+"/restore-current",
+        JSON.createObjectNode().put("expected_version","1"));
+    assertSameNoStoreResponse(wrong,denied,404);
+    var tooLate=rankingJsonAction(original,"POST",canonical+"/"+expired+"/restore-current",
+        JSON.createObjectNode().put("expected_version","2"));
+    assertThat(tooLate.status()).isEqualTo(409);
+    assertThat(tooLate.body().required("code").asText()).isEqualTo("ranking.entry_recovery_expired");
+    jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='REMOVE_OWN_ENTRY'",
+        rank,original.id());
+    assertSameNoStoreResponse(request(directory,original.token(),Map.of()),denied,404);
+    jdbc.update("update ranking set archived_at=now() where id=?",rank);
+    assertThat(request(directory,owner.token(),Map.of()).body().required("code").asText()).isEqualTo("ranking.archived_read_only");
+    assertSameNoStoreResponse(request(directory,outsider.token(),Map.of()),denied,404);
+  }
+
+  @Test void versionedRestoreSurvivesReloadAndPreservesNotesWithAbaProtection() throws Exception {
+    var owner=user(false);
+    var contributor=user(false);
+    UUID rank=ranking(owner,"PRIVATE"),entry=seedRevealEntry(rank);
+    membership(rank,contributor,"REMOVE_OWN_ENTRY");
+    UUID author=seedAuthor(rank,contributor.id()), round=seedRound(rank,entry,1,true,4000);
+    jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",
+        rank,round,author,7);
+    markRemoved(rank,entry,author,8,5);
+    String canonical=COLLECTIONS+"/"+rank+"/entries";
+    String restore=canonical+"/"+entry+"/restore-current";
+    var reload=request(canonical+"/recovery",contributor.token(),Map.of()).body().at("/items/0");
+    assertThat(reload.required("title").isNull()).isTrue();
+    var version=JSON.createObjectNode().put("expected_version",reload.required("version").asText());
+    var restored=rankingJsonAction(contributor,"POST",restore,version);
+    assertThat(restored.status()).isEqualTo(200);
+    assertThat(restored.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(fields(restored.body())).containsExactlyInAnyOrder("entry_id","version");
+    assertThat(restored.body().required("version").asText()).isEqualTo("9");
+    assertThat(jdbc.queryForObject("select removal_token from ranking_movie_entry where ranking_id=? and entry_id=?",
+        UUID.class,rank,entry)).isNull();
+    assertThat(jdbc.queryForObject("select score from ranking_movie_rating where ranking_id=? and round_id=?",
+        Integer.class,rank,round)).isEqualTo(7);
+    assertThat(request(canonical+"/recovery",contributor.token(),Map.of()).body().required("items").size()).isZero();
+    var replay=rankingJsonAction(contributor,"POST",restore,version);
+    assertThat(replay.body().required("code").asText()).isEqualTo("ranking.entry_state_stale");
+
+    var removedAgain=rankingJsonAction(contributor,"DELETE",canonical+"/"+entry,
+        JSON.createObjectNode().put("expected_version",9).put("confirm",true));
+    assertThat(removedAgain.status()).isEqualTo(200);
+    assertThat(rankingJsonAction(contributor,"POST",restore,version).body()).isEqualTo(replay.body());
+    var newer=request(canonical+"/recovery",contributor.token(),Map.of()).body().at("/items/0/version").asText();
+    assertThat(newer).isEqualTo("10");
+    assertThat(rankingJsonAction(contributor,"POST",restore,JSON.createObjectNode().put("expected_version",newer))
+        .body().required("version").asText()).isEqualTo("11");
+  }
+
+  @Test void concurrentLegacyTokenAndCanonicalVersionRestoreOnlyOnce() throws Exception {
+    var owner=user(false);
+    UUID rank=ranking(owner,"PRIVATE"),entry=seedRevealEntry(rank);
+    UUID token=markRemoved(rank,entry,null,4,5);
+    String legacy=LEGACY_COLLECTIONS+"/"+rank+"/entries/"+entry;
+    String canonical=COLLECTIONS+"/"+rank+"/entries/"+entry;
+    var tokenApply=http.sendAsync(rankingJsonRequest(owner,"POST",legacy+"/restore",
+        JSON.createObjectNode().put("removal_token",token.toString())),HttpResponse.BodyHandlers.ofString());
+    var versionApply=http.sendAsync(rankingJsonRequest(owner,"POST",canonical+"/restore-current",
+        JSON.createObjectNode().put("expected_version","4")),HttpResponse.BodyHandlers.ofString());
+    var results=List.of(response(tokenApply.get(10,java.util.concurrent.TimeUnit.SECONDS)),
+        response(versionApply.get(10,java.util.concurrent.TimeUnit.SECONDS)));
+    assertThat(results.stream().map(ApiResponse::status).toList()).containsExactlyInAnyOrder(200,409);
+    assertThat(results.stream().filter(r->r.status()==409).findFirst().orElseThrow().body().required("code").asText())
+        .isEqualTo("ranking.entry_state_stale");
+    assertThat(jdbc.queryForObject("select lifecycle_version from ranking_movie_entry where ranking_id=? and entry_id=?",
+        Long.class,rank,entry)).isEqualTo(5);
+    assertThat(jdbc.queryForObject("select removal_token from ranking_movie_entry where ranking_id=? and entry_id=?",
+        UUID.class,rank,entry)).isNull();
+  }
+
+  private UUID markRemoved(UUID rank,UUID entry,UUID author,long version,int minutesAgo) {
+    UUID token=UUID.randomUUID();
+    jdbc.update("""
+        update ranking_movie_entry set removed_at=clock_timestamp()-make_interval(mins=>?),removal_token=?,
+          added_by_author_id=?,lifecycle_version=? where ranking_id=? and entry_id=?
+        """,minutesAgo,token,author,version,rank,entry);
+    return token;
+  }
+
   private UUID seedAuthor(UUID rank,UUID account) {
     UUID id=UUID.randomUUID();
     jdbc.update("insert into ranking_author_identity(ranking_id,author_id,account_id,deleted_public_code) values (?,?,?,?)",

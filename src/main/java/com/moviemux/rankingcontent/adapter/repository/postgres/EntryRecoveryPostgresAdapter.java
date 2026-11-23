@@ -2,7 +2,9 @@ package com.moviemux.rankingcontent.adapter.repository.postgres;
 
 import com.moviemux.rankingcontent.domain.exception.*;
 import com.moviemux.rankingcontent.domain.model.EntryRecoveryState;
+import com.moviemux.rankingcontent.domain.model.RestoredEntry;
 import com.moviemux.rankingcontent.domain.port.EntryRecovery;
+import com.moviemux.rankingcontent.domain.port.RestoreCurrentEntry;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -16,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 @Transactional(propagation=Propagation.MANDATORY)
-public class EntryRecoveryPostgresAdapter implements EntryRecovery {
+public class EntryRecoveryPostgresAdapter implements EntryRecovery, RestoreCurrentEntry {
   private final NamedParameterJdbcTemplate jdbc;
   public EntryRecoveryPostgresAdapter(NamedParameterJdbcTemplate jdbc) { this.jdbc=jdbc; }
   private static final String STATE = "e.entry_id,e.lifecycle_version,e.removed_at,e.removal_token,e.removed_at + interval '24 hours' as expires_at";
@@ -42,9 +44,16 @@ public class EntryRecoveryPostgresAdapter implements EntryRecovery {
   private record LockedRanking(UUID owner,boolean archived) {}
   private record LockedEntry(EntryRecoveryState state,UUID account) {}
   private EntryRecoveryState lockAuthorized(Map<String,Object> p) {
+    return lockAuthorized(p,false);
+  }
+  private EntryRecoveryState lockAuthorized(Map<String,Object> p,boolean checkCurrentAccount) {
     var ranks=jdbc.query("select owner_user_id,archived_at from ranking where id=:ranking for update",p,
         (row,n)->new LockedRanking(row.getObject("owner_user_id",UUID.class),row.getObject("archived_at")!=null));
     if(ranks.isEmpty())throw new RankingEntriesDeniedException();
+    if(checkCurrentAccount && jdbc.queryForList("""
+        select u.id from "user" u join user_statistics s on s.user_id=u.id
+        where u.id=:actor and s.consecutive_failed_login_attempts<10 for key share of u for share of s
+        """,p,UUID.class).isEmpty()) throw new RankingEntriesDeniedException();
     var members=jdbc.query("select active from ranking_membership where ranking_id=:ranking and user_id=:actor for update",p,(row,n)->row.getBoolean("active"));
     if(members.isEmpty() || !members.get(0))throw new RankingEntriesDeniedException();
     var entries=jdbc.query("select "+STATE+",a.account_id from ranking_movie_entry e left join ranking_author_identity a on a.ranking_id=e.ranking_id and a.author_id=e.added_by_author_id where e.ranking_id=:ranking and e.entry_id=:entry for update of e",p,
@@ -68,6 +77,16 @@ public class EntryRecoveryPostgresAdapter implements EntryRecovery {
   @Override public EntryRecoveryState restore(UUID rankingId,UUID entryId,UUID actorUserId,UUID removalToken) {
     var p=params(rankingId,entryId,actorUserId);var current=lockAuthorized(p);
     if(current.removedAt()==null || !removalToken.equals(current.removalToken()))throw new StaleEntryRecoveryException();
+    return clearRemoval(p);
+  }
+  @Override public RestoredEntry restoreCurrent(UUID rankingId,UUID entryId,UUID actorUserId,long expectedVersion) {
+    var p=params(rankingId,entryId,actorUserId);
+    var current=lockAuthorized(p,true);
+    if(current.removedAt()==null || current.version()!=expectedVersion) throw new StaleEntryRecoveryException();
+    var restored=clearRemoval(p);
+    return new RestoredEntry(restored.entryId(),restored.version());
+  }
+  private EntryRecoveryState clearRemoval(Map<String,Object> p) {
     var rows=jdbc.query("update ranking_movie_entry e set removed_at=null,removal_token=null,lifecycle_version=lifecycle_version+1 where ranking_id=:ranking and entry_id=:entry and clock_timestamp()<removed_at+interval '24 hours' returning "+STATE,p,(row,n)->state(row));
     if(rows.isEmpty())throw new ExpiredEntryRecoveryException();
     return rows.get(0);
