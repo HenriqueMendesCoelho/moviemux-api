@@ -447,6 +447,55 @@ class RankingAccessListHttpIT {
     assertThat(inviteRequest(recipient, "POST", rank, "/" + id + "/accept", null).statusCode()).isEqualTo(204);
   }
 
+  @Test void privateInboxFiltersBeforePaginationAndRechecksIssuerOnSameToken() throws Exception {
+    var owner = user(false);
+    var issuer = user(false);
+    var recipient = user(false);
+    var outsider = user(true);
+    String code = rotateInvitationAddress(recipient);
+    UUID firstRank = ranking(owner, "PRIVATE");
+    UUID secondRank = ranking(owner, "PRIVATE");
+    membership(firstRank, issuer, "INVITE_MEMBER");
+    membership(secondRank, issuer, "INVITE_MEMBER");
+    jdbc.update("update ranking set name='Fantastic Cinema' where id=?", firstRank);
+    var first = inviteRequest(issuer, "POST", firstRank, "", code);
+    var second = inviteRequest(issuer, "POST", secondRank, "", code);
+    assertThat(first.statusCode()).isEqualTo(201);
+    assertThat(second.statusCode()).isEqualTo(201);
+    String path = "/ranking-invitations/incoming";
+    var outsiderPage = request(path, outsider.token(), Map.of("X-User-Id", recipient.id().toString()));
+    assertEmpty(outsiderPage);
+    assertThat(request(path, null, Map.of()).status()).isIn(401,403);
+    var page = request(path + "?limit=1", recipient.token(), Map.of());
+    assertThat(page.status()).isEqualTo(200);
+    assertThat(page.headers().firstValue("Cache-Control")).hasValueSatisfying(v -> assertThat(v).contains("no-store"));
+    String cursor = page.body().required("next_cursor").asText();
+    assertThat(page.body().required("items").size()).isEqualTo(1);
+    assertThat(page.body().at("/items/0/invite_id").asText()).isEqualTo(cursor);
+    var tail = request(path + "?limit=1&after=" + cursor, recipient.token(), Map.of());
+    assertThat(tail.body().required("next_cursor").isNull()).isTrue();
+    assertThat(tail.body().required("items").size()).isEqualTo(1);
+    assertThat(tail.body().at("/items/0/invite_id").asText()).isNotEqualTo(cursor);
+
+    var every = request(path, recipient.token(), Map.of()).body().required("items");
+    assertThat(every).hasSize(2);
+    for (var row : every) {
+      assertThat(fields(row)).containsExactlyInAnyOrder("invite_id", "ranking_id", "ranking_name", "expires_at");
+      if (row.required("ranking_id").asText().equals(firstRank.toString()))
+        assertThat(row.required("ranking_name").asText()).isEqualTo("Fantastic Cinema");
+      else assertThat(row.required("ranking_name").isNull()).isTrue();
+    }
+
+    jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='INVITE_MEMBER'",
+        firstRank, issuer.id());
+    var remaining = request(path, recipient.token(), Map.of());
+    assertThat(remaining.body().required("items").size()).isEqualTo(1);
+    assertThat(remaining.body().at("/items/0/ranking_id").asText()).isEqualTo(secondRank.toString());
+    var targetId = remaining.body().at("/items/0/invite_id").asText();
+    assertThat(inviteRequest(recipient, "POST", secondRank, "/" + targetId + "/accept", null).statusCode()).isEqualTo(204);
+    assertEmpty(request(path, recipient.token(), Map.of()));
+  }
+
   private String rotateInvitationAddress(Account actor) throws Exception {
     var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port
         + "/api/monolith/user/ranking-invitation-address/rotate"))
