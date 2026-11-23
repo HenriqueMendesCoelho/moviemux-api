@@ -32,6 +32,18 @@ class MovieMutationTest {
         return MovieNote.builder().movie(movie(showNotes)).user(actor(false)).note(7).build();
     }
 
+    @Test void canonicalConflictIsRedactedAndDoesNotAnnounceOrPublish() {
+        var existing = movie(false);
+        when(movies.findById(movieId)).thenReturn(Optional.of(existing));
+        when(identities.findByEmail("ada@example.test")).thenReturn(actor(false));
+        when(movies.save(existing)).thenThrow(new com.moviemux.movie.domain.exception.MovieWriteConflictException());
+        assertThatThrownBy(() -> new UpdateMovieUseCaseImpl(movies, identities, announcements, notifications)
+            .execute(new UpdateMovieCommand(movie(true), movieId, "ada@example.test")))
+            .isInstanceOf(com.moviemux.movie.domain.exception.MovieWriteConflictException.class)
+            .hasMessage("Movie duplicated").hasNoCause();
+        verifyNoInteractions(announcements, notifications);
+    }
+
     @Test void updateMissingMovieDoesNotWriteOrNotify() {
         when(identities.findByEmail("ada@example.test")).thenReturn(actor(false));
         var operation = new UpdateMovieUseCaseImpl(movies,identities,announcements,notifications);
