@@ -81,6 +81,9 @@ class RankingAccessListHttpIT {
         () -> java.util.Base64.getEncoder().encodeToString(new byte[32]));
     properties.add("ranking.invitation.address.encryption-key",
         () -> java.util.Base64.getEncoder().encodeToString("01234567890123456789012345678901".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+    properties.add("ranking.rating-copy.preview-key",
+        () -> java.util.Base64.getEncoder().encodeToString("A synthetic key for preview test".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+    properties.add("ranking.rating-copy.preview-ttl-seconds", () -> "600");
     properties.add("ranking.catalog.tmdb-import-enabled", () -> "true");
     properties.add("ranking.creation.max-owned", () -> "1");
     properties.add("ranking.creation.include-archived", () -> "true");
@@ -1042,6 +1045,116 @@ class RankingAccessListHttpIT {
     if (body!=null) builder.header("Content-Type","application/json");
     return response(http.send(builder.POST(body==null?HttpRequest.BodyPublishers.noBody():
         HttpRequest.BodyPublishers.ofString(body)).build(),HttpResponse.BodyHandlers.ofString()));
+  }
+
+  @Test void ownRatingCopyPreviewUsesExactContextsAndNeverChangesEitherRanking() throws Exception {
+    var owner=user(false);
+    var actor=user(false);
+    var outsider=user(true);
+    UUID sourceRank=ranking(owner,"PRIVATE"),targetRank=ranking(owner,"PRIVATE");
+    membership(sourceRank,actor,"READ");
+    membership(targetRank,actor,"READ","RATE_OWN");
+    UUID sourceEntry=seedRevealEntry(sourceRank),targetEntry=UUID.randomUUID(),wrongEntry=seedRevealEntry(targetRank);
+    jdbc.update("""
+        insert into ranking_movie_entry(ranking_id,entry_id,movie_id,created_at)
+        select ?,?,movie_id,now() from ranking_movie_entry where ranking_id=? and entry_id=?
+        """,targetRank,targetEntry,sourceRank,sourceEntry);
+    UUID sourceRound=seedRound(sourceRank,sourceEntry,3,false,4000),
+        targetRound=seedRound(targetRank,targetEntry,8,true,5000),
+        wrongRound=seedRound(targetRank,wrongEntry,3,true,5000);
+    UUID sourceAuthor=seedAuthor(sourceRank,actor.id());
+    UUID sourcePeer=seedAuthor(sourceRank,owner.id()),targetPeer=seedAuthor(targetRank,owner.id());
+    jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",
+        sourceRank,sourceRound,sourcePeer,10);
+    jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",
+        targetRank,targetRound,targetPeer,9);
+
+    var source=JSON.createObjectNode().put("ranking_id",sourceRank.toString()).put("entry_id",sourceEntry.toString())
+        .put("round_id",sourceRound.toString());
+    var body=JSON.createObjectNode().set("source",source);
+    String base="/rankings/"+targetRank+"/entries/"+targetEntry+"/rounds/"+targetRound+"/rating/me";
+    String path=base+"/copy-preview";
+    assertCopyBlocked(copyPreview(actor,path,body), "SOURCE_INELIGIBLE");
+
+    jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",
+        sourceRank,sourceRound,sourceAuthor,0);
+    var before=copyAffectedRows();
+    var result=copyPreview(actor,path,body);
+    assertThat(result.status()).isEqualTo(200);
+    assertThat(result.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(fields(result.body())).containsExactlyInAnyOrder("status","source_score","preview_token","expires_at");
+    assertThat(result.body().required("status").asText()).isEqualTo("READY");
+    assertThat(result.body().required("source_score").isIntegralNumber()).isTrue();
+    assertThat(result.body().required("source_score").asInt()).isZero();
+    String token=result.body().required("preview_token").asText();
+    assertThat(token).matches("[A-Za-z0-9_-]+");
+    assertThat(java.time.Instant.parse(result.body().required("expires_at").asText())).isAfter(java.time.Instant.now());
+    assertThat(copyPreview(actor,path,body).body().required("preview_token").asText()).isNotEqualTo(token);
+    assertThat(copyPreview(actor,base+"/copy-apply",JSON.createObjectNode().put("preview_token",token)).status()).isEqualTo(404);
+    assertThat(copyAffectedRows()).isEqualTo(before);
+
+    String code=copyPreview(outsider,path,body).body().required("code").asText();
+    assertThat(code).isEqualTo("ranking.not_found");
+    for (String outside : List.of(
+         "/rankings/"+targetRank+"/entries/"+wrongEntry+"/rounds/"+wrongRound+"/rating/me/copy-preview",
+         "/rankings/"+targetRank+"/entries/"+targetEntry+"/rounds/"+sourceRound+"/rating/me/copy-preview")) {
+      var denied=copyPreview(actor,outside,body);
+      assertThat(denied.status()).isEqualTo(404);
+      assertThat(denied.headers().firstValue("Cache-Control")).hasValue("no-store");
+      assertThat(fields(denied.body())).containsExactly("code");
+      assertThat(denied.body().required("code").asText()).isEqualTo(code);
+    }
+    var invalid=JSON.createObjectNode().set("source",source.deepCopy().put("score",8));
+    assertThat(copyPreview(actor,path,invalid).status()).isEqualTo(400);
+    assertThat(copyPreview(actor,path+"?score=8",body).status()).isEqualTo(400);
+
+    jdbc.update("update ranking_movie_rating set score=? where ranking_id=? and round_id=? and author_id=?",11,
+        sourceRank,sourceRound,sourceAuthor);
+    assertCopyBlocked(copyPreview(actor,path,body), "SOURCE_INELIGIBLE");
+    jdbc.update("update ranking_movie_rating set score=? where ranking_id=? and round_id=? and author_id=?",null,
+        sourceRank,sourceRound,sourceAuthor);
+    assertCopyBlocked(copyPreview(actor,path,body), "SOURCE_INELIGIBLE");
+    jdbc.update("update ranking_movie_rating set score=10 where ranking_id=? and round_id=? and author_id=?",
+        sourceRank,sourceRound,sourceAuthor);
+
+    UUID targetAuthor=seedAuthor(targetRank,actor.id());
+    jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,null,now())",
+        targetRank,targetRound,targetAuthor);
+    assertCopyBlocked(copyPreview(actor,path,body), "DESTINATION_EXISTS");
+    jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='READ'",targetRank,actor.id());
+    assertThat(copyPreview(actor,path,body).body().required("code").asText()).isEqualTo(code);
+    grant(targetRank,actor,"READ");
+    jdbc.update("update ranking set archived_at=now() where id=?",sourceRank);
+    assertThat(copyPreview(actor,path,body).body().required("code").asText()).isEqualTo(code);
+    assertThat(jdbc.queryForObject("select revealed from ranking_movie_round where ranking_id=? and round_id=?",
+        Boolean.class,sourceRank,sourceRound)).isFalse();
+    assertThat(TMDB_CALLS.get()).isZero();
+    assertThat(PICKER_CALLS.get()).isZero();
+  }
+
+  private List<String> copyAffectedRows() {
+    var existing=new ArrayList<>(authorizationRows());
+    for (String name : List.of("ranking_author_identity","ranking_movie_entry","ranking_movie_round","ranking_movie_rating")) {
+      existing.addAll(jdbc.queryForList("select row_to_json(t)::text from " + table(name)
+          + " t order by row_to_json(t)::text", String.class));
+    }
+    return existing;
+  }
+
+  private ApiResponse copyPreview(Account actor,String path,JsonNode body) throws Exception {
+    var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith"+path))
+        .timeout(Duration.ofSeconds(10)).header("Authorization","Bearer "+actor.token())
+        .header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body.toString()));
+    return response(http.send(request.build(),HttpResponse.BodyHandlers.ofString()));
+  }
+
+  private void assertCopyBlocked(ApiResponse response,String code) {
+    assertThat(response.status()).isEqualTo(200);
+    assertThat(response.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(response.body().required("status").asText()).isEqualTo(code);
+    assertThat(response.body().required("source_score").isNull()).isTrue();
+    assertThat(response.body().required("preview_token").isNull()).isTrue();
+    assertThat(response.body().required("expires_at").isNull()).isTrue();
   }
 
   private UUID seedAuthor(UUID rank,UUID account) {
