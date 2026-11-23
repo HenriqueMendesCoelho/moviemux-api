@@ -475,6 +475,22 @@ for actual ownership. This proof does not appear in creation, directory or
 public summaries. A copied link is only a reference to the neutral join page;
 visiting it does not join or reveal private content.
 
+### Collection visibility settings
+
+Only the current enabled, active owner of a live collection can access
+`GET /rankings/{rankingId}/settings/visibility` or change it with
+`PUT /rankings/{rankingId}/settings/visibility`. GET has no body or query; PUT
+accepts only `{"visibility":"PUBLIC"}` or `{"visibility":"PRIVATE"}`.
+Success returns only the current `visibility`. Setting the same value again
+makes no row write. Archived collections remain read-only.
+
+Making a collection PUBLIC lets anonymous visitors with its exact link
+view the collection and averages from already revealed rounds. It does not
+publish a directory or change admission, membership, grants, invitations,
+votes or history. Once a change to PRIVATE commits, subsequent anonymous
+reads return the generic no-store 404. The change cannot retract content
+already seen. No notifications, activity or XP follow this action.
+
 ### Anonymous disclosed ranking reads
 
 A visitor with the exact ID of a currently live `PUBLIC` ranking may read
