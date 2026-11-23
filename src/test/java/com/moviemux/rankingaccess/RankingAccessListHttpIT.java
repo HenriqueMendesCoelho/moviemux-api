@@ -45,6 +45,8 @@ class RankingAccessListHttpIT {
   private static final String SCHEMA = "ranking_list_http_test_" + UUID.randomUUID().toString().replace("-", "");
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final AtomicInteger OUTBOUND = new AtomicInteger();
+  private static final AtomicInteger TMDB_CALLS = new AtomicInteger();
+  private static volatile java.util.concurrent.CountDownLatch providerArrived, releaseProvider;
   private static String databaseUrl, databaseUser, databasePassword;
   private static boolean ownsSchema;
   private static HttpServer externalStub;
@@ -77,6 +79,7 @@ class RankingAccessListHttpIT {
         () -> java.util.Base64.getEncoder().encodeToString(new byte[32]));
     properties.add("ranking.invitation.address.encryption-key",
         () -> java.util.Base64.getEncoder().encodeToString("01234567890123456789012345678901".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+    properties.add("ranking.catalog.tmdb-import-enabled", () -> "true");
     properties.add("ranking.creation.max-owned", () -> "1");
     properties.add("ranking.creation.include-archived", () -> "true");
     properties.add("spring.datasource.url", () -> databaseUrl);
@@ -87,6 +90,36 @@ class RankingAccessListHttpIT {
     properties.add("spring.datasource.hikari.connection-init-sql", () -> "SET statement_timeout = '10s'");
     externalStub = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     externalStub.createContext("/", exchange -> {
+      String base = "/api/v1/tmdb/movie/";
+      String path = exchange.getRequestURI().getPath();
+      if (path.matches("/api/v1/tmdb/movie/82000[1-7]/summary")) {
+        TMDB_CALLS.incrementAndGet();
+        int id = Integer.parseInt(path.substring(base.length(), path.length() - "/summary".length()));
+        int status = id == 820004 ? 404 : id == 820005 ? 429 : 200;
+        if (id == 820007) {
+          var arrived = providerArrived;
+          var release = releaseProvider;
+          if (arrived == null || release == null) status = 500;
+          else {
+            arrived.countDown();
+            try {
+              if (!release.await(6, java.util.concurrent.TimeUnit.SECONDS)) status = 500;
+            } catch (InterruptedException interrupted) {
+              Thread.currentThread().interrupt();
+              status = 500;
+            }
+          }
+        }
+        String value = status == 200 ? JSON.createObjectNode().put("tmdb_id", id == 820003 ? id+999 : id)
+            .put("original_title","Synthetic KIT title").put("imdb_id",id == 820006 ? "tt900000" : "tt" + id)
+            .put("runtime",93).toString() : "synthetic-private-upstream-body";
+        byte[] bytes=value.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(status, bytes.length);
+        exchange.getResponseBody().write(bytes);
+        exchange.close();
+        return;
+      }
       OUTBOUND.incrementAndGet();
       exchange.getRequestBody().readAllBytes();
       exchange.sendResponseHeaders(500, -1);
@@ -120,6 +153,7 @@ class RankingAccessListHttpIT {
   void cleanOnlyOwnedSchema() {
     jdbc.execute("truncate table " + table("\"user\"") + " restart identity cascade");
     OUTBOUND.set(0);
+    TMDB_CALLS.set(0);
   }
 
   @AfterEach
@@ -564,6 +598,117 @@ class RankingAccessListHttpIT {
         .timeout(Duration.ofSeconds(10)).header("Authorization","Bearer "+actor.token())
         .header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(json.toString())).build();
     return http.send(post,HttpResponse.BodyHandlers.ofString());
+  }
+
+  @Test void contextualTmdbImportAuthorizesAndReusesWithoutLegacySideEffects() throws Exception {
+    var owner = user(true);
+    var outsider = user(false);
+    UUID rank = ranking(owner, "PRIVATE");
+    UUID otherRank = ranking(owner, "PRIVATE");
+    assertThat(importTmdb(outsider, rank, 820001).statusCode()).isEqualTo(404);
+    assertThat(TMDB_CALLS.get()).isZero();
+    var imported = importTmdb(owner, rank, 820001);
+    assertThat(imported.statusCode()).isEqualTo(201);
+    assertThat(imported.headers().firstValue("Cache-Control")).hasValueSatisfying(v -> assertThat(v).contains("no-store"));
+    var json = JSON.readTree(imported.body());
+    assertThat(fields(json)).containsExactly("entry_id");
+    assertThat(TMDB_CALLS.get()).isEqualTo(1);
+    var same = importTmdb(owner, rank, 820001);
+    assertThat(same.statusCode()).isEqualTo(200);
+    assertThat(JSON.readTree(same.body())).isEqualTo(json);
+    var other = importTmdb(owner, otherRank, 820001);
+    assertThat(other.statusCode()).isEqualTo(201);
+    assertThat(TMDB_CALLS.get()).isEqualTo(1);
+    var catalog = jdbc.queryForMap("""
+        select legacy_eligible, portuguese_title, english_title, director, description, original_title
+        from movie where tmdb_id=820001
+        """);
+    assertThat(catalog).containsEntry("legacy_eligible",false).containsEntry("original_title","Synthetic KIT title")
+        .containsEntry("portuguese_title",null).containsEntry("english_title",null)
+        .containsEntry("director",null).containsEntry("description",null);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_entry",Long.class)).isEqualTo(2L);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_round",Long.class)).isEqualTo(2L);
+    assertThat(jdbc.queryForObject("select count(*) from movie_note",Long.class)).isZero();
+    assertThat(request("/movie?title=Synthetic%20KIT",owner.token(),Map.of()).status()).isEqualTo(204);
+    assertThat(request("/rankings/"+rank+"/entries",outsider.token(),Map.of()).status()).isEqualTo(404);
+  }
+
+  @Test void tmdbProviderAndCanonicalIdentityFailuresRollBackAndKeepPrivateErrorCodes() throws Exception {
+    var owner = user(false);
+    UUID rank = ranking(owner, "PRIVATE");
+    jdbc.update("""
+        insert into movie(id,created_at,imdb_id,description,director,english_title,portuguese_title)
+        values (?,now(),'tt900000','Unrelated canonical','Director','Other','Outro')
+        """,UUID.randomUUID());
+    for (String[] scenario : new String[][]{
+        {"820003","502","ranking.tmdb_invalid_response"},
+        {"820004","404","ranking.tmdb_not_found"},
+        {"820005","503","ranking.tmdb_unavailable"},
+        {"820006","409","ranking.catalog_identity_conflict"}}) {
+      var response = importTmdb(owner,rank,Long.parseLong(scenario[0]));
+      assertThat(response.statusCode()).isEqualTo(Integer.parseInt(scenario[1]));
+      var error=JSON.readTree(response.body());
+      assertThat(fields(error)).containsExactly("code");
+      assertThat(error.required("code").asText()).isEqualTo(scenario[2]);
+    }
+    assertThat(TMDB_CALLS.get()).isEqualTo(4);
+    assertThat(jdbc.queryForObject("select count(*) from movie",Long.class)).isEqualTo(1L);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_entry",Long.class)).isZero();
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_round",Long.class)).isZero();
+  }
+
+  @Test void concurrentTmdbImportsAcrossRankingsDeduplicateCanonicalMovie() throws Exception {
+    var owner = user(false);
+    UUID a = ranking(owner, "PRIVATE"), b = ranking(owner, "PRIVATE");
+    try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+      var start = new java.util.concurrent.CountDownLatch(1);
+      var one = executor.submit(() -> { start.await(); return importTmdb(owner,a,820002); });
+      var two = executor.submit(() -> { start.await(); return importTmdb(owner,b,820002); });
+      start.countDown();
+      assertThat(one.get(15,java.util.concurrent.TimeUnit.SECONDS).statusCode()).isEqualTo(201);
+      assertThat(two.get(15,java.util.concurrent.TimeUnit.SECONDS).statusCode()).isEqualTo(201);
+    }
+    assertThat(jdbc.queryForObject("select count(*) from movie where tmdb_id=820002",Long.class)).isEqualTo(1L);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_entry",Long.class)).isEqualTo(2L);
+    assertThat(jdbc.queryForObject("select count(distinct movie_id) from ranking_movie_entry",Long.class)).isEqualTo(1L);
+    assertThat(TMDB_CALLS.get()).isBetween(1,2);
+  }
+
+  @Test void grantRevokedWhileKitRespondsAbortsTheContextualWrite() throws Exception {
+    var owner = user(false);
+    var member = user(false);
+    UUID rank = ranking(owner, "PRIVATE");
+    membership(rank, member, "ADD_ENTRY");
+    var arrival = new java.util.concurrent.CountDownLatch(1);
+    var resume = new java.util.concurrent.CountDownLatch(1);
+    providerArrived=arrival;
+    releaseProvider=resume;
+    try (var executor=java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+      var call=executor.submit(() -> importTmdb(member,rank,820007));
+      try {
+        assertThat(arrival.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+        jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='ADD_ENTRY'",
+            rank,member.id());
+      } finally {
+        resume.countDown();
+      }
+      var denied=call.get(10,java.util.concurrent.TimeUnit.SECONDS);
+      assertThat(denied.statusCode()).isEqualTo(404);
+      assertThat(JSON.readTree(denied.body()).required("code").asText()).isEqualTo("ranking.not_found");
+    } finally {
+      providerArrived=null;
+      releaseProvider=null;
+    }
+    assertThat(TMDB_CALLS.get()).isEqualTo(1);
+    assertThat(jdbc.queryForObject("select count(*) from movie where tmdb_id=820007",Long.class)).isZero();
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_entry",Long.class)).isZero();
+  }
+
+  private HttpResponse<String> importTmdb(Account actor, UUID rank, long tmdb) throws Exception {
+    var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith/rankings/"+rank+"/entries/tmdb"))
+        .timeout(Duration.ofSeconds(10)).header("Authorization","Bearer "+actor.token()).header("Content-Type","application/json")
+        .POST(HttpRequest.BodyPublishers.ofString(JSON.createObjectNode().put("tmdb_id",tmdb).toString())).build();
+    return http.send(request,HttpResponse.BodyHandlers.ofString());
   }
 
   private String rotateInvitationAddress(Account actor) throws Exception {

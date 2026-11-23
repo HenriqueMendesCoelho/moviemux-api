@@ -25,7 +25,11 @@ public class AddExistingCatalogEntryPostgresAdapter implements AddExistingCatalo
   private record ExistingEntry(UUID id, boolean removed) {}
   @Override @Transactional(propagation=Propagation.MANDATORY)
   public AddedCatalogEntry write(UUID rankingId,UUID actorUserId,UUID movieId) {
-    var params=Map.of("ranking",Objects.requireNonNull(rankingId),"actor",Objects.requireNonNull(actorUserId),"movie",Objects.requireNonNull(movieId));
+    requireAdd(rankingId, actorUserId);
+    return linkLocked(rankingId, actorUserId, movieId);
+  }
+  void requireAdd(UUID rankingId, UUID actorUserId) {
+    var params=Map.of("ranking",Objects.requireNonNull(rankingId),"actor",Objects.requireNonNull(actorUserId));
     var ranks=jdbc.query("select owner_user_id,archived_at from ranking where id=:ranking for update",params,
         (row,n)->new LockedRanking(row.getObject("owner_user_id",UUID.class),row.getObject("archived_at")!=null));
     if(ranks.isEmpty())throw new RankingEntriesDeniedException();
@@ -36,6 +40,9 @@ public class AddExistingCatalogEntryPostgresAdapter implements AddExistingCatalo
         select exists(select 1 from ranking_membership_grant where ranking_id=:ranking and user_id=:actor and capability='ADD_ENTRY')
         """,params,Boolean.class)))throw new RankingEntriesDeniedException();
     if(rank.archived())throw new ArchivedCatalogEntryException();
+  }
+  AddedCatalogEntry linkLocked(UUID rankingId, UUID actorUserId, UUID movieId) {
+    var params=Map.of("ranking",rankingId,"actor",actorUserId,"movie",Objects.requireNonNull(movieId));
     // No provider call, catalog insert/update, legacy creation usecase, or global notification.
     var movies=jdbc.query("select id from movie where id=:movie for key share",params,(row,n)->row.getObject("id",UUID.class));
     if(movies.isEmpty())throw new RankingEntriesDeniedException();
