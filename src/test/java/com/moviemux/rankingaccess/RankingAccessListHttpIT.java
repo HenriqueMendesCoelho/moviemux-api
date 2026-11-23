@@ -1159,6 +1159,132 @@ class RankingAccessListHttpIT {
     assertThat(response.body().required("expires_at").isNull()).isTrue();
   }
 
+  @Test void anonymousPublicProjectionPagesOnlyDisclosedValuesWithoutHiddenSignals() throws Exception {
+    var owner=user(false);
+    var signedVisitor=user(true);
+    UUID rank=ranking(owner,"PUBLIC"), separate=ranking(owner,"PUBLIC");
+    UUID shownEntry=seedRevealEntry(rank), noTally=seedRevealEntry(rank), removed=seedRevealEntry(rank),
+        foreignEntry=seedRevealEntry(separate);
+    jdbc.update("""
+        update movie set original_title='Original public',english_title='EN public',portuguese_title='PT public'
+        where id=(select movie_id from ranking_movie_entry where ranking_id=? and entry_id=?)
+        """,rank,shownEntry);
+    jdbc.update("""
+        update movie set original_title=?,english_title='EN fallback',portuguese_title='PT fallback'
+        where id=(select movie_id from ranking_movie_entry where ranking_id=? and entry_id=?)
+        """," ",rank,noTally);
+    jdbc.update("update ranking_movie_entry set removed_at=now(),removal_token=? where ranking_id=? and entry_id=?",
+        UUID.randomUUID(),rank,removed);
+    UUID shown=seedRound(rank,shownEntry,1,true,3600), overdue=seedRound(rank,shownEntry,2,false,3600),
+        unknown=seedRound(rank,shownEntry,3,null,3600), hiddenOnly=seedRound(rank,noTally,1,false,3600),
+        unrelated=seedRound(separate,foreignEntry,1,true,3600);
+    UUID actor=seedAuthor(rank,owner.id()), anonymized=seedAuthor(rank,null), legacyNull=seedAuthor(rank,null),
+        foreign=seedAuthor(separate,owner.id());
+    for (var row : java.util.Arrays.asList(new Object[]{rank,shown,actor,0},new Object[]{rank,shown,anonymized,-8},
+        new Object[]{rank,shown,legacyNull,null},new Object[]{rank,overdue,actor,10},
+        new Object[]{rank,unknown,actor,10},new Object[]{separate,unrelated,foreign,10})) {
+      jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",row);
+    }
+    String path="/public/rankings/"+rank;
+    for(String mode:List.of("INVITATION","OPEN","APPROVAL")) {
+      jdbc.update("update ranking set admission=? where id=?",mode,rank);
+      var summary=request(path,null,Map.of());
+      assertThat(summary.status()).isEqualTo(200);
+      assertThat(summary.headers().firstValue("Cache-Control")).hasValue("no-store");
+      assertThat(fields(summary.body())).containsExactlyInAnyOrder("ranking_id","ranking_name");
+      assertThat(summary.body().required("ranking_id").asText()).isEqualTo(rank.toString());
+      assertThat(summary.body().required("ranking_name").isNull()).isTrue();
+      assertThat(request(path,signedVisitor.token(),Map.of()).body()).isEqualTo(summary.body());
+      var noisy=request(path,null,Map.of("Authorization","Bearer intentionally-invalid-public-visitor-token",
+          "Cookie","JSESSIONID=obsolete","X-User-Id",signedVisitor.id().toString(),"Accept-Language","pt-BR"));
+      assertThat(noisy.status()).isEqualTo(200);
+      assertThat(noisy.body()).isEqualTo(summary.body());
+      assertThat(noisy.headers().allValues("Set-Cookie")).isEmpty();
+    }
+    jdbc.update("update ranking set name='Synthetic public name' where id=?",rank);
+    assertThat(request(path,null,Map.of()).body().required("ranking_name").asText()).isEqualTo("Synthetic public name");
+
+    var catalogue=request(path+"/entries",null,Map.of());
+    assertThat(catalogue.status()).isEqualTo(200);
+    assertThat(catalogue.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(fields(catalogue.body())).containsExactlyInAnyOrder("items","next_cursor");
+    assertThat(catalogue.body().required("next_cursor").isNull()).isTrue();
+    var publicRows=new java.util.LinkedHashMap<String,JsonNode>();
+    for (var row:catalogue.body().required("items")) {
+      assertThat(fields(row)).containsExactlyInAnyOrder("entry_id","title","total","votes");
+      publicRows.put(row.required("entry_id").asText(),row);
+    }
+    assertThat(new ArrayList<>(publicRows.keySet()))
+        .containsExactlyElementsOf(java.util.stream.Stream.of(shownEntry.toString(),noTally.toString()).sorted().toList());
+    assertThat(publicRows.get(shownEntry.toString()).required("title").asText()).isEqualTo("Original public");
+    assertThat(publicRows.get(shownEntry.toString()).required("total").asInt()).isEqualTo(-8);
+    assertThat(publicRows.get(shownEntry.toString()).required("votes").asInt()).isEqualTo(2);
+    assertThat(publicRows.get(noTally.toString()).required("title").asText()).isEqualTo("EN fallback");
+    assertThat(publicRows.get(noTally.toString()).required("total").asInt()).isZero();
+    assertThat(publicRows.get(noTally.toString()).required("votes").asInt()).isZero();
+
+    jdbc.update("update ranking_movie_rating set score=235 where ranking_id=? and round_id in (?,?)",rank,overdue,unknown);
+    jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",
+        rank,hiddenOnly,actor,3);
+    assertThat(request(path+"/entries",null,Map.of()).body()).isEqualTo(catalogue.body());
+    assertThat(jdbc.queryForObject("select revealed from ranking_movie_round where ranking_id=? and round_id=?",
+        Boolean.class,rank,overdue)).isFalse();
+    var head=request(path+"/entries?limit=1",null,Map.of()).body();
+    String cursor=head.required("next_cursor").asText();
+    assertThat(cursor).isEqualTo(new ArrayList<>(publicRows.keySet()).getFirst());
+    var tail=request(path+"/entries?after="+cursor+"&limit=1",null,Map.of()).body();
+    assertThat(tail.required("items").get(0).required("entry_id").asText()).isNotEqualTo(cursor);
+    assertThat(tail.required("next_cursor").isNull()).isTrue();
+    assertThat(request(path+"/entries?after=ffffffff-ffff-ffff-ffff-ffffffffffff",null,Map.of()).body()
+        .required("items").size()).isZero();
+
+    assertThat(request("/rankings/"+rank,signedVisitor.token(),Map.of()).status()).isEqualTo(404);
+    assertThat(request("/rankings/"+rank+"/access",null,Map.of()).status()).isIn(401,403);
+    assertThat(request(path+"/entries?limit=51",null,Map.of()).status()).isEqualTo(400);
+    var generic=request("/public/rankings/"+UUID.randomUUID(),null,Map.of());
+    assertThat(generic.status()).isEqualTo(404);
+    assertThat(generic.body().required("code").asText()).isEqualTo("ranking.not_found");
+    jdbc.update("update ranking set visibility='PRIVATE' where id=?",rank);
+    for(String suffix:List.of("","/entries","/entries?limit=51")) {
+      var withheld=request(path+suffix,null,Map.of());
+      assertThat(withheld.status()).isEqualTo(404);
+      assertThat(withheld.body()).isEqualTo(generic.body());
+      assertThat(withheld.headers().firstValue("Cache-Control")).hasValue("no-store");
+    }
+    jdbc.update("update ranking set visibility='PUBLIC',archived_at=now() where id=?",rank);
+    assertThat(request(path,null,Map.of()).body()).isEqualTo(generic.body());
+    assertThat(request(path+"/entries",null,Map.of()).body()).isEqualTo(generic.body());
+    assertThat(request("/public/rankings/not-a-uuid/entries?limit=51",null,Map.of()).body()).isEqualTo(generic.body());
+  }
+
+  @Test void anonymousRankingNamespaceOnlyAllowsExactPublicReadsNothingElse() throws Exception {
+    UUID rank=ranking(user(false),"PUBLIC");
+    var baseline=copyAffectedRows();
+    String path="/public/rankings/"+rank;
+    for (String suffix:List.of("", "/entries")) {
+      for (String method:List.of("HEAD","OPTIONS","POST","PUT","PATCH","DELETE")) {
+        var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith"+path+suffix))
+            .timeout(Duration.ofSeconds(10)).method(method,HttpRequest.BodyPublishers.noBody()).build();
+        var rejected=http.send(request,HttpResponse.BodyHandlers.ofString());
+        assertThat(rejected.statusCode()).isEqualTo(404);
+        assertThat(rejected.headers().firstValue("Cache-Control")).hasValueSatisfying(v->assertThat(v).contains("no-store"));
+        if (method.equals("HEAD")) assertThat(rejected.body()).isEmpty();
+        else assertThat(JSON.readTree(rejected.body()).required("code").asText()).isEqualTo("ranking.not_found");
+      }
+    }
+    for(var alias:List.of(request("/public/rankings",null,Map.of()),request(path+"/rating",null,Map.of()))) {
+      assertThat(alias.status()).isEqualTo(404);
+      assertThat(alias.headers().firstValue("Cache-Control")).hasValueSatisfying(v->assertThat(v).contains("no-store"));
+      assertThat(alias.body().required("code").asText()).isEqualTo("ranking.not_found");
+    }
+    var preflight=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith"+path))
+        .header("Origin","https://synthetic.example.test").header("Access-Control-Request-Method","GET")
+        .method("OPTIONS",HttpRequest.BodyPublishers.noBody()).build();
+    assertThat(http.send(preflight,HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(404);
+    assertThat(request(path+"/entries",null,Map.of()).body().required("items").size()).isZero();
+    assertThat(copyAffectedRows()).isEqualTo(baseline);
+  }
+
   private UUID seedAuthor(UUID rank,UUID account) {
     UUID id=UUID.randomUUID();
     jdbc.update("insert into ranking_author_identity(ranking_id,author_id,account_id,deleted_public_code) values (?,?,?,?)",
