@@ -761,6 +761,184 @@ class RankingAccessListHttpIT {
     assertEmpty(request(path, recipient.token(), Map.of()));
   }
 
+  @Test void scopedCatalogSearchIncludesManualAndContextOnlyTitlesWithoutCollectionOrProviderEffects() throws Exception {
+    var owner = user(false);
+    var contributor = user(false);
+    var outsider = user(true);
+    var readOnly = user(false);
+    UUID rank = ranking(owner, "PRIVATE"), otherRank = ranking(owner, "PRIVATE");
+    membership(rank, contributor, "ADD_ENTRY");
+    membership(rank, readOnly, "READ");
+    UUID manual = UUID.randomUUID(), contextOnly = UUID.randomUUID(), otherLanguage = UUID.randomUUID();
+    jdbc.update("""
+        insert into movie(id,created_at,description,director,english_title,portuguese_title,original_title,release_date)
+        values (?,now(),'synthetic','synthetic','A manual English','A catálogo','Literal %_ case',date '2001-03-04')
+        """, manual);
+    jdbc.update("""
+        insert into movie(id,created_at,legacy_eligible,original_title,portuguese_title,english_title,tmdb_id)
+        values (?,now(),false,'B original catalog','　','B English %_ match',913730)
+        """, contextOnly);
+    jdbc.update("""
+        insert into movie(id,created_at,legacy_eligible,portuguese_title,english_title)
+        values (?,now(),false,'C ignored XYZ',null)
+        """, otherLanguage);
+    UUID hiddenEntry = UUID.randomUUID();
+    jdbc.update("insert into ranking_movie_entry(ranking_id,entry_id,movie_id,created_at) values (?,?,?,now())",
+        otherRank, hiddenEntry, contextOnly);
+    UUID hiddenRound = seedRound(otherRank, hiddenEntry, 1, false, 4100);
+    UUID author = seedAuthor(otherRank, owner.id());
+    jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,10,now())",
+        otherRank, hiddenRound, author);
+    var before = copyAffectedRows();
+    var movies = catalogRows();
+
+    String path = catalogSearchPath(COLLECTIONS, rank);
+    var query = catalogSearchBody("　%_ ", 1, "pt-BR");
+    var searched = rankingJsonAction(contributor, "POST", path, query);
+    var alias = rankingJsonAction(owner, "POST", catalogSearchPath(LEGACY_COLLECTIONS, rank), query);
+    assertSameNoStoreResponse(searched, alias, 200);
+    assertThat(fields(searched.body())).containsExactlyInAnyOrder("items", "page", "has_more");
+    assertThat(searched.body().at("/page").asInt()).isEqualTo(1);
+    assertThat(searched.body().at("/has_more").asBoolean()).isFalse();
+    assertThat(searched.body().required("items")).hasSize(2);
+    assertThat(searched.body().at("/items/0")).isEqualTo(JSON.createObjectNode().put("movie_id", manual.toString())
+        .put("title", "A catálogo").put("release_date", "2001-03-04"));
+    assertThat(searched.body().at("/items/1")).isEqualTo(JSON.createObjectNode().put("movie_id", contextOnly.toString())
+        .put("title", "B original catalog").putNull("release_date"));
+    var english = rankingJsonAction(contributor, "POST", path, catalogSearchBody("IGNORED xyz", 1, "en-US"));
+    assertThat(english.status()).isEqualTo(200);
+    assertThat(english.body().at("/items/0/title").asText()).isEqualTo("C ignored XYZ");
+    assertEmptyCatalog(rankingJsonAction(contributor, "POST", path, catalogSearchBody("not matching", 1, "pt-BR")));
+
+    assertThat(request(COLLECTIONS + "/" + rank + "/entries", contributor.token(), Map.of()).status()).isEqualTo(404);
+    assertCatalogError(rankingJsonAction(readOnly, "POST", path, query), 404, "ranking.not_found");
+    assertCatalogError(rankingJsonAction(outsider, "POST", path, query), 404, "ranking.not_found");
+    assertCatalogError(rankingJsonAction(contributor, "POST", catalogSearchPath(COLLECTIONS, otherRank), query),
+        404, "ranking.not_found");
+    jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='ADD_ENTRY'",
+        rank, contributor.id());
+    assertCatalogError(rankingJsonAction(contributor, "POST", path, query), 404, "ranking.not_found");
+    grant(rank, contributor, "ADD_ENTRY");
+    assertThat(copyAffectedRows()).isEqualTo(before);
+    assertThat(catalogRows()).isEqualTo(movies);
+
+    jdbc.update("update ranking set archived_at=now() where id=?", rank);
+    var archived = copyAffectedRows();
+    assertCatalogError(rankingJsonAction(contributor, "POST", path, query), 409, "ranking.archived_read_only");
+    assertCatalogError(rankingJsonAction(outsider, "POST", path, query), 404, "ranking.not_found");
+    assertThat(copyAffectedRows()).isEqualTo(archived);
+    assertThat(catalogRows()).isEqualTo(movies);
+    assertThat(TMDB_CALLS.get()).isZero();
+    assertThat(PICKER_CALLS.get()).isZero();
+  }
+
+  @Test void catalogSearchUsesStableTieBreakAndCapsHasMoreEvenWhenThereAreLaterMatches() throws Exception {
+    var owner = user(false);
+    UUID rank = ranking(owner, "PRIVATE");
+    jdbc.execute("""
+        insert into movie(id,created_at,legacy_eligible,english_title)
+        select cast('00000000-0000-4000-8000-'||lpad(n::text,12,'0') as uuid),now(),false,
+          case when n%2=0 then 'Test tie' else 'TEST Tie' end
+        from generate_series(1,402) n
+        """);
+    for (int page : List.of(1, 2, 19, 20)) {
+      var result = rankingJsonAction(owner, "POST", catalogSearchPath(COLLECTIONS, rank),
+          catalogSearchBody("test tie", page, "en-US"));
+      assertThat(result.status()).isEqualTo(200);
+      assertThat(result.headers().firstValue("Cache-Control")).hasValue("no-store");
+      assertThat(result.body().at("/page").asInt()).isEqualTo(page);
+      assertThat(result.body().at("/has_more").asBoolean()).isEqualTo(page < 20);
+      assertThat(result.body().required("items")).hasSize(20);
+      for (int i = 0; i < 20; i++) {
+        String expected = "00000000-0000-4000-8000-%012d".formatted((page - 1) * 20 + i + 1);
+        assertThat(result.body().at("/items/" + i + "/movie_id").asText()).isEqualTo(expected);
+      }
+    }
+    assertThat(TMDB_CALLS.get()).isZero();
+    assertThat(PICKER_CALLS.get()).isZero();
+  }
+
+  @Test void catalogSearchStrictRequestAndConcurrentAttachOfSameManualMovieAreIndependent() throws Exception {
+    var owner = user(false);
+    var contributor = user(false);
+    UUID a = ranking(owner, "PRIVATE"), b = ranking(contributor, "PRIVATE"), manual = UUID.randomUUID();
+    membership(a, contributor, "ADD_ENTRY");
+    jdbc.update("""
+        insert into movie(id,created_at,description,director,english_title,portuguese_title)
+        values (?,now(),'synthetic','synthetic','Manual catalog search','Cinema manual')
+        """, manual);
+    String canonical = catalogSearchPath(COLLECTIONS, a);
+    var valid = catalogSearchBody("Manual", 1, "en-US");
+    assertCatalogError(rankingJsonAction(contributor, "POST", canonical + "?query=Manual", valid),
+        400, "ranking.invalid_catalog_search");
+    assertCatalogError(rankingJsonAction(owner, "POST", COLLECTIONS + "/not-uuid/entries/catalog/search", valid),
+        400, "ranking.invalid_catalog_search");
+    for (String malformed : List.of(
+        """
+        {"query":"ok","query":"duplicate","page":1,"language":"en-US"}
+        """,
+        valid + "{}", valid.deepCopy().put("page", "1").toString(), valid.deepCopy().put("page", 21).toString(),
+        valid.deepCopy().put("query", "🎬").toString(), valid.deepCopy().put("language", "en-GB").toString(),
+        valid.deepCopy().put("extra", true).toString())) {
+      assertCatalogError(rawCatalogRequest(contributor, canonical, malformed), 400, "ranking.invalid_catalog_search");
+    }
+    assertThat(rawCatalogRequest(null, canonical, valid.toString()).status()).isIn(401, 403);
+    var candidate = rankingJsonAction(contributor, "POST", canonical, valid);
+    assertThat(candidate.status()).isEqualTo(200);
+    assertThat(candidate.body().at("/items/0/movie_id").asText()).isEqualTo(manual.toString());
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_entry", Integer.class)).isZero();
+
+    var movie = JSON.createObjectNode().put("movie_id", manual.toString());
+    String suffix = "/entries/catalog";
+    var left = http.sendAsync(rankingJsonRequest(contributor, "POST", COLLECTIONS + "/" + a + suffix, movie),
+        HttpResponse.BodyHandlers.ofString());
+    var right = http.sendAsync(rankingJsonRequest(contributor, "POST", LEGACY_COLLECTIONS + "/" + b + suffix, movie),
+        HttpResponse.BodyHandlers.ofString());
+    var first = response(left.get(15, java.util.concurrent.TimeUnit.SECONDS));
+    var second = response(right.get(15, java.util.concurrent.TimeUnit.SECONDS));
+    assertThat(first.status()).isEqualTo(201);
+    assertThat(second.status()).isEqualTo(201);
+    assertThat(first.body().required("entry_id").asText()).isNotEqualTo(second.body().required("entry_id").asText());
+    assertThat(jdbc.queryForList("select movie_id from ranking_movie_entry", UUID.class)).containsExactly(manual, manual);
+    assertThat(jdbc.queryForObject("select count(*) from movie where id=? and tmdb_id is null", Integer.class, manual)).isEqualTo(1);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_round", Integer.class)).isEqualTo(2);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_rating", Integer.class)).isZero();
+    assertSameNoStoreResponse(rankingJsonAction(contributor, "POST", canonical, valid), candidate, 200);
+    assertThat(TMDB_CALLS.get()).isZero();
+    assertThat(PICKER_CALLS.get()).isZero();
+  }
+
+  private String catalogSearchPath(String prefix, UUID rank) { return prefix + "/" + rank + "/entries/catalog/search"; }
+
+  private com.fasterxml.jackson.databind.node.ObjectNode catalogSearchBody(String query, int page, String language) {
+    return JSON.createObjectNode().put("query", query).put("page", page).put("language", language);
+  }
+
+  private ApiResponse rawCatalogRequest(Account actor, String path, String body) throws Exception {
+    var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/monolith" + path))
+        .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
+        .POST(HttpRequest.BodyPublishers.ofString(body));
+    if (actor != null) request.header("Authorization", "Bearer " + actor.token());
+    return response(http.send(request.build(), HttpResponse.BodyHandlers.ofString()));
+  }
+
+  private void assertCatalogError(ApiResponse data, int status, String code) {
+    assertThat(data.status()).isEqualTo(status);
+    assertThat(data.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(data.body()).isEqualTo(JSON.createObjectNode().put("code", code));
+  }
+
+  private void assertEmptyCatalog(ApiResponse data) {
+    assertThat(data.status()).isEqualTo(200);
+    assertThat(data.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(data.body()).isEqualTo(JSON.createObjectNode().put("page", 1).put("has_more", false)
+        .set("items", JSON.createArrayNode()));
+  }
+
+  private List<String> catalogRows() {
+    return jdbc.queryForList("select row_to_json(m)::text from movie m order by id", String.class);
+  }
+
   @Test void canonicalContextMovieDoesNotAppearInLegacyReadsOrWrites() throws Exception {
     var owner = user(true);
     var outsider = user(false);
