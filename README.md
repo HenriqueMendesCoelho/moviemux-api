@@ -472,3 +472,20 @@ replicas and jobs are verified V12+ compatible and any old queues are drained.
 Turning the toggle off does not change already imported catalog data or make
 an older unfiltered binary safe. Neither import nor reuse emits legacy alerts,
 affects other rankings' scores, or awards XP.
+
+### Default round disclosure on detail
+
+Authenticated `GET /rankings/{rankingId}/entries/{entryId}/rounds/{roundId}`
+returns only `round_id`, `round_number` and nullable `revealed`. This specific
+detail action can reveal a currently readable, active round whose flag is
+explicitly false once its contextual creation time is at least 30 minutes old.
+Authorization and elapsed time are rechecked under database locks. List and
+aggregate reads, malformed or forbidden requests, archived rankings and unknown
+legacy flags never change disclosure. HEAD does not trigger the transition.
+Use this detail only when requested; do not prefetch it in SSR, list scans or PWA
+background paths.
+
+The response contains no vote, author, timing or statistics data and is no-store.
+Only the established revealed-only aggregate may be refreshed afterward; hidden
+rounds never contribute. The transition does not edit scores or contextual
+timestamps, notify anyone, or reopen after a rating edit.
