@@ -961,6 +961,89 @@ class RankingAccessListHttpIT {
     assertThat(request(base+shown+suffix,reader.token(),Map.of()).body()).isEqualTo(detailed.body());
   }
 
+  @Test void openJoinIsExplicitScopedAtomicAndNeverReinstatesOrRewritesGrants() throws Exception {
+    var owner=user(false);
+    var joiner=user(false);
+    var other=user(true);
+    UUID open=ranking(owner,"PRIVATE"), closed=ranking(owner,"PUBLIC"), approval=ranking(owner,"PUBLIC"),
+        archived=ranking(owner,"PUBLIC"), publicOpen=ranking(owner,"PUBLIC");
+    jdbc.update("update ranking set admission='OPEN' where id in (?,?,?)",open,archived,publicOpen);
+    jdbc.update("update ranking set archived_at=now() where id=?",archived);
+    jdbc.update("update ranking set admission='APPROVAL' where id=?",approval);
+    String scope="/rankings/"+open;
+    assertThat(request(scope,joiner.token(),Map.of()).status()).isEqualTo(404);
+    assertEmpty(list(joiner,""));
+
+    var denied = joinOpen(joiner,UUID.randomUUID().toString(),"",null);
+    assertThat(denied.status()).isEqualTo(404);
+    assertThat(denied.body().required("code").asText()).isEqualTo("ranking.not_found");
+    for (String id : List.of("not-an-id",closed.toString(),approval.toString(),archived.toString())) {
+      var outside=joinOpen(joiner,id,"",null);
+      assertThat(outside.status()).isEqualTo(denied.status());
+      assertThat(outside.body()).isEqualTo(denied.body());
+      assertThat(outside.headers().firstValue("Cache-Control")).hasValue("no-store");
+    }
+    for (var invalid : List.of(joinOpen(joiner,open.toString(),"","{}"),
+         joinOpen(joiner,open.toString(),"?user_id="+other.id(),null))) {
+      assertThat(invalid.status()).isEqualTo(400);
+      assertThat(invalid.body().required("code").asText()).isEqualTo("ranking.invalid_join");
+      assertThat(invalid.headers().firstValue("Cache-Control")).hasValue("no-store");
+    }
+    assertThat(joinOpen(null,open.toString(),"",null).status()).isIn(401,403);
+    assertEmpty(list(joiner,""));
+
+    long entries=jdbc.queryForObject("select count(*) from ranking_movie_entry",Long.class);
+    long invites=jdbc.queryForObject("select count(*) from ranking_invitation",Long.class);
+    // Both requests race the one membership creation. Neither rewrites the grants after it exists.
+    try (var pool=java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+      var ready=new java.util.concurrent.CountDownLatch(2);
+      var go=new java.util.concurrent.CountDownLatch(1);
+      java.util.concurrent.Callable<ApiResponse> attempt=()->{
+        ready.countDown();
+        if (!go.await(5,java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("race not started");
+        return joinOpen(joiner,open.toString(),"",null);
+      };
+      var first=pool.submit(attempt);
+      var second=pool.submit(attempt);
+      try {
+        assertThat(ready.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      } finally { go.countDown(); }
+      for (var joined : List.of(first.get(12,java.util.concurrent.TimeUnit.SECONDS),
+           second.get(12,java.util.concurrent.TimeUnit.SECONDS))) {
+        assertThat(joined.status()).isEqualTo(204);
+        assertThat(joined.body().isNull()).isTrue();
+        assertThat(joined.headers().firstValue("Cache-Control")).hasValue("no-store");
+      }
+    }
+    assertThat(jdbc.queryForObject("select count(*) from ranking_membership where ranking_id=? and user_id=?",
+        Integer.class,open,joiner.id())).isEqualTo(1);
+    assertThat(jdbc.queryForList("select capability from ranking_membership_grant where ranking_id=? and user_id=?",
+        String.class,open,joiner.id())).containsExactlyInAnyOrder("READ","RATE_OWN");
+    assertThat(request(scope,joiner.token(),Map.of()).status()).isEqualTo(200);
+    assertThat(list(joiner,"").body().required("items").get(0).required("ranking_id").asText()).isEqualTo(open.toString());
+    assertThat(request(scope,other.token(),Map.of()).status()).isEqualTo(404);
+
+    jdbc.update("delete from ranking_membership_grant where ranking_id=? and user_id=? and capability='RATE_OWN'",
+        open,joiner.id());
+    assertThat(joinOpen(joiner,open.toString(),"",null).status()).isEqualTo(204);
+    assertThat(jdbc.queryForList("select capability from ranking_membership_grant where ranking_id=? and user_id=?",
+        String.class,open,joiner.id())).containsExactly("READ");
+    jdbc.update("update ranking_membership set active=false where ranking_id=? and user_id=?",open,joiner.id());
+    assertThat(joinOpen(joiner,open.toString(),"",null).body()).isEqualTo(denied.body());
+    assertThat(joinOpen(joiner,publicOpen.toString(),"",null).status()).isEqualTo(204);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_movie_entry",Long.class)).isEqualTo(entries);
+    assertThat(jdbc.queryForObject("select count(*) from ranking_invitation",Long.class)).isEqualTo(invites);
+  }
+
+  private ApiResponse joinOpen(Account actor,String rank,String query,String body) throws Exception {
+    var builder=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/monolith/rankings/"+rank+"/join"+query))
+        .timeout(Duration.ofSeconds(10));
+    if (actor!=null) builder.header("Authorization","Bearer "+actor.token());
+    if (body!=null) builder.header("Content-Type","application/json");
+    return response(http.send(builder.POST(body==null?HttpRequest.BodyPublishers.noBody():
+        HttpRequest.BodyPublishers.ofString(body)).build(),HttpResponse.BodyHandlers.ofString()));
+  }
+
   private UUID seedAuthor(UUID rank,UUID account) {
     UUID id=UUID.randomUUID();
     jdbc.update("insert into ranking_author_identity(ranking_id,author_id,account_id,deleted_public_code) values (?,?,?,?)",
