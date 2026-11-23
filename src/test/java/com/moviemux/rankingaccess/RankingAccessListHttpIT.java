@@ -916,6 +916,58 @@ class RankingAccessListHttpIT {
     return http.send(post,HttpResponse.BodyHandlers.ofString());
   }
 
+  @Test void perRoundAggregateNeverIncludesHiddenParticipationAndPreservesNumericHistory() throws Exception {
+    var owner=user(false);
+    var reader=user(false);
+    var outsider=user(true);
+    UUID rank=ranking(owner,"PRIVATE"), second=ranking(owner,"PRIVATE");
+    membership(rank,reader,"READ");
+    UUID entry=seedRevealEntry(rank), shown=seedRound(rank,entry,1,true,3600),
+        hidden=seedRound(rank,entry,2,false,3600), unknown=seedRound(rank,entry,3,null,3600),
+        noVotes=seedRound(rank,entry,4,true,3600);
+    UUID first=seedAuthor(rank,owner.id()), own=seedAuthor(rank,reader.id()), anonymized=seedAuthor(rank,null);
+    for (var vote : java.util.Arrays.asList(new Object[]{rank,shown,first,-12},new Object[]{rank,shown,own,0},
+        new Object[]{rank,shown,anonymized,null},new Object[]{rank,hidden,own,300})) {
+      jdbc.update("insert into ranking_movie_rating(ranking_id,round_id,author_id,score,created_at) values (?,?,?,?,now())",vote);
+    }
+    String base="/rankings/"+rank+"/entries/"+entry+"/rounds/";
+    String suffix="/ratings/aggregate";
+    var detailed=request(base+shown+suffix,reader.token(),Map.of());
+    assertThat(detailed.status()).isEqualTo(200);
+    assertThat(detailed.headers().firstValue("Cache-Control")).hasValueSatisfying(value->assertThat(value).contains("no-store"));
+    assertThat(fields(detailed.body())).containsExactlyInAnyOrder("round_id","revealed","total","votes");
+    assertThat(detailed.body().required("revealed").asBoolean()).isTrue();
+    assertThat(detailed.body().required("total").asInt()).isEqualTo(-12);
+    assertThat(detailed.body().required("votes").asInt()).isEqualTo(2);
+    var blank=request(base+noVotes+suffix,reader.token(),Map.of()).body();
+    assertThat(blank.required("total").asInt()).isZero();
+    assertThat(blank.required("votes").asInt()).isZero();
+    var hiddenView=request(base+hidden+suffix,reader.token(),Map.of()).body();
+    assertThat(hiddenView.required("revealed").asBoolean()).isFalse();
+    assertThat(hiddenView.required("total").isNull()).isTrue();
+    assertThat(hiddenView.required("votes").isNull()).isTrue();
+    jdbc.update("update ranking_movie_rating set score=-999 where ranking_id=? and round_id=? and author_id=?",rank,hidden,own);
+    assertThat(request(base+hidden+suffix,reader.token(),Map.of()).body()).isEqualTo(hiddenView);
+    assertThat(jdbc.queryForObject("select revealed from ranking_movie_round where ranking_id=? and round_id=?",
+        Boolean.class,rank,hidden)).isFalse();
+    var uncertain=request(base+unknown+suffix,reader.token(),Map.of()).body();
+    assertThat(uncertain.required("revealed").isNull()).isTrue();
+    assertThat(uncertain.required("total").isNull()).isTrue();
+    assertThat(uncertain.required("votes").isNull()).isTrue();
+    assertThat(request(base+shown+suffix,outsider.token(),Map.of()).status()).isEqualTo(404);
+    assertThat(request("/rankings/"+second+"/entries/"+entry+"/rounds/"+shown+suffix,
+        owner.token(),Map.of()).status()).isEqualTo(404);
+    jdbc.update("update ranking set archived_at=now() where id=?",rank);
+    assertThat(request(base+shown+suffix,reader.token(),Map.of()).body()).isEqualTo(detailed.body());
+  }
+
+  private UUID seedAuthor(UUID rank,UUID account) {
+    UUID id=UUID.randomUUID();
+    jdbc.update("insert into ranking_author_identity(ranking_id,author_id,account_id,deleted_public_code) values (?,?,?,?)",
+        rank,id,account,UUID.randomUUID());
+    return id;
+  }
+
   private String rotateInvitationAddress(Account actor) throws Exception {
     var builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port
         + "/api/monolith/user/ranking-invitation-address/rotate"))
