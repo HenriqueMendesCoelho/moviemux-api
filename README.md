@@ -553,8 +553,28 @@ Set the dedicated `ranking.rating-copy.preview-key` to a Base64 encoding of a
 32-byte key distinct from auth/invitation keys and explicitly set
 `ranking.rating-copy.preview-ttl-seconds` between 1 and 3600 (e.g. 600 in
 disposable QA). Without both settings the configured operation fails closed
-after scope authorization. No apply route, copy writes, history/XP effects,
-or release activation are included in this checkpoint.
+after scope authorization.
+
+`POST /movies/collections/{rankingId}/entries/{entryId}/rounds/{roundId}/rating/me/copy-apply`
+(and the exact `/rankings` alias) accepts only `{"preview_token":"…"}`.
+The original outcome and an authorized exact replay both return `201`
+with `round_id` and `score`. Re-fetch your current note after confirmation:
+later edits never change the sealed receipt or get overwritten by replay.
+The command checks both live contexts again, locks the exact canonical film
+scopes, and copies only the caller's still-compatible source score into an
+empty destination. It never creates an entry or emits events, activity or XP.
+
+Application is off unless `ranking.rating-copy.apply-enabled=true`, a
+purpose-specific preview key/TTL are configured, and the independent receipt
+sweeper is configured and healthy. Explicitly configure
+`ranking.rating-copy.cleanup-batch-size` (1–100) and
+`ranking.rating-copy.cleanup-interval-seconds` (1–3600); there are no defaults
+and no dependency on the shared scheduling toggle. V15 records only the bounded
+operation ID, contextual destination and expiry. Logical expiry denies replay
+immediately, even if physical cleanup is delayed. Monitor the
+`moviemux.rating.copy.receipts` cleanup health, oldest-expired lag and bounded
+expired count (capped at batch size + 1). Cleanup removes only receipt rows,
+never scores. No production activation is part of this change.
 
 ### Canonical movie catalog versus legacy board
 
