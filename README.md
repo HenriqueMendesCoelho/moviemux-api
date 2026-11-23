@@ -441,6 +441,22 @@ Once expired, revoked, consumed or unusable, the invitation stops contributing
 a name or an item. Seeing an invitation never authorizes reading the ranking
 before acceptance. Missing historical names remain null.
 
+### Explicit OPEN admission
+
+For a known ranking identifier, an authenticated user may explicitly
+`POST /rankings/{rankingId}/join` with no body or query. A live `OPEN` ranking
+grants only `READ` and `RATE_OWN` to a new member, atomically. The flow works
+for either visibility, is not a discovery endpoint, and does not read or expose
+private content before membership. Success is empty `204`. An active member
+retry in a live `OPEN` ranking never rewrites existing grants. Inactive
+memberships are not reinstated.
+
+Wrong admission, archived, unavailable and malformed identifiers return the
+same private no-store `404 ranking.not_found`. Supplying a body or query
+returns `400 ranking.invalid_join`; authentication still uses the existing
+boundary. There is no automatic join on read, external message, invitation,
+activity or XP. `APPROVAL` and `INVITATION` cannot be bypassed here.
+
 ### Canonical movie catalog versus legacy board
 
 The shared `movie` table retains canonical movie identity. V12 adds immutable
