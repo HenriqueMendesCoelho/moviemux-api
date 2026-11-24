@@ -665,6 +665,23 @@ The private no-store response contains only `items` in input order:
 Duplicates are reported independently. This preview never needs the single-copy
 key or worker, issues no token and changes no ratings. There is no batch apply.
 
+### Manual canonical movie creation
+
+`GET /restricted/movies/catalog/manual` returns a bodyless 204 only for a
+current global ADM. `POST` to the same route accepts a UUIDv4 `command_id`,
+at least one localized/original title and optional known metadata (director,
+description, civil release date, runtime or existing genre IDs). An exact
+normalized retry returns the same `movie_id` (200 rather than 201); reusing
+the command for changed metadata returns 409 instead. Both paths are no-store.
+Neither local Collection ownership nor a stale token grants this permission.
+
+V18 stores the immutable versioned command fingerprint only on a new
+independent catalog row. The command does not attach the movie to a Collection,
+write the legacy board or call TMDB, Discord or Socket.IO. The new item appears
+in authorized catalog searches and can be attached later with the ordinary
+scoped command. No metadata editing, fuzzy identity merge or old board alias
+is part of this endpoint.
+
 ### Canonical movie catalog versus legacy board
 
 The shared `movie` table retains canonical movie identity. V12 adds immutable
