@@ -21,6 +21,9 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.Http403ForbiddenEntryPoint;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.AnyRequestMatcher;
 
 import static org.springframework.security.config.Customizer.withDefaults;
 
@@ -29,6 +32,7 @@ import static org.springframework.security.config.Customizer.withDefaults;
 @EnableMethodSecurity
 public class SecurityConfig {
 
+	private static final String MANUAL_CATALOG = "/restricted/movies/catalog/manual";
 	private static final String[] PUBLIC_MATCHERS = { "/public/**" };
 	private static final String[] PUBLIC_RANKING_GET = {
 			"/public/movies/collections/{rankingId}", "/public/movies/collections/{rankingId}/entries",
@@ -96,10 +100,17 @@ public class SecurityConfig {
 		http.cors(withDefaults());
 		http.csrf(AbstractHttpConfigurer::disable);
 		http.authorizeHttpRequests(authz -> authz.requestMatchers(PUBLIC_MATCHERS).permitAll()
+				.requestMatchers(MANUAL_CATALOG).hasAuthority("ROLE_ADM")
 				.requestMatchers(HttpMethod.GET, "/actuator/**")
 				.hasAuthority("ROLE_ADM")
 				.anyRequest()
 				.authenticated());
+		http.exceptionHandling(errors -> errors
+				.defaultAuthenticationEntryPointFor((request, response, failure) -> {
+					response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+					response.setHeader("Cache-Control", "no-store");
+				}, PathPatternRequestMatcher.withDefaults().matcher(MANUAL_CATALOG))
+				.defaultAuthenticationEntryPointFor(new Http403ForbiddenEntryPoint(), AnyRequestMatcher.INSTANCE));
 		http.addFilter(jwtAuthorizationFilter());
 		http.addFilter(new JWTAuthorizationFilter(authenticationManager(authenticationConfiguration), jwtUtil,
 				userDetailsService));
