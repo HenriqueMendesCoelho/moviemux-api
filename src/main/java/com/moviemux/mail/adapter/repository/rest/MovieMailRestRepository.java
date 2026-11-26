@@ -37,7 +37,7 @@ public class MovieMailRestRepository implements EmailGateway {
           .toBodilessEntity();
       return Delivery.SENT;
     } catch (RestClientResponseException failure) {
-      throw new MailDeliveryFailure(Reason.HTTP_ERROR);
+      throw new MailDeliveryFailure(Reason.HTTP_ERROR, failure.getStatusCode().value());
     } catch (ResourceAccessException failure) {
       throw new MailDeliveryFailure(Reason.UNAVAILABLE);
     } catch (RestClientException failure) {
