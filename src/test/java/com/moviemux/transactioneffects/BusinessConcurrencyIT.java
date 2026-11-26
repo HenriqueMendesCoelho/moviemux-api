@@ -3,11 +3,8 @@ package com.moviemux.transactioneffects;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.moviemux.mail.domain.repository.EmailGateway;
-import com.moviemux.user.adapter.repository.postgres.InvitePostgresRepository;
 import com.moviemux.user.domain.command.RegisterUserCommand;
-import com.moviemux.user.domain.model.Invite;
 import com.moviemux.user.domain.model.User;
-import com.moviemux.user.domain.repository.InviteRepository;
 import com.moviemux.user.domain.usecase.CreateUserUseCase;
 import com.moviemux.wishlist.adapter.repository.postgres.impl.WishlistPostgresRepository;
 import com.moviemux.wishlist.domain.command.CreateWishlistCommand;
@@ -21,7 +18,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -35,7 +31,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import com.moviemux.user.domain.exception.InviteNotValidException;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -93,13 +89,10 @@ class BusinessConcurrencyIT {
   @Autowired CreateUserWishlistUseCase createWishlist;
   @Autowired CreateUserUseCase createUser;
   @Autowired BarrierWishlists wishlists;
-  @Autowired BarrierInvites invites;
 
   @BeforeEach
   void resetSchedules() {
     wishlists.beforeOwnerLock = null;
-    invites.readBarrier = null;
-    invites.firstCommitted = null;
   }
 
   private UUID owner() {
@@ -207,63 +200,23 @@ class BusinessConcurrencyIT {
   }
 
   @Test
-  void staleInviteSnapshotRejectsSecondRegistrationAndRollsBackItsAccount() throws Exception {
-    owner(); // Existing user forces invitation-based registration in both calls.
+  void concurrentRegistrationConsumesLegacyInviteExactlyOnce() throws Exception {
+    owner();
     String code = "concurrent-invite-" + UUID.randomUUID();
     jdbc.update("insert into user_invites(code) values (?)", code);
-    invites.readBarrier = new CyclicBarrier(2);
-    invites.firstCommitted = new CountDownLatch(1);
     String firstEmail = "first-" + UUID.randomUUID() + "@example.test";
     String secondEmail = "second-" + UUID.randomUUID() + "@example.test";
-    List<Outcome> outcomes =
-        race(
-            () -> {
-              try {
-                return createUser.execute(new RegisterUserCommand(candidate(firstEmail), code));
-              } finally {
-                // The proxied operation has either committed or failed before this signal.
-                invites.firstCommitted.countDown();
-              }
-            },
-            () -> {
-              invites.waitForFirstCommit.set(true);
-              try {
-                return createUser.execute(new RegisterUserCommand(candidate(secondEmail), code));
-              } finally {
-                invites.waitForFirstCommit.remove();
-              }
-            });
-    assertThat(outcomes.getFirst().succeeded()).isTrue();
-    assertThat(outcomes.get(1).failure())
-        .isInstanceOf(ObjectOptimisticLockingFailureException.class);
-    assertThat(
-            jdbc.queryForObject(
-                "select count(*) from \"user\" where email=?", Integer.class, firstEmail))
-        .isEqualTo(1);
-    assertThat(
-            jdbc.queryForObject(
-                "select count(*) from \"user\" where email=?", Integer.class, secondEmail))
-        .isZero();
-    assertThat(
-            jdbc.queryForObject(
-                "select count(*) from user_invites where code=?", Integer.class, code))
-        .isZero();
-    assertThat(
-            jdbc.queryForObject(
-                "select count(*) from user_preferences where user_id in (select id from \"user\""
-                    + " where email in (?,?))",
-                Integer.class,
-                firstEmail,
-                secondEmail))
-        .isEqualTo(1);
-    assertThat(
-            jdbc.queryForObject(
-                "select count(*) from user_statistics where user_id in (select id from \"user\""
-                    + " where email in (?,?))",
-                Integer.class,
-                firstEmail,
-                secondEmail))
-        .isEqualTo(1);
+    var outcomes=race(
+        ()->createUser.execute(new RegisterUserCommand(candidate(firstEmail),code)),
+        ()->createUser.execute(new RegisterUserCommand(candidate(secondEmail),code)));
+    assertThat(outcomes.stream().filter(Outcome::succeeded)).hasSize(1);
+    assertThat(outcomes.stream().filter(result->!result.succeeded()).map(Outcome::failure))
+        .singleElement().isInstanceOf(InviteNotValidException.class);
+    assertThat(jdbc.queryForObject("select count(*) from \"user\" where email in (?,?)",Integer.class,firstEmail,secondEmail)).isEqualTo(1);
+    assertThat(jdbc.queryForObject("select count(*) from user_invites where code=?",Integer.class,code)).isZero();
+    for(String table:List.of("user_preferences","user_statistics")){
+      assertThat(jdbc.queryForObject("select count(*) from "+table+" where user_id in (select id from \"user\" where email in (?,?))",Integer.class,firstEmail,secondEmail)).isEqualTo(1);
+    }
   }
 
   private User candidate(String email) {
@@ -348,56 +301,12 @@ class BusinessConcurrencyIT {
     }
   }
 
-  static class BarrierInvites implements InviteRepository {
-    final InvitePostgresRepository delegate;
-    volatile CyclicBarrier readBarrier;
-    volatile CountDownLatch firstCommitted;
-    final ThreadLocal<Boolean> waitForFirstCommit = ThreadLocal.withInitial(() -> false);
-
-    BarrierInvites(InvitePostgresRepository delegate) {
-      this.delegate = delegate;
-    }
-
-    public Invite findByCode(String code) {
-      Invite snapshot = delegate.findByCode(code);
-      await(readBarrier);
-      return snapshot;
-    }
-
-    public List<Invite> findAll() {
-      return delegate.findAll();
-    }
-
-    public Invite save(Invite invite) {
-      return delegate.save(invite);
-    }
-
-    public void delete(Invite invite) {
-      if (waitForFirstCommit.get()) {
-        try {
-          if (!firstCommitted.await(15, TimeUnit.SECONDS))
-            throw new IllegalStateException("First registration did not finish");
-        } catch (InterruptedException failure) {
-          Thread.currentThread().interrupt();
-          throw new IllegalStateException("Synthetic invitation schedule interrupted", failure);
-        }
-      }
-      delegate.delete(invite);
-    }
-  }
-
   @TestConfiguration
   static class Configuration {
     @Bean
     @Primary
     BarrierWishlists barrierWishlists(WishlistPostgresRepository delegate) {
       return new BarrierWishlists(delegate);
-    }
-
-    @Bean
-    @Primary
-    BarrierInvites barrierInvites(InvitePostgresRepository delegate) {
-      return new BarrierInvites(delegate);
     }
 
     @Bean

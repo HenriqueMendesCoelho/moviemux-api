@@ -153,6 +153,8 @@ class WishlistAuthorizationHttpIT {
             + ".movie_wishlist, "
             + SCHEMA
             + ".user_invites restart identity cascade");
+    // This fixture models a fresh independent installation for each scenario.
+    jdbc.update("update " + SCHEMA + ".instance_registration_policy set mode='INVITE_ONLY',bootstrap_completed=false where singleton");
     OUTBOUND.clear();
     UNEXPECTED_OUTBOUND.clear();
   }

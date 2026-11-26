@@ -154,6 +154,9 @@ class BackendWorkflowIT {
             + ".movie_wishlist, "
             + SCHEMA
             + ".user_invites restart identity cascade");
+    // Each synthetic case starts a newly initialized installation; production bootstrap
+    // deliberately remains completed when the last account is removed.
+    jdbc.update("update " + SCHEMA + ".instance_registration_policy set mode='INVITE_ONLY',bootstrap_completed=false where singleton");
     OUTBOUND.clear();
     UNEXPECTED_OUTBOUND.clear();
   }

@@ -13,7 +13,7 @@ public class UserRequestDto {
   @Length(min = 3, max = 100)
   private String name;
 
-  @NotBlank @Email private String email;
+  @NotBlank @Email @Length(max = 100) private String email;
 
   @NotBlank
   @Length(min = 8, max = 70)

@@ -30,7 +30,11 @@ public class SpringControllerAdviceHandler {
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	public Map<String, Object> handleValidationExceptions(MethodArgumentNotValidException ex,
 			HttpServletRequest request) {
-		log.error("Request: " + request.getRequestURI() + " raised: ", ex);
+		if (registrationRequest(request)) {
+          log.warn("Registration rejected ({})", ex.getClass().getSimpleName());
+        } else {
+          log.error("Request: " + request.getRequestURI() + " raised: ", ex);
+        }
 
 		Map<String, Object> response = new LinkedHashMap<>();
 		response.put("timestamp", new Date(System.currentTimeMillis()).toString());
@@ -53,7 +57,11 @@ public class SpringControllerAdviceHandler {
 	@ResponseStatus(HttpStatus.UNAUTHORIZED)
 	@ExceptionHandler(TokenInvalidException.class)
 	public Map<String, Object> handleValidationExceptions(TokenInvalidException ex, HttpServletRequest request) {
-		log.error("Request: " + request.getRequestURI() + " raised: ", ex);
+		if (registrationRequest(request)) {
+          log.warn("Registration rejected ({})", ex.getClass().getSimpleName());
+        } else {
+          log.error("Request: " + request.getRequestURI() + " raised: ", ex);
+        }
 
 		Map<String, Object> response = new LinkedHashMap<>();
 		response.put("timestamp", new Date(System.currentTimeMillis()).toString());
@@ -79,7 +87,11 @@ public class SpringControllerAdviceHandler {
 	@ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
 	@ExceptionHandler(Exception.class)
 	public Map<String, Object> handleError(HttpServletRequest request, Exception ex) {
-		log.error("Request: " + request.getRequestURI() + " raised: ", ex);
+		if (registrationRequest(request)) {
+          log.warn("Registration rejected ({})", ex.getClass().getSimpleName());
+        } else {
+          log.error("Request: " + request.getRequestURI() + " raised: ", ex);
+        }
 
 		Map<String, Object> response = new LinkedHashMap<>();
 		response.put("timestamp", new Date(System.currentTimeMillis()).toString());
@@ -90,4 +102,9 @@ public class SpringControllerAdviceHandler {
 
 		return response;
 	}
+    private static boolean registrationRequest(HttpServletRequest request) {
+        return "POST".equals(request.getMethod())
+            && (request.getContextPath()+"/public/user").equals(request.getRequestURI());
+    }
+
 }

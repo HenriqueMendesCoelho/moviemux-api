@@ -5,11 +5,10 @@ import com.moviemux.user.domain.repository.UserMailSender;
 import com.moviemux.user.domain.model.Role;
 import com.moviemux.user.domain.exception.DuplicatedUserException;
 import com.moviemux.user.domain.exception.InviteNotValidException;
-import com.moviemux.user.domain.model.Invite;
 import com.moviemux.user.domain.model.Preferences;
 import com.moviemux.user.domain.model.Statistics;
 import com.moviemux.user.domain.model.User;
-import com.moviemux.user.domain.repository.InviteRepository;
+import com.moviemux.user.domain.registration.RegistrationGate;
 import com.moviemux.user.domain.repository.PasswordHasher;
 import com.moviemux.user.domain.repository.UserRepository;
 import com.moviemux.user.domain.usecase.CreateUserUseCase;
@@ -24,7 +23,7 @@ import org.springframework.stereotype.Component;
 @Transactional(rollbackFor = Exception.class)
 public class CreateUserUseCaseImpl implements CreateUserUseCase {
   private final UserRepository repository;
-  private final InviteRepository inviteRepository;
+  private final RegistrationGate registration;
   private final PasswordHasher passwordEncoder;
   private final UserMailSender mailSender;
 
@@ -34,19 +33,11 @@ public class CreateUserUseCaseImpl implements CreateUserUseCase {
     User user = command.user();
     String inviteCode = command.inviteCode();
 
-    if (repository.count() > 0) {
-      Invite invite = inviteRepository.findByCode(inviteCode);
+    var decision = registration.authorize(user.getEmail(), inviteCode);
+    user.setRoles(java.util.Set.of(Role.USER));
+    if (decision.bootstrap()) user.addRole(Role.ADM);
 
-      if (invite == null) {
-        throw new InviteNotValidException();
-      }
-
-      inviteRepository.delete(invite);
-    } else {
-      user.addRole(Role.ADM);
-    }
-
-    if (repository.findByEmail(user.getEmail()) != null) {
+    if (registration.existingEmail(user.getEmail()) || repository.findByEmail(user.getEmail()) != null) {
       throw new DuplicatedUserException();
     }
     user.setPassword(passwordEncoder.encode(user.getPassword()));
@@ -54,6 +45,7 @@ public class CreateUserUseCaseImpl implements CreateUserUseCase {
     user.setPreferences(Preferences.builder().user(user).notify(true).build());
 
     User userCreated = repository.save(user);
+    registration.complete(userCreated.getEmail(), decision);
 
     sendWelcomeMail(userCreated);
 

@@ -15,6 +15,8 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.CacheControl;
+import com.moviemux.user.domain.registration.RegistrationFailure;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -30,10 +32,15 @@ public class UserPublicSpringController {
     UserResponseDto response;
     try {
       response = controller.createUser(user);
-      return ResponseEntity.ok(response);
-    } catch (DuplicatedUserException | InviteNotValidException e) {
-      return ResponseEntity.badRequest()
+      return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(response);
+    } catch (InviteNotValidException e) {
+      return ResponseEntity.badRequest().cacheControl(CacheControl.noStore())
+          .body(Map.of("error",true,"status",400,"message",e.getMessage(),"code","registration.invite_required"));
+    } catch (DuplicatedUserException e) {
+      return ResponseEntity.badRequest().cacheControl(CacheControl.noStore())
           .body(Map.of("error", true, "status", 400, "message", e.getMessage()));
+    } catch (RegistrationFailure e) {
+      return ResponseEntity.status(503).cacheControl(CacheControl.noStore()).body(Map.of("code","registration.unavailable"));
     }
   }
 

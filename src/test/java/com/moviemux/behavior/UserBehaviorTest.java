@@ -11,11 +11,11 @@ import com.moviemux.user.domain.exception.UserNotAuthorizedException;
 import com.moviemux.user.domain.exception.UserNotFoundException;
 import com.moviemux.user.domain.exception.UserRedefinePasswordKeyInvalid;
 import com.moviemux.user.domain.exception.UserRedefinePasswordKeyNotFound;
-import com.moviemux.user.domain.model.Invite;
 import com.moviemux.user.domain.model.Preferences;
 import com.moviemux.user.domain.model.Statistics;
 import com.moviemux.user.domain.model.User;
-import com.moviemux.user.domain.repository.InviteRepository;
+import com.moviemux.user.domain.registration.RegistrationGate;
+import com.moviemux.user.domain.registration.RegistrationMode;
 import com.moviemux.user.domain.repository.PasswordHasher;
 import com.moviemux.user.domain.repository.UserRepository;
 import com.moviemux.user.domain.usecase.impl.CreateUserUseCaseImpl;
@@ -35,7 +35,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class UserBehaviorTest {
   @Mock UserRepository repository;
-  @Mock InviteRepository inviteRepository;
+  @Mock RegistrationGate registration;
   @Mock PasswordHasher passwordEncoder;
   @Mock UserMailSender kronusIntegrationToolRepository;
   @Mock java.time.Clock clock;
@@ -94,6 +94,7 @@ class UserBehaviorTest {
   @Test
   void firstUserGetsAdminAndInitializedProfileBeforeWelcomeMail() throws Exception {
     User u = user();
+    when(registration.authorize(u.getEmail(),null)).thenReturn(new RegistrationGate.Decision(RegistrationMode.INVITE_ONLY,true));
     when(passwordEncoder.encode("plain")).thenReturn("encoded");
     when(repository.save(u)).thenReturn(u);
     assertThat(register(u, null)).isSameAs(u);
@@ -101,47 +102,51 @@ class UserBehaviorTest {
     assertThat(u.getPassword()).isEqualTo("encoded");
     assertThat(u.getPreferences().isNotify()).isTrue();
     assertThat(u.getStatistics().getConsecutiveFailedLoginAttempts()).isZero();
-    InOrder order = inOrder(repository, kronusIntegrationToolRepository);
-    order.verify(repository).count();
+    InOrder order = inOrder(registration,repository, kronusIntegrationToolRepository);
+    order.verify(registration).authorize(u.getEmail(),null);
     order.verify(repository).findByEmail(u.getEmail());
     order.verify(repository).save(u);
     order.verify(kronusIntegrationToolRepository).sendEmail(argThat(mail ->
         mail.templateId().equals("welcome") && mail.to().equals(u.getEmail())
             && mail.metadata().equals(java.util.Map.of("user", u.getName()))));
-    verifyNoInteractions(inviteRepository);
+    verify(registration).complete(eq(u.getEmail()),any());
   }
 
   @Test
-  void subsequentUserRequiresValidInviteWithoutWritingOrMailing() {
-    when(repository.count()).thenReturn(1L);
+  void subsequentUserRequiresValidInviteWithoutWritingOrMailing() throws Exception {
+    when(registration.authorize(anyString(),eq("missing"))).thenThrow(new InviteNotValidException());
     assertThatThrownBy(() -> register(user(), "missing"))
         .isInstanceOf(InviteNotValidException.class);
     verify(repository, never()).save(any());
-    verify(inviteRepository, never()).delete(any());
+    verify(registration, never()).complete(anyString(),any());
     verifyNoInteractions(passwordEncoder, kronusIntegrationToolRepository);
   }
 
   @Test
-  void legacyRegistrationConsumesInviteBeforeDetectingDuplicate() {
+  void duplicateRegistrationAbortsBeforeSavingAccount() throws Exception {
     User u = user();
-    Invite invite = new Invite(1L, "synthetic-invite");
-    when(repository.count()).thenReturn(1L);
-    when(inviteRepository.findByCode(invite.getCode())).thenReturn(invite);
-    when(repository.findByEmail(u.getEmail())).thenReturn(u);
-    assertThatThrownBy(() -> register(u, invite.getCode()))
-        .isInstanceOf(DuplicatedUserException.class);
-    InOrder order = inOrder(inviteRepository, repository);
-    order.verify(repository).count();
-    order.verify(inviteRepository).findByCode(invite.getCode());
-    order.verify(inviteRepository).delete(invite);
-    order.verify(repository).findByEmail(u.getEmail());
-    verify(repository, never()).save(any());
+    when(registration.authorize(u.getEmail(),"synthetic-invite"))
+        .thenReturn(new RegistrationGate.Decision(RegistrationMode.INVITE_ONLY,false));
+    when(registration.existingEmail(u.getEmail())).thenReturn(true);
+    assertThatThrownBy(() -> register(u,"synthetic-invite")).isInstanceOf(DuplicatedUserException.class);
+    verify(repository,never()).save(any());
+    verify(registration,never()).complete(anyString(),any());
     verifyNoInteractions(kronusIntegrationToolRepository);
+  }
+
+  @Test
+  void openRegistrationNeverGrantsExtraRoles() throws Exception {
+    User u=user();u.addRole(Role.ADM);
+    when(registration.authorize(u.getEmail(),null)).thenReturn(new RegistrationGate.Decision(RegistrationMode.OPEN,false));
+    when(repository.save(u)).thenReturn(u);
+    assertThat(register(u,null).getRoles()).containsExactly(Role.USER);
+    verify(registration).complete(eq(u.getEmail()),any());
   }
 
   @Test
   void welcomeFailureDoesNotUndoSuccessfulRegistration() throws Exception {
     User u = user();
+    when(registration.authorize(u.getEmail(),null)).thenReturn(new RegistrationGate.Decision(RegistrationMode.INVITE_ONLY,true));
     when(repository.save(u)).thenReturn(u);
     doThrow(new IllegalStateException("stub unavailable"))
         .when(kronusIntegrationToolRepository)
