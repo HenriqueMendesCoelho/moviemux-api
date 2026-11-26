@@ -198,13 +198,15 @@ public final class OfflineLegacyRankingMigration {
   private LegacySource legacySource() {
     var versions = jdbc.queryForList("select version from flyway_schema_history where success order by installed_rank", String.class);
     int latest = versions.size();
-    if (latest < 8 || latest > 18 || !versions.equals(java.util.stream.IntStream.rangeClosed(1, latest)
+    if (latest < 8 || latest > 19 || !versions.equals(java.util.stream.IntStream.rangeClosed(1, latest)
         .mapToObj(Integer::toString).toList()))
       throw new IllegalStateException("migration.schema_version_mismatch");
     if (count("select count(*) from flyway_schema_history where not success") != 0)
       throw new IllegalStateException("migration.schema_history_failed");
     boolean isolated = latest >= 12;
     // Preserve the original SQL column order and labels for the algorithm-1 fingerprint.
+    // V19 adds instance registration state and waitlist only; neither changes the legacy
+    // movie/user/rating source rows or the target reconciliation contract.
     String movies = "select id,created_at,description,director,english_title,english_url_trailer,imdb_id,"
         + "original_title,portuguese_title,portuguese_url_trailer,release_date,runtime,show_notes,tmdb_id,"
         + "updated_at,url_image,user_id from movie" + (isolated ? " where legacy_eligible" : "");

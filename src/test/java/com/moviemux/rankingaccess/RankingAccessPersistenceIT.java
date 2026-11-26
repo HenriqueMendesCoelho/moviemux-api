@@ -140,7 +140,7 @@ class RankingAccessPersistenceIT {
     var beforeRows = tableRows(oldTables);
     assertThat(beforeRows.values()).allSatisfy(rows -> assertThat(rows).hasSize(1));
 
-    // Intentionally no target: this proves the real latest startup path, currently V18.
+    // Intentionally no target: this proves the real latest startup path, currently V19.
     var adopted = Flyway.configure().dataSource(url, user, password).schemas(schema).defaultSchema(schema)
         .createSchemas(false).baselineOnMigrate(false).cleanDisabled(true).baselineVersion("1")
         .baselineDescription("Synthetic audited V1 schema").locations("classpath:db/migration").load();
@@ -150,8 +150,8 @@ class RankingAccessPersistenceIT {
     assertThat(catalog(oldTables)).containsExactlyElementsOf(beforeCatalog);
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
     adopted.baseline(); // Explicit baseline only in this isolated disposable synthetic schema.
-    assertThat(adopted.migrate().migrationsExecuted).isEqualTo(17);
-    assertThat(adopted.info().current().getVersion().getVersion()).isEqualTo("18");
+    assertThat(adopted.migrate().migrationsExecuted).isEqualTo(18);
+    assertThat(adopted.info().current().getVersion().getVersion()).isEqualTo("19");
     var expectedLegacyMovieCatalog = new ArrayList<>(beforeCatalog);
     expectedLegacyMovieCatalog.addAll(List.of("movie:legacy_eligible:boolean:bool::NO:true:NO:",
         "movie:manual_command_id:uuid:uuid::YES::NO:",
@@ -168,9 +168,11 @@ class RankingAccessPersistenceIT {
     var newTables = Set.of("ranking", "ranking_membership", "ranking_membership_grant", "ranking_author_identity",
         "ranking_movie_entry", "ranking_movie_round", "ranking_movie_rating",
         "legacy_ranking_migration", "legacy_ranking_movie_map", "ranking_invitation", "ranking_invitation_address",
-        "ranking_rating_copy_receipt");
-    assertThat(tables()).containsExactlyInAnyOrderElementsOf(union(union(oldTables, newTables),Set.of("legacy_board_cutover")));
+        "ranking_rating_copy_receipt", "registration_waitlist");
+    assertThat(tables()).containsExactlyInAnyOrderElementsOf(union(union(oldTables, newTables),Set.of("legacy_board_cutover", "instance_registration_policy")));
     assertThat(jdbc.queryForList("select phase from legacy_board_cutover",String.class)).containsExactly("LEGACY");
+    assertThat(jdbc.queryForList("select mode from instance_registration_policy",String.class)).containsExactly("INVITE_ONLY");
+    assertThat(jdbc.queryForList("select bootstrap_completed from instance_registration_policy",Boolean.class)).containsExactly(true);
     assertThat(tableRows(newTables).values()).allSatisfy(rows -> assertThat(rows).isEmpty());
     var upgraded = catalog(oldTables);
     String checkPrefix = "movie:movie_legacy_required_metadata_ck:";
@@ -189,14 +191,14 @@ class RankingAccessPersistenceIT {
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
     assertThat(jdbc.queryForList("select legacy_eligible from movie", Boolean.class)).containsExactly(true);
     assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
-        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true", "12:SQL:true", "13:SQL:true", "14:SQL:true", "15:SQL:true", "16:SQL:true", "17:SQL:true", "18:SQL:true");
+        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true", "12:SQL:true", "13:SQL:true", "14:SQL:true", "15:SQL:true", "16:SQL:true", "17:SQL:true", "18:SQL:true", "19:SQL:true");
     assertThat(adopted.migrate().migrationsExecuted).isZero();
     assertThat(catalog(oldTables)).containsExactlyElementsOf(upgraded);
     assertThat(tableRows(oldTables)).isEqualTo(beforeRows);
     assertThat(jdbc.queryForList("select legacy_eligible from movie", Boolean.class)).containsExactly(true);
     assertThat(tableRows(newTables).values()).allSatisfy(rows -> assertThat(rows).isEmpty());
     assertThat(jdbc.queryForList("select version||':'||type||':'||success::text from flyway_schema_history order by installed_rank", String.class))
-        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true", "12:SQL:true", "13:SQL:true", "14:SQL:true", "15:SQL:true", "16:SQL:true", "17:SQL:true", "18:SQL:true");
+        .containsExactly("1:BASELINE:true", "2:SQL:true", "3:SQL:true", "4:SQL:true", "5:SQL:true", "6:SQL:true", "7:SQL:true", "8:SQL:true", "9:SQL:true", "10:SQL:true", "11:SQL:true", "12:SQL:true", "13:SQL:true", "14:SQL:true", "15:SQL:true", "16:SQL:true", "17:SQL:true", "18:SQL:true", "19:SQL:true");
   }
 
   private Map<String, List<String>> tableRows(Set<String> tableNames) {
