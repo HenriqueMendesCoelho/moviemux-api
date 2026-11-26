@@ -779,3 +779,50 @@ before returning its result or failure. The term is in the JSON body, sent to
 KIT as its own encoded parameter without account or ranking IDs. Picker never
 links or creates catalog records. Configure operational throttling and
 log/trace redaction before public rollout; provider timeouts are not rate limits.
+
+### Runtime registration policy (V19)
+
+Global account registration is independent from collection visibility and admission.
+The instance singleton starts `INVITE_ONLY` on both existing and new databases;
+an enabled global administrator may change it to `WAITLIST` or `OPEN` through
+the authenticated registration settings. This does not add users to collections,
+modify existing roles, or invalidate legacy invitations. The final signup transaction
+locks the same policy row as the admin mode change.
+
+Fresh empty self-host installations still support the first-account bootstrap. **Keep
+the installation private until the first ADM has been created.** The bootstrap marker
+cannot be reopened by deletion of accounts through application APIs. Imported
+installations with existing users start with bootstrap completed.
+
+- GET `/public/registration-mode`: current mode, no-store.
+- POST `/public/user`: existing signup. An account invite is required in INVITE_ONLY
+  and WAITLIST after bootstrap, optional in OPEN. A supplied code must be valid and
+  is consumed on successful signup. WAITLIST email entry does not create an account.
+- POST `/public/registration-waitlist`: email-only, valid duplicate/existing requests
+  return the same accepted response in WAITLIST. No automatic mail.
+- Current global ADM only: GET/PUT `/restricted/registration-mode`;
+  GET `/restricted/registration-waitlist?after=<uuid>&limit=20`; bodyless POST
+  `/restricted/registration-waitlist/{requestId}/invite`.
+- Explicit invitation issues one email-bound code in the existing account-invite
+  store. Administrators can copy that code if email is unavailable. An accepted
+  gateway response is not confirmation of delivery, and an ambiguous failure may
+  have delivered the message. Retries are explicit, reuse the code and can duplicate
+  messages after ambiguous failure; no automatic re-send. Existing invite deletion
+  revokes the code. Successful registration clears the matching waitlist request.
+
+Email requires `send.mail=true`, an operator-configured
+`registration.waitlist.invite-template` present at the configured existing mail
+service, and `registration.waitlist.registration-url` (absolute HTTPS registration
+page for this instance). The template receives `invite_code` and
+`registration_link` metadata. Missing setup yields DELIVERY_UNAVAILABLE with an
+administrator-only code, not a successful-delivery claim. Verify the actual template
+and delivery on an authorized stage before release. Do not publish account PII or
+invite codes in logs. Configure ingress protection for direct registration/waitlist
+and the existing BFF/Turnstile. The runtime mode is independent of V17 cutover
+phase: for upgrades, the operator MUST keep INVITE_ONLY throughout LEGACY and
+FENCED, and only open WAITLIST/OPEN once all replicas/gateway have retired the
+legacy board (ACTIVE) and the new frontend/ingress are verified. This is an
+operator gate, not automatic backend enforcement, and permits separate fresh
+self-host initialization. Rate limits, waitlist retention and operational
+opening must be reviewed before enabling public access. V19 is additive;
+a V18 binary is not assumed to boot against V19 Flyway history.
